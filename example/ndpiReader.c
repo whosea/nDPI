@@ -47,6 +47,7 @@
 #include <sys/socket.h>
 #include <assert.h>
 #include <math.h>
+#include "ndpi_config.h"
 #include "ndpi_api.h"
 #include "uthash.h"
 #include <sys/stat.h>
@@ -57,9 +58,12 @@
 #ifdef HAVE_JSON_C
 #include <json.h>
 #endif
+#define DEBUG_TRACE 1
 
 #include "ndpi_util.h"
+#include "ahocorasick.h"
 
+extern int bt_parse_debug;
 /** Client parameters **/
 static char *_pcap_file[MAX_NUM_READER_THREADS]; /**< Ingress pcap file/interfaces */
 static FILE *playlist_fp[MAX_NUM_READER_THREADS] = { NULL }; /**< Ingress playlist */
@@ -210,6 +214,7 @@ static int dpdk_port_id = 0, dpdk_run_capture = 1;
 #endif
 
 void test_lib(); /* Forward */
+void host_dump(void);
 
 /* ********************************** */
 
@@ -283,7 +288,8 @@ static void help(u_int long_help) {
 	 "  --fifo <path to file or pipe>\n"
 	 "  --debug\n"
 	 "  --dbg-proto proto|num[,...]\n"
-    );
+	 "  --host-dump\n"
+	 );
 #endif
 
   if(long_help) {
@@ -327,6 +333,7 @@ static struct option longopts[] = {
   { "json", required_argument, NULL, 'j'},
   { "result-path", required_argument, NULL, 'w'},
   { "quiet", no_argument, NULL, 'q'},
+  { "host-dump", no_argument, NULL, 258},
 
   {0, 0, 0, 0}
 };
@@ -552,6 +559,7 @@ static void parseOptions(int argc, char **argv) {
 
     case 'v':
       verbose = atoi(optarg);
+      bt_parse_debug = verbose > 1;
       break;
 
     case 'V':
@@ -561,6 +569,7 @@ static void parseOptions(int argc, char **argv) {
 	nDPI_LogLevel = 3;
 	_debug_protocols = strdup("all");
       }
+      ndpi_debug_print_level = nDPI_LogLevel;
       break;
 
     case 'h':
@@ -626,6 +635,10 @@ static void parseOptions(int argc, char **argv) {
 
     case 257:
       _debug_protocols = strdup(optarg);
+      break;
+
+    case 258:
+      host_dump(); // no return
       break;
 
     default:
@@ -788,6 +801,16 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 	      flow->detected_protocol.app_protocol,
 	      ndpi_get_proto_name(ndpi_thread_info[thread_id].workflow->ndpi_struct, flow->detected_protocol.app_protocol));
 
+    if(flow->nf_mark) {
+	    char buf[64];
+	    ndpi_protocol nfproto = { .app_protocol=flow->nf_mark >> 16,
+					.master_protocol = flow->nf_mark & 0xffff };
+	    if(memcmp((void *)&nfproto,(void *)&flow->detected_protocol,sizeof(nfproto)))
+		fprintf(out, "[NF:%x.%x:%x.%x:%s]",nfproto.app_protocol,nfproto.master_protocol,
+			flow->detected_protocol.app_protocol,flow->detected_protocol.master_protocol,
+			ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct, nfproto, buf, sizeof(buf)));
+	    // else  fprintf(out, "[NF:OK]");
+    } // else fprintf(out, "[NONF]");
     if(flow->detected_protocol.category != 0)
       fprintf(out, "[cat: %s/%u]",
 	      ndpi_category_get_name(ndpi_thread_info[thread_id].workflow->ndpi_struct,
@@ -1120,14 +1143,14 @@ static int acceptable(u_int32_t num_pkts){
 }
 
 /* *********************************************** */
-
+#ifdef HAVE_JSON_C
 static int receivers_sort(void *_a, void *_b) {
   struct receiver *a = (struct receiver *)_a;
   struct receiver *b = (struct receiver *)_b;
 
   return(b->num_pkts - a->num_pkts);
 }
-
+#endif
 /* *********************************************** */
 
 static int receivers_sort_asc(void *_a, void *_b) {
@@ -1470,6 +1493,9 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
   // enable all protocols
   NDPI_BITMASK_SET_ALL(all);
   ndpi_set_protocol_detection_bitmask2(ndpi_thread_info[thread_id].workflow->ndpi_struct, &all);
+#ifdef NDPI_PROTOCOL_BITTORRENT
+   ndpi_bittorrent_init(ndpi_thread_info[thread_id].workflow->ndpi_struct,9*1024,2100,0);
+#endif
 
   // clear memory for results
   memset(ndpi_thread_info[thread_id].workflow->stats.protocol_counter, 0,
@@ -2326,7 +2352,7 @@ static void configurePcapHandle(pcap_t * pcap_handle) {
  * @brief Open a pcap file or a specified device - Always returns a valid pcap_t
  */
 static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_file) {
-  u_int snaplen = 1536;
+  u_int snaplen = 4000;
   int promisc = 1;
   char pcap_error_buffer[PCAP_ERRBUF_SIZE];
   pcap_t * pcap_handle = NULL;
@@ -3256,6 +3282,17 @@ static void produceBpfFilter(char *filePath) {
 #endif
 
 
+void host_dump(void) {
+char buf[256];
+void *automa = ndpi_automa_host(ndpi_info_mod);
+
+ndpi_finalize_automa(automa);
+ac_automata_dump(automa,buf,sizeof(buf),'n');
+
+exit(0);
+}
+
+
 /* *********************************************** */
 
 
@@ -3283,6 +3320,7 @@ int orginal_main(int argc, char **argv) {
 
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
 
+    trace = nDPI_LogLevel > 2 ? stderr : NULL;
     parseOptions(argc, argv);
 
     if(bpf_filter_flag) {
@@ -3304,6 +3342,7 @@ int orginal_main(int argc, char **argv) {
     }
 
     signal(SIGINT, sigproc);
+    siginterrupt(SIGINT,1);
 
     for(i=0; i<num_loops; i++)
       test_lib();

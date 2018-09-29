@@ -20,6 +20,7 @@
 
 /* ****************************************************** */
 
+#if 0
 static ndpi_network host_protocol_list[] = {
   /*
     SoundCloud
@@ -7956,6 +7957,7 @@ static ndpi_network host_protocol_list[] = {
 
   { 0x0, 0, 0 }
 };
+#endif
 
 
 /* ****************************************************** */
@@ -8554,5 +8556,5 @@ static const char *ndpi_en_impossible_bigrams[] = {
   "vq", "vt", "vw", "vx", "vz", "wq", "wv", "wx", "wz", /* "xb", foxbusiness.com */
   	"xg", "xj", "xk", "xv", "xz", "xw", "yd", /*"yp", Removed for paypal */
   "yj", "yq", "yv", "yz", "yw", "zb", "zc", "zg", "zh", "zj", "zn", "zq", "zs", "zx", "wh", "wk",
-  "wb", "zk", "kp", "zk", "xy",
+  "wb", "zk", "kp", /*"zk",*/ "xy",
   NULL };

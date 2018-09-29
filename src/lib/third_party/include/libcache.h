@@ -27,7 +27,13 @@ SOFTWARE.
 #ifndef __DESELMO_LIBCACHE_H__
 #define __DESELMO_LIBCACHE_H__
 
+#ifndef __KERNEL__
 #include <stdint.h>
+#endif
+
+typedef struct cache_entry *cache_entry;
+
+typedef struct cache_entry_map *cache_entry_map;
 
 typedef struct cache_entry *cache_entry;
 

@@ -50,7 +50,11 @@ compile
 /src/lib/Makefile
 /src/lib/protocols/.deps/
 /src/lib/third_party/src/.deps/
+/src/include/ndpi_config.h
+/src/include/ndpi_define.h
 stamp-h1
 *.swp
 /test-driver
 /tests/Makefile
+/src/lib/ndpi_network_list_compile
+/src/lib/ndpi_network_list.c.inc

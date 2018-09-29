@@ -23,12 +23,19 @@ SOFTWARE.
  *
  */
 
-
+#ifndef __KERNEL__
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#else
+#include <asm/byteorder.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <asm/errno.h>
+#endif
 
+#include "ndpi_api.h"
 #include "libcache.h"
 #include "ndpi_api.h"
 
@@ -124,7 +131,7 @@ cache_result cache_add(cache_t cache, void *item, uint32_t item_size) {
   cache_entry entry;
   cache_entry_map map_entry;
 
-  if(!cache || !item || !item_size) {
+  if(!cache || !item || !item_size || !cache->max_size) {
     return CACHE_INVALID_INPUT;
   }
 
@@ -216,7 +223,7 @@ cache_result cache_add(cache_t cache, void *item, uint32_t item_size) {
 cache_result cache_contains(cache_t cache, void *item, uint32_t item_size) {
   uint32_t hash;
 
-  if(!cache || !item || !item_size) {
+  if(!cache || !item || !item_size || !cache->max_size) {
     return CACHE_INVALID_INPUT;
   }
 
@@ -242,7 +249,7 @@ cache_result cache_contains(cache_t cache, void *item, uint32_t item_size) {
 cache_result cache_remove(cache_t cache, void *item, uint32_t item_size) {
   uint32_t hash;
 
-  if(!cache || !item || !item_size) {
+  if(!cache || !item || !item_size || !cache->max_size) {
     return CACHE_INVALID_INPUT;
   }
 

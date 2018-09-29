@@ -47,7 +47,7 @@ extern "C" {
 #define SAVE_DETECTION_BITMASK_AS_UNKNOWN     1
 #define NO_SAVE_DETECTION_BITMASK_AS_UNKNOWN  0
 
-
+  extern int ndpi_debug_print_level;
   /**
    * Check if a string is encoded with punycode
    * ( https://tools.ietf.org/html/rfc3492 )
@@ -132,8 +132,10 @@ extern "C" {
    * @par ndpi_mod  = the struct created for the protocol detection
    * @par match     = the struct passed to match the protocol
    *
+   * @return  0 - success, -1 - error
+   *
    */
-  void ndpi_init_protocol_match(struct ndpi_detection_module_struct *ndpi_mod,
+  int ndpi_init_protocol_match(struct ndpi_detection_module_struct *ndpi_mod,
 				ndpi_protocol_match *match);
 
   /**
@@ -504,6 +506,9 @@ extern "C" {
   const char* ndpi_category_get_name(struct ndpi_detection_module_struct *ndpi_mod,
 				     ndpi_protocol_category_t category);
 
+  u_int16_t ndpi_get_proto_by_name(struct ndpi_detection_module_struct *ndpi_mod,
+		  		   const char *name);
+
   /**
    * Set protocol category string
    *
@@ -725,6 +730,16 @@ extern "C" {
   void ndpi_finalize_automa(void *_automa);
 
   /**
+   * Open the automa for change
+   *
+   * @par     The automata initialized with ndpi_init_automa();
+   *
+   */
+  void ndpi_open_automa(void *_automa);
+  int  ndpi_is_open_automa(void *_automa);
+  void *ndpi_automa_host(struct ndpi_detection_module_struct *ndpi_struct);
+
+  /**
    * Add a string to match to an automata
    *
    * @par     The automata initialized with ndpi_init_automa();
@@ -754,7 +769,7 @@ extern "C" {
   ndpi_proto_defaults_t* ndpi_get_proto_defaults(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_num_supported_protocols(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_num_custom_protocols(struct ndpi_detection_module_struct *ndpi_mod);
-  u_int ndpi_get_ndpi_detection_module_size();
+  u_int ndpi_get_ndpi_detection_module_size(void);
   void ndpi_set_log_level(struct ndpi_detection_module_struct *ndpi_mod, u_int l);
   
   /**
@@ -768,7 +783,10 @@ extern "C" {
    */
   int ndpi_match_string_id(void *_automa, char *string_to_match, unsigned long *id);
 
+  int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, u_int8_t do_add);
+
   /* Utility functions to set ndpi malloc/free/print wrappers */
+  void set_ndpi_ticks_per_second(u_int32_t ticks_per_second);
   void set_ndpi_malloc(void* (*__ndpi_malloc)(size_t size));
   void set_ndpi_free(void  (*__ndpi_free)(void *ptr));
   void set_ndpi_flow_malloc(void* (*__ndpi_flow_malloc)(size_t size));
@@ -778,7 +796,7 @@ extern "C" {
   void * ndpi_malloc(size_t size);
   void * ndpi_calloc(unsigned long count, size_t size);
   void ndpi_free(void *ptr);
-  u_int8_t ndpi_get_api_version();
+  u_int8_t ndpi_get_api_version(void);
 
   /* https://github.com/corelight/community-id-spec */
   int ndpi_flowv4_flow_hash(u_int8_t l4_proto, u_int32_t src_ip, u_int32_t dst_ip, u_int16_t src_port, u_int16_t dst_port,

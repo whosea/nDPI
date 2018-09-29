@@ -196,7 +196,6 @@ static void check_content_type_and_change_protocol(struct ndpi_detection_module_
 						   struct ndpi_flow_struct *flow) {
 
   struct ndpi_packet_struct *packet = &flow->packet;
-  u_int8_t a;
 
 
 #if defined(NDPI_PROTOCOL_1KXUN) || defined(NDPI_PROTOCOL_IQIYI)
@@ -438,12 +437,12 @@ static void check_content_type_and_change_protocol(struct ndpi_detection_module_
   }
 
   /* search for line startin with "Icy-MetaData" */
-    for (a = 0; a < packet->parsed_lines; a++) {
+  for (a = 0; a < packet->parsed_lines; a++) {
     if(packet->line[a].len > 11 && memcmp(packet->line[a].ptr, "Icy-MetaData", 12) == 0) {
-    NDPI_LOG_INFO(ndpi_struct, "found MPEG: Icy-MetaData\n");
-    ndpi_int_http_add_connection(ndpi_struct, flow, NDPI_CONTENT_CATEGORY_MPEG);
-    return;
-  }
+          NDPI_LOG_INFO(ndpi_struct, "found MPEG: Icy-MetaData\n");
+          ndpi_int_http_add_connection(ndpi_struct, flow, NDPI_CONTENT_CATEGORY_MPEG);
+          return;
+    }
   }
 
   if(packet->content_line.ptr != NULL && packet->content_line.len != 0) {
@@ -500,9 +499,11 @@ static struct l_string {
 	STATIC_STRING_L("REPORT ") };
 static const char *http_fs = "CDGHOPR";
 
+#ifdef NDPI_ENABLE_DEBUG_MESSAGES
 static uint8_t non_ctrl(uint8_t c) {
 	return c < 32 ? '.':c;
 }
+#endif
 
 static u_int16_t http_request_url_offset(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
@@ -661,6 +662,9 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
     if(packet->line[0].len >= (9 + filename_start)
         && memcmp(&packet->line[0].ptr[packet->line[0].len - 9], " HTTP/1.", 8) == 0) { /* Request line complete. Ex. "GET / HTTP/1.1" */
 
+      int x = 1;
+      int a;
+
       packet->http_url_name.ptr = &packet->payload[filename_start];
       packet->http_url_name.len = packet->line[0].len - (filename_start + 9);
 
@@ -684,7 +688,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
       }
 
       /* Check for additional field introduced by Steam */
-      int x = 1;
       if(packet->line[x].len >= 11 && (memcmp(packet->line[x].ptr, "x-steam-sid", 11)) == 0) {
 	    NDPI_LOG_INFO(ndpi_struct, "found STEAM\n");
 	    ndpi_int_http_add_connection(ndpi_struct, flow, NDPI_PROTOCOL_STEAM);
@@ -693,7 +696,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
       }
 
       /* Check for additional field introduced by Facebook */
-      x = 1;
       while(packet->line[x].len != 0) {
 	    if(packet->line[x].len >= 12 && (memcmp(packet->line[x].ptr, "X-FB-SIM-HNI", 12)) == 0) {
 	      NDPI_LOG_INFO(ndpi_struct, "found FACEBOOK\n");
@@ -735,7 +737,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
 
 #if defined(NDPI_PROTOCOL_1KXUN) || defined(NDPI_PROTOCOL_IQIYI)
       /* Check for 1kxun packet */
-      int a;
       for (a = 0; a < packet->parsed_lines; a++) {
 	if(packet->line[a].len >= 14 && (memcmp(packet->line[a].ptr, "Client-Source:", 14)) == 0) {
 	  if((memcmp(packet->line[a].ptr+15, "1kxun", 5)) == 0) {

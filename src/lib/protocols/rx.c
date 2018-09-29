@@ -60,7 +60,7 @@ struct ndpi_rx_header {
 #define	PARAM_2           10	
 #define	PARAM_3           11	
 #define	PARAMS_4          12	
-#define	VERS	          13
+#define	RX_VERSION          13
 
 /* Flags values */
 #define EMPTY              0
@@ -79,6 +79,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
                    struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = &flow->packet;
+  struct ndpi_rx_header *header;
   u_int32_t payload_len = packet->payload_packet_len;
 
   NDPI_LOG_DBG2(ndpi_struct, "RX: pck: %d, dir[0]: %d, dir[1]: %d\n",
@@ -90,7 +91,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
     return;
   }
   
-  struct ndpi_rx_header *header = (struct ndpi_rx_header*) packet->payload;
+  header = (struct ndpi_rx_header*) packet->payload;
 
   /**
    * Useless check: a session could be detected also after it starts 
@@ -108,7 +109,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
   **/
   
   /* TYPE field */
-  if((header->type < DATA) || (header->type > VERS)) {
+  if((header->type < DATA) || (header->type > RX_VERSION)) {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
   }
@@ -154,7 +155,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
         goto security;
       case PARAM_3:
 	goto security;
-      case VERS:
+      case RX_VERSION:
 	goto security;
       default:
 	NDPI_EXCLUDE_PROTO(ndpi_struct, flow);

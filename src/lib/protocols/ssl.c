@@ -378,6 +378,8 @@ void sslInitExtraPacketProcessing(int caseNum, struct ndpi_flow_struct *flow) {
 
 int sslDetectProtocolFromCertificate(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = &flow->packet;
+  ndpi_protocol_match_result ret_match;
+  u_int32_t subproto;
 
   if((packet->payload_packet_len > 9)
      && (packet->payload[0] == 0x16 /* consider only specific SSL packets (handshake) */)) {
@@ -391,12 +393,12 @@ int sslDetectProtocolFromCertificate(struct ndpi_detection_module_struct *ndpi_s
       packet->ssl_certificate_num_checks++;
 
       if(rc > 0) {
+	u_int32_t subproto;
 	packet->ssl_certificate_detected++;
 #ifdef CERTIFICATE_DEBUG
 	NDPI_LOG_DBG2(ndpi_struct, "***** [SSL] %s\n", certificate);
 #endif
-	ndpi_protocol_match_result ret_match;
-	u_int32_t subproto = ndpi_match_host_subprotocol(ndpi_struct, flow, certificate,
+	subproto = ndpi_match_host_subprotocol(ndpi_struct, flow, certificate,
 							 strlen(certificate),
 							 &ret_match,
 							 NDPI_PROTOCOL_SSL);
