@@ -367,9 +367,9 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
 	      case 'n':
 		nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%ld %.100s", sid.rep.number,sid.astring);
 		break;
-	      case 's':
-		nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%.100s", sid.rep.stringy);
-		break;
+//	      case 's':
+//		nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%.100s", sid.rep.stringy);
+//		break;
 	      }
 	  }
 	printf("%s}\n",lbuf);

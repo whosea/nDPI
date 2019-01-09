@@ -78,7 +78,7 @@ xt_ndpi-y := main.o \
 		${NDPI_PRO}/mail_pop.o \
 		${NDPI_PRO}/mail_smtp.o \
 		${NDPI_PRO}/maplestory.o \
-		${NDPI_PRO}/mdns.o \
+		${NDPI_PRO}/mdns_proto.o \
 		${NDPI_PRO}/mgcp.o \
 		${NDPI_PRO}/mpegts.o \
 		${NDPI_PRO}/mqtt.o \
@@ -121,7 +121,7 @@ xt_ndpi-y := main.o \
 		${NDPI_PRO}/skype.o \
 		${NDPI_PRO}/smb.o \
 		${NDPI_PRO}/smpp.o \
-		${NDPI_PRO}/snmp.o \
+		${NDPI_PRO}/snmp_proto.o \
 		${NDPI_PRO}/socks45.o \
 		${NDPI_PRO}/someip.o \
 		${NDPI_PRO}/sopcast.o \

@@ -1,6 +1,6 @@
 CC=@CC@
 CFLAGS=-g -I../src/include @CFLAGS@
-LIBNDPI=../src/lib/libndpi.a
+LIBNDPI=../src/lib/.libs/libndpi-static.a
 LDFLAGS=$(LIBNDPI) @PCAP_LIB@ -lpthread @LDFLAGS@
 OBJS=ndpiReader.o ndpi_util.o
 PREFIX?=/usr/local

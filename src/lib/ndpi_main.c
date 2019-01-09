@@ -2180,7 +2180,7 @@ static int ndpi_add_host_ip_subprotocol(struct ndpi_detection_module_struct *ndp
   return 0;
 }
 
-#endif
+//#endif
 
 void set_ndpi_ticks_per_second(u_int32_t ticks_per_second) {
        _ticks_per_second = ticks_per_second;

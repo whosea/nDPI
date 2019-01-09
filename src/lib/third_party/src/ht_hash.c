@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <string.h>
-
+#endif
 #include "ht_hash.h"
 
 /* #define HASH_DEBUG 1 */

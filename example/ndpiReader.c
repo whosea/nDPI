@@ -61,7 +61,7 @@
 #define DEBUG_TRACE 1
 
 #include "ndpi_util.h"
-#include "ahocorasick.h"
+#include "../src/lib/third_party/include/ahocorasick.h"
 
 extern int bt_parse_debug;
 /** Client parameters **/

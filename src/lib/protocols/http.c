@@ -196,6 +196,7 @@ static void check_content_type_and_change_protocol(struct ndpi_detection_module_
 						   struct ndpi_flow_struct *flow) {
 
   struct ndpi_packet_struct *packet = &flow->packet;
+  int a;
 
 
 #if defined(NDPI_PROTOCOL_1KXUN) || defined(NDPI_PROTOCOL_IQIYI)
