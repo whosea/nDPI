@@ -89,8 +89,6 @@ static char proto_name[]="proto";
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
-
-
 #define PROC_REMOVE(pde,net) proc_remove(pde)
 #else
 
@@ -122,6 +120,11 @@ static inline void *PDE_DATA(const struct inode *inode)
 #ifndef CONFIG_NF_CONNTRACK_LABELS
 #error NF_CONNTRACK_LABELS not defined
 #endif
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+#define nf_ct_l3proto_try_module_get(a) 0
+#define nf_ct_l3proto_module_put(a)
 #endif
 
 MODULE_LICENSE("GPL");
@@ -869,6 +872,7 @@ ndpi_alloc_flow (struct nf_ct_ext_ndpi *ct_ndpi)
         return flow;
 }
 #ifndef NF_CT_CUSTOM
+
 static void (*ndpi_nf_ct_destroy)(struct nf_conntrack *) __rcu __read_mostly;
 
 static void ndpi_destroy_conntrack(struct nf_conntrack *nfct) {
@@ -1073,7 +1077,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		if(low_ip > up_ip) { tmp_ip = low_ip; low_ip=up_ip; up_ip = tmp_ip; }
 		if(low_port > up_port) { tmp_port = low_port; low_port=up_port; up_port = tmp_port; }
 		proto = ndpi_guess_undetected_protocol (
-				n->ndpi_struct,protocol,low_ip,low_port,up_ip,up_port);
+				n->ndpi_struct,flow,protocol,low_ip,low_port,up_ip,up_port);
 	    }
 	} else {
 		add_stat(flow->packet.parsed_lines);
@@ -3486,6 +3490,7 @@ static int __net_init ndpi_net_init(struct net *net)
 		}
 		for(hm = host_match; hm->string_to_match ; hm++) {
 			size_t sml;
+			ndpi_protocol_match_result s_ret;
 			i = hm->protocol_id;
 			if(i >= NDPI_NUM_BITS) {
 				pr_err("xt_ndpi: bad proto num %d \n",i);
@@ -3493,7 +3498,7 @@ static int __net_init ndpi_net_init(struct net *net)
 			}
 			sml = strlen(hm->string_to_match);
 			i2 = ndpi_match_string_subprotocol(n->ndpi_struct,
-								hm->string_to_match,sml,1);
+								hm->string_to_match,sml,&s_ret,1);
 			if(i2 == NDPI_PROTOCOL_UNKNOWN || i != i2) {
 				pr_err("xt_ndpi: Warning! Hostdef '%s' %s! Skipping.\n",
 						hm->string_to_match,
@@ -3593,6 +3598,7 @@ static int __net_init ndpi_net_init(struct net *net)
 #ifndef NF_CT_CUSTOM
 static void replace_nf_destroy(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,19,0)
 	void (*destroy)(struct nf_conntrack *);
 	rcu_read_lock();
 	destroy = rcu_dereference(nf_ct_destroy);
@@ -3600,10 +3606,22 @@ static void replace_nf_destroy(void)
 	rcu_assign_pointer(ndpi_nf_ct_destroy,destroy);
         RCU_INIT_POINTER(nf_ct_destroy, ndpi_destroy_conntrack);
 	rcu_read_unlock();
+#else
+	struct nf_ct_hook *hook;
+	rcu_read_lock();
+	hook = rcu_dereference(nf_ct_hook);
+	BUG_ON(hook == NULL);
+	rcu_assign_pointer(ndpi_nf_ct_destroy,hook->destroy);
+	/* This is a hellish hack! */
+	hook->destroy = ndpi_destroy_conntrack;
+	rcu_read_unlock();
+
+#endif
 }
 
 static void restore_nf_destroy(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,19,0)
 	void (*destroy)(struct nf_conntrack *);
 	rcu_read_lock();
 	destroy = rcu_dereference(nf_ct_destroy);
@@ -3612,6 +3630,17 @@ static void restore_nf_destroy(void)
 	BUG_ON(destroy == NULL);
 	rcu_assign_pointer(nf_ct_destroy,destroy);
 	rcu_read_unlock();
+#else
+	struct nf_ct_hook *hook;
+	rcu_read_lock();
+	hook = rcu_dereference(nf_ct_hook);
+	BUG_ON(hook == NULL);
+	BUG_ON(hook->destroy != ndpi_destroy_conntrack);
+	/* This is a hellish hack! */
+	hook->destroy = rcu_dereference(ndpi_nf_ct_destroy);
+	rcu_assign_pointer(ndpi_nf_ct_destroy,NULL);
+	rcu_read_unlock();
+#endif
 }
 #else
 static struct nf_ct_ext_type ndpi_extend = {

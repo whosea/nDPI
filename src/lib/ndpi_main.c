@@ -783,7 +783,6 @@ int ndpi_init_protocol_match(struct ndpi_detection_module_struct *ndpi_mod,
 {
   u_int16_t no_master[2] = { NDPI_PROTOCOL_NO_MASTER_PROTO, NDPI_PROTOCOL_NO_MASTER_PROTO };
   ndpi_port_range ports_a[MAX_DEFAULT_PORTS], ports_b[MAX_DEFAULT_PORTS];
-  static u_int16_t generic_id = NDPI_LAST_IMPLEMENTED_PROTOCOL;
 
   if(ndpi_add_host_url_subprotocol(ndpi_mod,
 			match->string_to_match,
@@ -2449,12 +2448,13 @@ int ndpi_get_custom_category_match(struct ndpi_detection_module_struct *ndpi_str
 				      char *name_or_ip, unsigned long *id) {
   char ipbuf[64];
   struct in_addr pin;
+  char *ptr;
 
   if(!ndpi_struct->custom_categories.categories_loaded)
     return -1;
 
   strncpy(ipbuf, name_or_ip, sizeof(ipbuf));
-  char *ptr = strrchr(ipbuf, '/');
+  ptr = strrchr(ipbuf, '/');
 
   if(ptr)
     ptr[0] = '\0';
@@ -2499,8 +2499,10 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_struct
       cache_free((cache_t)(ndpi_struct->tinc_cache));
     ndpi_bittorrent_done(ndpi_struct);
 
+#ifndef __KERNEL__
     if(ndpi_struct->ookla_cache)
       lruc_free((lruc*)ndpi_struct->ookla_cache);
+#endif
 
     if(ndpi_struct->protocols_ptree)
       ndpi_Destroy_Patricia((patricia_tree_t*)ndpi_struct->protocols_ptree, free_ptree_data);

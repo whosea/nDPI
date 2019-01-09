@@ -1,10 +1,14 @@
 /* https://github.com/willcannings/C-LRU-Cache */
 
 #include "lruc.h"
+
+#ifndef __KERNEL__
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <err.h>
+#endif
+#include "ndpi_api.h"
 
 // ------------------------------------------
 // private functions
@@ -58,8 +62,8 @@ void lruc_remove_item(lruc *cache, lruc_item *prev, lruc_item *item, uint32_t ha
   
   // free memory and update the free memory counter
   cache->free_memory += item->value_length;
-  free(item->value);
-  free(item->key);
+  ndpi_free(item->value);
+  ndpi_free(item->key);
   
   // push the item to the free items queue  
   memset(item, 0, sizeof(lruc_item));
@@ -103,7 +107,7 @@ lruc_item *lruc_pop_or_create_item(lruc *cache) {
     item = cache->free_items;
     cache->free_items = item->next;
   } else {
-    item = (lruc_item *) calloc(sizeof(lruc_item), 1);
+    item = (lruc_item *) ndpi_calloc(sizeof(lruc_item), 1);
   }
   
   return item;
@@ -116,24 +120,38 @@ lruc_item *lruc_pop_or_create_item(lruc *cache) {
 #define test_for_missing_value()      error_for(!value || value_length == 0, LRUC_MISSING_VALUE)
 #define test_for_value_too_large()    error_for(value_length > cache->total_memory, LRUC_VALUE_TOO_LARGE)
 
+#ifndef __KERNEL__
 // lock helpers
-#define lock_cache()    if(pthread_mutex_lock(cache->mutex)) {\
+#define lock_cache(cache)    if(pthread_mutex_lock(cache->mutex)) {\
   perror("LRU Cache unable to obtain mutex lock");\
   return LRUC_PTHREAD_ERROR;\
 }
 
-#define unlock_cache()  if(pthread_mutex_unlock(cache->mutex)) {\
+#define unlock_cache(cache)  if(pthread_mutex_unlock(cache->mutex)) {\
   perror("LRU Cache unable to release mutex lock");\
   return LRUC_PTHREAD_ERROR;\
 }
+#define init_cache(cache) cache->mutex = (pthread_mutex_t *) ndpi_malloc(sizeof(pthread_mutex_t)); \
+  if(pthread_mutex_init(cache->mutex, NULL)) { \
+    perror("LRU Cache unable to initialise mutex"); \
+    ndpi_free(cache->items); \
+    ndpi_free(cache); \
+    return NULL; \
+  }
+#else
 
+#define lock_cache(cache) spin_lock_bh (&cache->lock);
+#define unlock_cache(cache) spin_unlock_bh (&cache->lock);
+#define init_cache(cache) spin_lock_init(&cache->lock);
+#define perror(a) printk(a)
+#endif
 
 // ------------------------------------------
 // public api
 // ------------------------------------------
 lruc *lruc_new(uint64_t cache_size, uint32_t average_length) {
   // create the cache
-  lruc *cache = (lruc *) calloc(sizeof(lruc), 1);
+  lruc *cache = (lruc *) ndpi_calloc(sizeof(lruc), 1);
   if(!cache) {
     perror("LRU Cache unable to create cache object");
     return NULL;
@@ -142,69 +160,70 @@ lruc *lruc_new(uint64_t cache_size, uint32_t average_length) {
   cache->average_item_length  = average_length;
   cache->free_memory          = cache_size;
   cache->total_memory         = cache_size;
+#ifndef __KERNEL__
   cache->seed                 = time(NULL);
+#else
+  cache->seed		      = jiffies;
+#endif
   
   // size the hash table to a guestimate of the number of slots required (assuming a perfect hash)
-  cache->items = (lruc_item **) calloc(sizeof(lruc_item *), cache->hash_table_size);
+  cache->items = (lruc_item **) ndpi_calloc(sizeof(lruc_item *), cache->hash_table_size);
   if(!cache->items) {
     perror("LRU Cache unable to create cache hash table");
-    free(cache);
+    ndpi_free(cache);
     return NULL;
   }
-  
+
   // all cache calls are guarded by a mutex
-  cache->mutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
-  if(pthread_mutex_init(cache->mutex, NULL)) {
-    perror("LRU Cache unable to initialise mutex");
-    free(cache->items);
-    free(cache);
-    return NULL;
-  }
+  init_cache(cache);
   return cache;
 }
 
 
 lruc_error lruc_free(lruc *cache) {
+  lruc_item *item = NULL, *next = NULL;
+  uint32_t i = 0;
+
   test_for_missing_cache();
   
   // free each of the cached items, and the hash table
-  lruc_item *item = NULL, *next = NULL;
-  uint32_t i = 0;
   if(cache->items) {
     for(; i < cache->hash_table_size; i++) {
       item = cache->items[i];    
       while(item) {
         next = (lruc_item *) item->next;
-        free(item);
+        ndpi_free(item);
         item = next;
       }
     }
-    free(cache->items);
+    ndpi_free(cache->items);
   }
   
   // free the cache
+#ifndef __KERNEL__
   if(cache->mutex) {
     if(pthread_mutex_destroy(cache->mutex)) {
       perror("LRU Cache unable to destroy mutex");
       return LRUC_PTHREAD_ERROR;
     }
   }
-  free(cache);
+#endif
+  ndpi_free(cache);
   
   return LRUC_NO_ERROR;
 }
 
 
 lruc_error lruc_set(lruc *cache, void *key, uint32_t key_length, void *value, uint32_t value_length) {
+  uint32_t hash_index = lruc_hash(cache, key, key_length), required = 0;
+  lruc_item *item = NULL, *prev = NULL;
   test_for_missing_cache();
   test_for_missing_key();
   test_for_missing_value();
   test_for_value_too_large();
-  lock_cache();
+  lock_cache(cache);
   
   // see if the key already exists
-  uint32_t hash_index = lruc_hash(cache, key, key_length), required = 0;
-  lruc_item *item = NULL, *prev = NULL;
   item = cache->items[hash_index];
   
   while(item && lruc_cmp_keys(item, key, key_length)) {
@@ -215,7 +234,7 @@ lruc_error lruc_set(lruc *cache, void *key, uint32_t key_length, void *value, ui
   if(item) {
     // update the value and value_lengths
     required = value_length - item->value_length;
-    free(item->value);
+    ndpi_free(item->value);
     item->value = value;
     item->value_length = value_length;
     
@@ -241,19 +260,20 @@ lruc_error lruc_set(lruc *cache, void *key, uint32_t key_length, void *value, ui
       lruc_remove_lru_item(cache);
   }
   cache->free_memory -= required;
-  unlock_cache();
+  unlock_cache(cache);
   return LRUC_NO_ERROR;
 }
 
 
 lruc_error lruc_get(lruc *cache, void *key, uint32_t key_length, void **value) {
-  test_for_missing_cache();
-  test_for_missing_key();
-  lock_cache();
-  
-  // loop until we find the item, or hit the end of a chain
   uint32_t hash_index = lruc_hash(cache, key, key_length);
   lruc_item *item = cache->items[hash_index];
+
+  test_for_missing_cache();
+  test_for_missing_key();
+  lock_cache(cache);
+  
+  // loop until we find the item, or hit the end of a chain
   
   while(item && lruc_cmp_keys(item, key, key_length))
     item = (lruc_item *) item->next;
@@ -265,19 +285,20 @@ lruc_error lruc_get(lruc *cache, void *key, uint32_t key_length, void **value) {
     *value = NULL;
   }
   
-  unlock_cache();
+  unlock_cache(cache);
   return LRUC_NO_ERROR;
 }
 
 
 lruc_error lruc_delete(lruc *cache, void *key, uint32_t key_length) {
-  test_for_missing_cache();
-  test_for_missing_key();
-  lock_cache();
-  
-  // loop until we find the item, or hit the end of a chain
   lruc_item *item = NULL, *prev = NULL;
   uint32_t hash_index = lruc_hash(cache, key, key_length);
+
+  test_for_missing_cache();
+  test_for_missing_key();
+  lock_cache(cache);
+  
+  // loop until we find the item, or hit the end of a chain
   item = cache->items[hash_index];
   
   while(item && lruc_cmp_keys(item, key, key_length)) {
@@ -289,6 +310,6 @@ lruc_error lruc_delete(lruc *cache, void *key, uint32_t key_length) {
     lruc_remove_item(cache, prev, item, hash_index);
   }
   
-  unlock_cache();
+  unlock_cache(cache);
   return LRUC_NO_ERROR;
 }

@@ -1,9 +1,14 @@
+#ifndef __lruc_header__
+#define __lruc_header__
+
+#ifndef __KERNEL__
 #include <pthread.h>
 #include <stdint.h>
 #include <time.h>
-
-#ifndef __lruc_header__
-#define __lruc_header__
+#else
+#include "ndpi_kernel_compat.h"
+#include <linux/spinlock.h>
+#endif // __KERNEL__
 
 // ------------------------------------------
 // errors
@@ -39,7 +44,11 @@ typedef struct {
   uint32_t  hash_table_size;
   time_t    seed;
   lruc_item *free_items;
+#ifndef __KERNEL__
   pthread_mutex_t *mutex;
+#else
+  spinlock_t	lock;
+#endif
 } lruc;
 
 
@@ -53,3 +62,4 @@ lruc_error lruc_get(lruc *cache, void *key, uint32_t key_length, void **value);
 lruc_error lruc_delete(lruc *cache, void *key, uint32_t key_length);
 
 #endif
+

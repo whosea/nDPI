@@ -31,7 +31,7 @@ void ndpi_search_ookla(struct ndpi_detection_module_struct* ndpi_struct, struct 
   void *value;
   
   NDPI_LOG_DBG(ndpi_struct, "Ookla detection\n");
-  
+
   if(packet->tcp->source == htons(8080))
     addr = packet->iph->saddr;
   else if(packet->tcp->dest == htons(8080))
@@ -49,6 +49,7 @@ void ndpi_search_ookla(struct ndpi_detection_module_struct* ndpi_struct, struct 
   }
 
  ookla_exclude:
+
   NDPI_EXCLUDE_PROTO(ndpi_struct, flow);  
 }
 

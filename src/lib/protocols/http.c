@@ -617,7 +617,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
         */
       ookla_found:
         ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_OOKLA, NDPI_PROTOCOL_UNKNOWN);
-
 	if(ndpi_struct->ookla_cache == NULL)
 	  ndpi_struct->ookla_cache = lruc_new(4*1024, 1024);	 	
 	
@@ -631,7 +630,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
 	      lruc_set((lruc*)ndpi_struct->ookla_cache, (void*)&packet->iph->daddr, 4, dummy, 1);
 	  }
 	}
-	
         return;
       }
       
@@ -664,7 +662,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
         && memcmp(&packet->line[0].ptr[packet->line[0].len - 9], " HTTP/1.", 8) == 0) { /* Request line complete. Ex. "GET / HTTP/1.1" */
 
       int x = 1;
-      int a;
 
       packet->http_url_name.ptr = &packet->payload[filename_start];
       packet->http_url_name.len = packet->line[0].len - (filename_start + 9);

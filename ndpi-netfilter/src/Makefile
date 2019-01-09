@@ -13,6 +13,9 @@ xt_ndpi-y := main.o \
 		${NDPI_SRC}/lib/third_party/src/node.o \
 		${NDPI_SRC}/lib/third_party/src/ahocorasick.o \
 		${NDPI_SRC}/lib/third_party/src/libcache.o \
+		${NDPI_SRC}/lib/third_party/src/ndpi_patricia.o \
+		${NDPI_SRC}/lib/third_party/src/ht_hash.o \
+		${NDPI_SRC}/lib/third_party/src/lruc.o \
 		${NDPI_SRC}/lib/ndpi_main.o \
 		${NDPI_PRO}/afp.o \
 		${NDPI_PRO}/ajp.o \
@@ -79,12 +82,15 @@ xt_ndpi-y := main.o \
 		${NDPI_PRO}/mail_smtp.o \
 		${NDPI_PRO}/maplestory.o \
 		${NDPI_PRO}/mdns_proto.o \
+		${NDPI_PRO}/memcached.o \
+		${NDPI_PRO}/mining.o \
 		${NDPI_PRO}/mgcp.o \
 		${NDPI_PRO}/mpegts.o \
 		${NDPI_PRO}/mqtt.o \
 		${NDPI_PRO}/msn.o \
 		${NDPI_PRO}/mssql_tds.o \
 		${NDPI_PRO}/mysql.o \
+		${NDPI_PRO}/nest_log_sink.o \
 		${NDPI_PRO}/netbios.o \
 		${NDPI_PRO}/netflow.o \
 		${NDPI_PRO}/nfs.o \
@@ -92,6 +98,7 @@ xt_ndpi-y := main.o \
 		${NDPI_PRO}/noe.o \
 		${NDPI_PRO}/non_tcp_udp.o \
 		${NDPI_PRO}/ntp.o \
+		${NDPI_PRO}/ookla.o \
 		${NDPI_PRO}/openft.o \
 		${NDPI_PRO}/openvpn.o \
 		${NDPI_PRO}/oracle.o \
@@ -148,6 +155,7 @@ xt_ndpi-y := main.o \
 		${NDPI_PRO}/tvants.o \
 		${NDPI_PRO}/tvuplayer.o \
 		${NDPI_PRO}/ubntac2.o \
+		${NDPI_PRO}/upnp.o \
 		${NDPI_PRO}/usenet.o \
 		${NDPI_PRO}/vhua.o \
 		${NDPI_PRO}/viber.o \
