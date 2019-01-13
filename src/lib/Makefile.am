@@ -188,18 +188,19 @@ libndpi_la_SOURCES = ndpi_content_match.c.inc \
 		     third_party/src/sort.c \
 		     third_party/src/libcache.c \
 		     third_party/src/lruc.c \
+		     third_party/src/btlib.c \
 		     third_party/src/ndpi_patricia.c
 
-lib_LTLIBRARIES = libndpi-static.la
+lib_LTLIBRARIES = libndpi.la
 #noinst_LIBRARIES = libndpi.la libndpi-static.la
 
 #libndpi_la_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/include/ @HS_INC@
-#libndpi_la_LDFLAGS = -shared -version-info 1:0:0 
+#libndpi_la_LDFLAGS = -version-info 1:0:0 
 #-export-symbols $(top_srcdir)/libndpi.sym
 
-libndpi_static_la_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/include/ @HS_INC@
-libndpi_static_la_SOURCES = $(libndpi_la_SOURCES)
-libndpi_static_la_LDFLAGS = -static
+libndpi_la_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/include/ @HS_INC@
+#libndpi_la_SOURCES = $(libndpi_la_SOURCES)
+libndpi_la_LDFLAGS = -static
 
 #EXTRA_DIST = third_party/src/ndpi_patricia.c
 

@@ -28,6 +28,8 @@
 
 #include "ndpi_api.h"
 
+#include "btlib.h"
+
 #define NDPI_PROTOCOL_UNSAFE_DETECTION 	0
 #define NDPI_PROTOCOL_SAFE_DETECTION 		1
 
@@ -373,7 +375,6 @@ spin_unlock(&ht->tbl[key].lock);
 return ret;
 }
 
-#include "btlib.c"
 
 /* copy from https://secure.wand.net.nz/trac/libprotoident/browser/lib/udp/lpi_dht_dict.cc */
 #define ANY -1

@@ -24,7 +24,7 @@
 
 #include "ndpi_api.h"
 
-#ifndef NDPI_NO_STD_INC
+#if !defined(NDPI_NO_STD_INC) && !defined(__KERNEL__)
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
