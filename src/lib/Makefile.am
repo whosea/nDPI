@@ -3,11 +3,11 @@ AM_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/
 
 CFLAGS += -fPIC -DPIC -DNDPI_LIB_COMPILATION # --coverage
 
-libndpi_la_includedir = $(includedir)/libndpi-@VERSION@/libndpi
+libndpi_a_includedir = $(includedir)/libndpi-@VERSION@/libndpi
 
 BUILT_SOURCES = ndpi_network_list.c.inc
 
-libndpi_la_include_HEADERS = ../include/ndpi_api.h \
+libndpi_a_include_HEADERS = ../include/ndpi_api.h \
 			     ../include/ndpi_define.h \
 			     ../include/ndpi_main.h \
 			     ../include/ndpi_includes.h \
@@ -19,7 +19,7 @@ libndpi_la_include_HEADERS = ../include/ndpi_api.h \
 			     third_party/include/lruc.h \
 			     third_party/include/ht_hash.h
 
-libndpi_la_SOURCES = ndpi_content_match.c.inc \
+libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     ndpi_network_list.c.inc \
 		     ndpi_main.c \
 		     protocols/afp.c \
@@ -191,16 +191,9 @@ libndpi_la_SOURCES = ndpi_content_match.c.inc \
 		     third_party/src/btlib.c \
 		     third_party/src/ndpi_patricia.c
 
-lib_LTLIBRARIES = libndpi.la
-#noinst_LIBRARIES = libndpi.la libndpi-static.la
+lib_LIBRARIES = libndpi.a
 
-#libndpi_la_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/include/ @HS_INC@
-#libndpi_la_LDFLAGS = -version-info 1:0:0 
-#-export-symbols $(top_srcdir)/libndpi.sym
-
-libndpi_la_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/include/ @HS_INC@
-#libndpi_la_SOURCES = $(libndpi_la_SOURCES)
-libndpi_la_LDFLAGS = -static
+libndpi_a_CPPFLAGS = -I$(top_srcdir)/src/include/  -I$(top_srcdir)/src/lib/third_party/include/ @HS_INC@
 
 #EXTRA_DIST = third_party/src/ndpi_patricia.c
 
