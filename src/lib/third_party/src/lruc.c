@@ -156,13 +156,15 @@ lruc *lruc_new(uint64_t cache_size, uint32_t average_length) {
     perror("LRU Cache unable to create cache object");
     return NULL;
   }
-  cache->hash_table_size      = cache_size / average_length;
   cache->average_item_length  = average_length;
   cache->free_memory          = cache_size;
   cache->total_memory         = cache_size;
 #ifndef __KERNEL__
+  cache->hash_table_size      = cache_size / average_length;
   cache->seed                 = time(NULL);
 #else
+  do_div(cache_size, average_length);
+  cache->hash_table_size      = cache_size;
   cache->seed		      = jiffies;
 #endif
   
