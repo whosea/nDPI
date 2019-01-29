@@ -380,7 +380,7 @@ static void debug_printf(u_int32_t protocol, void *id_struct, ndpi_log_level_t l
         }
 }
 
-static void set_debug_trace( struct ndpi_net *n) {
+void set_debug_trace( struct ndpi_net *n) {
 	int i;
 	const char *t_proto;
 	ndpi_debug_function_ptr dbg_printf = (ndpi_debug_function_ptr)NULL;

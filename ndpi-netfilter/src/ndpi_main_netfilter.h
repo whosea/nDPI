@@ -68,3 +68,4 @@ struct ndpi_net {
 extern unsigned long ndpi_log_debug;
 
 const char *acerr2txt(AC_ERROR_t r);
+void set_debug_trace( struct ndpi_net *n);
