@@ -466,7 +466,7 @@ static void parseOptions(int argc, char **argv) {
 #endif
 
 #ifdef DEBUG_TRACE
-  trace = fopen("/tmp/ndpiReader.log", "a");
+  if(!trace) trace = fopen("/tmp/ndpiReader.log", "a");
 
   if(trace) fprintf(trace, " #### %s #### \n", __FUNCTION__);
 #endif
@@ -3305,7 +3305,7 @@ int orginal_main(int argc, char **argv) {
   int main(int argc, char **argv) {
 #endif
     int i;    
-    
+
     if(ndpi_get_api_version() != NDPI_API_VERSION) {
       printf("nDPI Library version mismatch: please make sure this code and the nDPI library are in sync\n");
       return(-1);
@@ -3320,7 +3320,9 @@ int orginal_main(int argc, char **argv) {
 
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
 
+#ifdef DEBUG_TRACE
     trace = nDPI_LogLevel > 2 ? stderr : NULL;
+#endif
     parseOptions(argc, argv);
 
     if(bpf_filter_flag) {
