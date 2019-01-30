@@ -1,5 +1,5 @@
 CC=@CC@
-CFLAGS=-g -I../src/include @CFLAGS@
+CFLAGS=-g -I../src/include @CFLAGS@ @CPPFLAGS@
 LIBNDPI=../src/lib/libndpi.a
 LDFLAGS=$(LIBNDPI) @PCAP_LIB@ -lpthread @LDFLAGS@
 OBJS=ndpiReader.o ndpi_util.o
