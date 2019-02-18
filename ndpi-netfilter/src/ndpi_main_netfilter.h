@@ -23,6 +23,8 @@ struct write_proc_cmd {
 	char      cmd[0];
 };
 
+struct nf_ct_ext_ndpi;
+
 struct ndpi_net {
 	struct ndpi_detection_module_struct *ndpi_struct;
 	struct rb_root osdpi_id_root;
@@ -37,6 +39,7 @@ struct ndpi_net {
 #ifdef BT_ANNOUNCE
 				*pe_ann,
 #endif
+				*pe_flow,
 				*pe_info,
 				*pe_proto,
 				*pe_hostdef,
@@ -63,6 +66,18 @@ struct ndpi_net {
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
 	u_int8_t debug_level[NDPI_NUM_BITS+1];
 #endif
+	spinlock_t		flow_lock;
+	spinlock_t		rem_lock;
+	struct nf_ct_ext_ndpi 	*flow_h;
+	struct nf_ct_ext_ndpi	*flow_l;
+	atomic_t		acc_open;
+	atomic_t		acc_work;
+	atomic_t		acc_rem;
+	atomic_t		acc_pass;
+	unsigned long int	acc_gc; // jiffies + x
+	int			acc_wait;
+	int			acc_end;
+	atomic_t		shutdown;
 };
 
 extern unsigned long ndpi_log_debug;
