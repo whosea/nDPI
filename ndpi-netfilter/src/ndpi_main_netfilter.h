@@ -66,18 +66,17 @@ struct ndpi_net {
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
 	u_int8_t debug_level[NDPI_NUM_BITS+1];
 #endif
-	spinlock_t		flow_lock;
-	spinlock_t		rem_lock;
-	struct nf_ct_ext_ndpi 	*flow_h;
-	struct nf_ct_ext_ndpi	*flow_l;
-	atomic_t		acc_open;
-	atomic_t		acc_work;
-	atomic_t		acc_rem;
-	atomic_t		acc_pass;
-	unsigned long int	acc_gc; // jiffies + x
-	int			acc_wait;
-	int			acc_end;
-	atomic_t		shutdown;
+	spinlock_t		rem_lock;	// lock ndpi_delete_acct
+	struct nf_ct_ext_ndpi 	*flow_h;	// Head of info list
+	struct nf_ct_ext_ndpi	*flow_l;	// save point for next read info
+	atomic_t		acc_open;	// flow is open
+	atomic_t		acc_work;	// number of active flow info
+	atomic_t		acc_rem;	// number of inactive flow info
+//	atomic_t		acc_pass;	// label of read process // debug
+	unsigned long int	acc_gc;		// next run ndpi_delete_acct (jiffies + X)
+	int			acc_wait;	// delay for next run ndpi_delete_acct
+	int			acc_end;	// EOF for read process
+	atomic_t		shutdown;	// stop netns
 };
 
 extern unsigned long ndpi_log_debug;
