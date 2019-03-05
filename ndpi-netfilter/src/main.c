@@ -223,6 +223,7 @@ static unsigned long  ndpi_lib_trace=0;
 static unsigned long  ndpi_mtu=48000;
 static unsigned long  bt_log_size=128;
 static unsigned long  bt_hash_size=0;
+static unsigned long  bt6_hash_size=0;
 static unsigned long  bt_hash_tmo=1200;
 
 static unsigned long  max_packet_unk_tcp=20;
@@ -281,6 +282,10 @@ module_param_named(bt_log_size, bt_log_size, ulong, 0400);
 MODULE_PARM_DESC(bt_log_size,"Keep information about the lastes N bt-hash. default 0, range: 32 - 512");
 module_param_named(bt_hash_size, bt_hash_size, ulong, 0400);
 MODULE_PARM_DESC(bt_hash_size,"Hash table size ( *1000 ). default 0, range: 8-32");
+#ifdef NDPI_DETECTION_SUPPORT_IPV6
+module_param_named(bt6_hash_size, bt6_hash_size, ulong, 0400);
+MODULE_PARM_DESC(bt6_hash_size,"Hash table size ( *1000 ). default 0, range: 8-32");
+#endif
 module_param_named(bt_hash_timeout, bt_hash_tmo, ulong, 0400);
 MODULE_PARM_DESC(bt_hash_timeout,"The expiration time for inactive records in BT-hash (sec). default 1200 range: 900-3600");
 
@@ -1173,7 +1178,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		break;
 	}
 
-	n = ndpi_pernet(nf_ct_net(ct));
+	n = ndpi_pernet(xt_net(par));
+//	n = ndpi_pernet(nf_ct_net(ct));
 
 	{
 	    struct nf_ct_ext_labels *ct_label = nf_ct_ext_find_label(ct);
@@ -1537,7 +1543,7 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct xt_ndpi_tginfo *info = par->targinfo;
 	ndpi_protocol proto = NDPI_PROTOCOL_NULL;
-	struct ndpi_net *n = ndpi_pernet(dev_net(skb->dev ? : skb_dst(skb)->dev));
+	struct ndpi_net *n = ndpi_pernet(xt_net(par));
 	int mode = 0;
 
 	if(info->p_proto_id || info->m_proto_id || info->any_proto_id) {
@@ -1654,49 +1660,50 @@ static void bt_port_gc(unsigned long data) {
 #endif
 	struct timespec tm;
 	int i;
+	
+	n->gc.expires = jiffies + HZ/2;
+	add_timer(&n->gc);
 
-	if(ndpi_enable_flow && !atomic_read(&n->acc_open) && time_after(jiffies,n->acc_gc)) {
-		if(atomic_read(&n->acc_work) > 0 || 
-		   atomic_read(&n->acc_rem) > 0 )
-			ndpi_delete_acct(n,1,0);
-		n->acc_gc = jiffies + 5*HZ;
-	}
-
-	if(ht
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-		|| ht6
-#endif
-		)  {
-
-	    getnstimeofday(&tm);
-	    if(ht) spin_lock_bh(&ht->lock);
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-	    if(ht6) spin_lock_bh(&ht6->lock);
-#endif
+	getnstimeofday(&tm);
+	if(ht) {
+	    spin_lock_bh(&ht->lock);
 	    gc_1 = 1;
 	    /* full period 64 seconds */
 	    for(i=0; i < ht->size/128;i++) {
 		if(n->gc_index < 0 ) n->gc_index = 0;
 		if(n->gc_index >= ht->size-1) n->gc_index = 0;
 
-		if(ht && ht->tbl[n->gc_index].len)
+		if(ht->tbl[n->gc_index].len)
 			n->gc_count += ndpi_bittorrent_gc(ht,n->gc_index,tm.tv_sec);
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-		if(ht6 && ht6->tbl[n->gc_index].len)
-			n->gc_count += ndpi_bittorrent_gc(ht6,n->gc_index,tm.tv_sec);
-#endif
 		n->gc_index++;
 	    }
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-	    if(ht6) spin_unlock_bh(&ht6->lock);
-#endif
-	    if(ht) spin_unlock_bh(&ht->lock);
+	    spin_unlock_bh(&ht->lock);
 	}
-	
+#ifdef NDPI_DETECTION_SUPPORT_IPV6
+	if(ht6)  {
+	    spin_lock_bh(&ht6->lock);
+	    gc_1 = 1;
+	    for(i=0; i < ht6->size/128;i++) {
+		if(n->gc_index6 < 0 ) n->gc_index6 = 0;
+		if(n->gc_index6 >= ht6->size-1) n->gc_index6 = 0;
+
+		if(ht6->tbl[n->gc_index6].len)
+			n->gc_count += ndpi_bittorrent_gc(ht6,n->gc_index6,tm.tv_sec);
+		n->gc_index6++;
+	    }
+	    spin_unlock_bh(&ht6->lock);
+	}
+#endif
 	ndpi_bt_gc = n->gc_count;
 
-	n->gc.expires = jiffies + HZ/2;
-	add_timer(&n->gc);
+	if(ndpi_enable_flow && !atomic_read(&n->acc_open) && time_after(jiffies,n->acc_gc)) {
+		if(atomic_read(&n->acc_work) > 0 || 
+		   atomic_read(&n->acc_rem) > 0 ) {
+			ndpi_delete_acct(n,1,0);
+		}
+		n->acc_gc = jiffies + 5*HZ;
+	}
+
 }
 
 static int inet_ntop_port(int family,void *ip, u_int16_t port, char *lbuf, size_t bufsize) {
@@ -1753,8 +1760,8 @@ static ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
 		if(!atomic_read(&ht->count)) tmin = 0;
 	        l =  snprintf(lbuf,sizeof(lbuf)-1,
 			"hash_size %lu hash timeout %lus count %u min %d max %d gc %d\n",
-				bt_hash_size*1024,bt_hash_tmo,
-				atomic_read(&ht->count),tmin,tmax,n->gc_count	);
+				(family == AF_INET6 ? bt6_hash_size:bt_hash_size)*1024,
+				bt_hash_tmo, atomic_read(&ht->count),tmin,tmax,n->gc_count );
 
 		if (!(access_ok(VERIFY_WRITE, buf, l) &&
 				! __copy_to_user(buf, lbuf, l))) return -EFAULT;
@@ -1764,7 +1771,7 @@ static ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
 	    /* ppos > 0 */
 #define BSS1 144
 #define BSS2 12
-	    if(*ppos * BSS1 >= bt_hash_size*1024) return 0;
+	    if(*ppos * BSS1 >= (family == AF_INET6 ? bt6_hash_size:bt_hash_size)*1024) return 0;
 
 	    t = &ht->tbl[(*ppos-1)*BSS1];
 	    p=0;
@@ -1905,7 +1912,7 @@ static int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 
 	spin_unlock(&n->rem_lock);
 
-	if(all == 2) printk("%s: Delete flows %d/%d\n",__func__,i2,atomic_read(&n->acc_work));
+	if(all == 2 || i2) printk("%s: Delete flows %d/%d\n",__func__,i2,atomic_read(&n->acc_work));
 
 	return i2;
 }
@@ -2752,13 +2759,16 @@ static int __net_init ndpi_net_init(struct net *net)
 #endif
 
 	if(bt_hash_size > 512) bt_hash_size = 512;
+	if(bt6_hash_size > 32) bt6_hash_size = 32;
 #ifdef BT_ANNOUNCE
 	if(bt_log_size > 512) bt_log_size = 512;
 	if(bt_log_size < 32 ) bt_log_size = 0;
 #else
 	bt_log_size = 0;
 #endif
-	ndpi_bittorrent_init(n->ndpi_struct,bt_hash_size*1024,bt_hash_tmo,bt_log_size);
+	ndpi_bittorrent_init(n->ndpi_struct,
+			bt_hash_size*1024,bt6_hash_size*1024,
+			bt_hash_tmo,bt_log_size);
 
 	n->n_hash = -1;
 
@@ -3102,6 +3112,7 @@ static int __init ndpi_mt_init(void)
 		goto free_id;
 	}
 	if(bt_hash_size && bt_hash_size > 512) bt_hash_size = 512;
+	if(bt6_hash_size && bt6_hash_size > 32) bt6_hash_size = 32;
 	if(!bt_hash_tmo || bt_hash_tmo < 900) bt_hash_tmo = 900;
 	if( bt_hash_tmo > 3600) bt_hash_tmo = 3600;
 

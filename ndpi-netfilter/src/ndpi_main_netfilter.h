@@ -47,6 +47,7 @@ struct ndpi_net {
 	int		n_hash;
 	int		gc_count;
 	int		gc_index;
+	int		gc_index6;
 	int		labels_word;
         struct		timer_list gc;
 

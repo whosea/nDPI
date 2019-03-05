@@ -1466,10 +1466,10 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 }
 
 void ndpi_bittorrent_init(struct ndpi_detection_module_struct *ndpi_struct,
-		u_int32_t size,u_int32_t tmo,int logsize) {
+		u_int32_t size,u_int32_t size6,u_int32_t tmo,int logsize) {
 	ndpi_struct->bt_ht = hash_ip4p_init(size);
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
-	ndpi_struct->bt6_ht = hash_ip4p_init(size);
+	ndpi_struct->bt6_ht = hash_ip4p_init(size6);
 	if(ndpi_struct->bt6_ht)
 		ndpi_struct->bt6_ht->ipv6=1;
 #endif
