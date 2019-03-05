@@ -304,9 +304,9 @@ int main(int argc,char **argv) {
 		psp = nsp;
 
 		if(!strcmp(word,"source")) {
-			strncpy(lastword,word,sizeof(lastword));
+			strncpy(lastword,word,sizeof(lastword)-1);
 			if(wordarg)
-				strncat(pnl->comments,wordarg,sizeof(pnl->comments));
+				strncat(pnl->comments,wordarg,sizeof(pnl->comments)-1);
 			continue;
 		}
 		if(!strcmp(word,"ip")) {
@@ -367,7 +367,7 @@ int main(int argc,char **argv) {
 			if(pnl->comments[0]) {
 				strncat(pnl->comments,"\n",sizeof(pnl->comments));
 			}
-			strncat(pnl->comments,word,sizeof(pnl->comments));
+			strncat(pnl->comments,word,sizeof(pnl->comments)-1);
 			continue;
 		}
 		fprintf(stderr,"Invalid list word '%s'\n",lastword);
