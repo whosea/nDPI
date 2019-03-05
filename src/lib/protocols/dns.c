@@ -75,7 +75,7 @@ static uint32_t dns_validchar[8] = {
 /* *********************************************** */
 
 void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow) {
-  int x;
+  int x,payload_offset = 0;
   u_int8_t is_query;
   u_int16_t s_port = 0, d_port = 0;
   
@@ -88,7 +88,7 @@ void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, struct nd
   } else if(flow->packet.tcp != NULL) /* pkt size > 512 bytes */ {
     s_port = ntohs(flow->packet.tcp->source);
     d_port = ntohs(flow->packet.tcp->dest);
-    x = 2;
+    payload_offset = x = 2;
   } else {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
@@ -199,7 +199,7 @@ void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, struct nd
 
       /* extract host name server */
       max_len = sizeof(flow->host_server_name)-1;
-      off = sizeof(struct ndpi_dns_packet_header);
+      off = sizeof(struct ndpi_dns_packet_header)+payload_offset;
 
       while(j < max_len && off < flow->packet.payload_packet_len && flow->packet.payload[off] != '\0') {
 	uint8_t c,cl = flow->packet.payload[off++];
