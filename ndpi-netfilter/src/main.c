@@ -115,7 +115,7 @@ static inline void *PDE_DATA(const struct inode *inode)
 #endif
 
 // for testing only!
-//#define USE_CONNLABELS
+#define USE_CONNLABELS
 
 #if !defined(USE_CONNLABELS) && defined(CONFIG_NF_CONNTRACK_CUSTOM) && CONFIG_NF_CONNTRACK_CUSTOM > 0
 #define NF_CT_CUSTOM
@@ -163,6 +163,8 @@ struct flow_info {
 #include "ndpi_main_netfilter.h"
 #include "ndpi_proc_generic.h"
 #include "ndpi_proc_parsers.h"
+
+#include "../libre/regexp.h"
 
 struct nf_ct_ext_ndpi {
 	struct nf_ct_ext_ndpi	*next;		// 4/8
@@ -352,7 +354,6 @@ unsigned long
 	       ndpi_pudf=0,ndpi_pudr=0,
 	       ndpi_puo=0;
 
-#include "regexp.c"
 
 static int ndpi_delete_acct(struct ndpi_net *n,int all,int start);
 
@@ -622,7 +623,13 @@ static inline void ndpi_init_ct_struct_rev(struct nf_ct_ext_ndpi *ct_ndpi,
 		ns_port = ct_ndpi->flinfo.dport != tuple->src.u.tcp.port;
 		nd_port = ct_ndpi->flinfo.sport != tuple->dst.u.tcp.port;
 	}
-	// FIXME icmp ?
+	// FIXME icmp
+	if(l4_proto == IPPROTO_ICMP && (
+		tuple->dst.u.icmp.type == ICMP_ECHO || 
+		tuple->dst.u.icmp.type == ICMP_ECHOREPLY)) {
+		ns_port =  ct_ndpi->flinfo.dport == tuple->src.u.icmp.id;
+		nd_port =  ct_ndpi->flinfo.sport == ((tuple->dst.u.icmp.type << 8) | tuple->dst.u.icmp.code);
+	}
 	if(!is_ipv6) {
 	    if(ns_ip || ns_port) {
 		ct_ndpi->dnat = 1;
@@ -1090,7 +1097,7 @@ ndpi_host_ssl(ct_ndpi);
 do {
   if(info->host) {
 	if(ct_ndpi->host) {
-		res = info->re ? regexec(info->reg_data,ct_ndpi->host) != 0 :
+		res = info->re ? ndpi_regexec(info->reg_data,ct_ndpi->host) != 0 :
 			strstr(ct_ndpi->host,info->hostname) != NULL;
 		if(res) break;
 	}
@@ -1099,7 +1106,7 @@ do {
   if(info->ssl && ( ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_SSL ||
 		    ct_ndpi->proto.master_protocol == NDPI_PROTOCOL_SSL )) {
 	if(ct_ndpi->ssl) {
-		res = info->re ? regexec(info->reg_data,ct_ndpi->ssl) != 0 :
+		res = info->re ? ndpi_regexec(info->reg_data,ct_ndpi->ssl) != 0 :
 			strstr(ct_ndpi->ssl,info->hostname) != NULL;
 		if(res) break;
 	}
@@ -1445,7 +1452,7 @@ struct xt_ndpi_mtinfo *info = par->matchinfo;
 		re_len -= 2;
 		strncpy(re_buf,&info->hostname[1],re_len);
 		re_buf[re_len] = '\0';
-		info->reg_data = regcomp(re_buf,&re_len);
+		info->reg_data = ndpi_regcomp(re_buf,&re_len);
 		if(!info->reg_data) {
 			pr_info("regcomp failed\n");
 			return -EINVAL;

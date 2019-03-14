@@ -28,6 +28,10 @@
  *
  * Modified slightly by Matthew Strait to use more modern C.
  */
+#if __KERNEL__
+#include <ndpi_kernel_compat.h>
+#include <linux/slab.h>
+#endif
 
 #include "regexp.h"
 
@@ -40,7 +44,7 @@
   typedef size_t __kernel_size_t;
 #endif
 
-static void regerror(char * s)
+void ndpi_regerror(char * s)
 {
         printk("<3>Regexp: %s\n", s);
         /* NOTREACHED */
@@ -149,7 +153,7 @@ static void regerror(char * s)
 #define	UCHARAT(p)	((int)*(p)&CHARBITS)
 #endif
 
-#define	FAIL(m)	{ regerror(m); return(NULL); }
+#define	FAIL(m)	{ ndpi_regerror(m); return(NULL); }
 #define	ISMULT(c)	((c) == '*' || (c) == '+' || (c) == '?')
 #define	META	"^$.[()|?+*\\"
 
@@ -225,8 +229,8 @@ __kernel_size_t my_strcspn(const char *s1,const char *s2)
  * Beware that the optimization-preparation code in here knows about some
  * of the structure of the compiled regexp.
  */
-static regexp *
-regcomp(char *exp,int *patternsize)
+regexp *
+ndpi_regcomp(char *exp,int *patternsize)
 {
 	register regexp *r;
 	register char *scan;
@@ -721,8 +725,8 @@ STATIC char *regprop(char *op);
 /*
  - regexec - match a regexp against a string
  */
-static int
-regexec(regexp *prog, char *string)
+int
+ndpi_regexec(regexp *prog, char *string)
 {
 	register char *s;
 	struct match_globals g;
