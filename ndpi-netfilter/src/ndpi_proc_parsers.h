@@ -1,4 +1,6 @@
 
+#include "../lib/third_party/include/ndpi_patricia.h"
+
 struct ndpi_port_range {
 	uint16_t	start, end, // port range
 			proto,	    // ndpi proto

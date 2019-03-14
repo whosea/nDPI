@@ -80,7 +80,64 @@ struct ndpi_net {
 	atomic_t		shutdown;	// stop netns
 };
 
+struct flow_info {
+	/* 0 - in, 1 - out, 2 - last in, 3 - last out */
+	uint64_t		b[4]; // 32
+	uint32_t		p[4]; // 16
+	uint32_t		time_start,time_end; // 8
+
+	union nf_inet_addr	ip_s,ip_d; // 32
+	uint32_t		ip_snat,ip_dnat; // 8
+	uint16_t		sport,dport,sport_nat,dport_nat; // 8
+	uint16_t		ifidx,ofidx; // 4
+}  __attribute ((packed)); // 108 bytes
+
+
+struct nf_ct_ext_ndpi {
+	struct nf_ct_ext_ndpi	*next;		// 4/8
+	struct ndpi_flow_struct	*flow;		// 4/8
+	struct ndpi_id_struct   *src,*dst;	// 8/16
+	char			*host;		// 4/8 bytes
+	char			*ssl;		// 4/8 bytes
+	struct flow_info	flinfo;		// 108 bytes
+	ndpi_protocol		proto;		// 4 bytes
+	spinlock_t		lock;		// 2/4 bytes
+	uint8_t			l4_proto,	// 1
+				dumped,		// 1
+				for_delete,	// 1
+				detect_done:1,  // 1
+				ipv6:1,
+				rev:1,
+				snat:1,
+				dnat:1,
+				userid:1;
+#if __SIZEOF_LONG__ == 4
+	uint8_t			pad[2];
+#endif
+/* 
+ * 32bit - 144 bytes, 64bit - 172 bytes;
+ */
+} __attribute ((packed));
+
+static inline int ndpi_ct_counters0(struct nf_ct_ext_ndpi *ct) {
+        return  (ct->flinfo.p[0] == ct->flinfo.p[2]) &&
+                (ct->flinfo.p[1] == ct->flinfo.p[3]) ;
+}
+
+static inline void __ndpi_free_ct_proto(struct nf_ct_ext_ndpi *ct_ndpi) {
+        if(ct_ndpi->host) {
+                kfree(ct_ndpi->host);
+                ct_ndpi->host = NULL;
+        }
+        if(ct_ndpi->ssl) {
+                kfree(ct_ndpi->ssl);
+                ct_ndpi->ssl = NULL;
+        }
+}
+
 extern unsigned long ndpi_log_debug;
 
+#include "../lib/third_party/include/ahocorasick.h"
 const char *acerr2txt(AC_ERROR_t r);
+
 void set_debug_trace( struct ndpi_net *n);

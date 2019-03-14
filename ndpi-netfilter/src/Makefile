@@ -14,7 +14,8 @@ NDPI_PROTO_SRC := $(shell cd $(src) ; echo $(NDPI_PRO)/*.c)
 
 obj-m := xt_ndpi.o
 xt_ndpi-y := main.o ndpi_strcol.o ndpi_proc_parsers.o ndpi_proc_generic.o \
-		../libre/regexp.o \
+		ndpi_proc_info.o  ndpi_proc_flow.o ndpi_proc_hostdef.o \
+		ndpi_proc_ipdef.o ../libre/regexp.o \
 		${NDPI_SRC}/lib/third_party/src/node.o \
 		${NDPI_SRC}/lib/third_party/src/ahocorasick.o \
 		${NDPI_SRC}/lib/third_party/src/libcache.o \

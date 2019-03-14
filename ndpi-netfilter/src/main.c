@@ -24,26 +24,27 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/version.h>
-#include <linux/netfilter/x_tables.h>
+
+#include <linux/rbtree.h>
+#include <linux/time.h>
+#include <linux/atomic.h>
+#include <linux/proc_fs.h>
+#include <linux/jiffies.h>
+
+#include <net/net_namespace.h>
+#include <net/netns/generic.h>
+
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/icmp.h>
-
-#include <linux/if_ether.h>
-#include <linux/rbtree.h>
-#include <linux/kref.h>
-#include <linux/time.h>
-#include <net/net_namespace.h>
-#include <net/netns/generic.h>
-#include <linux/atomic.h>
-#include <linux/proc_fs.h>
-#include <linux/delay.h>
-#include <linux/jiffies.h>
 #include <linux/inetdevice.h>
+#include <linux/if_ether.h>
 
+
+#include <linux/netfilter/x_tables.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_extend.h>
 
@@ -115,7 +116,7 @@ static inline void *PDE_DATA(const struct inode *inode)
 #endif
 
 // for testing only!
-#define USE_CONNLABELS
+// #define USE_CONNLABELS
 
 #if !defined(USE_CONNLABELS) && defined(CONFIG_NF_CONNTRACK_CUSTOM) && CONFIG_NF_CONNTRACK_CUSTOM > 0
 #define NF_CT_CUSTOM
@@ -147,52 +148,18 @@ struct osdpi_id_node {
 };
 
 
-struct flow_info {
-	/* 0 - in, 1 - out, 2 - last in, 3 - last out */
-	uint64_t		b[4]; // 32
-	uint32_t		p[4]; // 16
-	uint32_t		time_start,time_end; // 8
-
-	union nf_inet_addr	ip_s,ip_d; // 32
-	uint32_t		ip_snat,ip_dnat; // 8
-	uint16_t		sport,dport,sport_nat,dport_nat; // 8
-	uint16_t		ifidx,ofidx; // 4
-}  __attribute ((packed)); // 108 bytes
-
 #include "ndpi_strcol.h"
 #include "ndpi_main_netfilter.h"
+#include "ndpi_main_common.h"
 #include "ndpi_proc_generic.h"
 #include "ndpi_proc_parsers.h"
+#include "ndpi_proc_info.h"
+#include "ndpi_proc_flow.h"
+#include "ndpi_proc_hostdef.h"
+#include "ndpi_proc_ipdef.h"
 
 #include "../libre/regexp.h"
 
-struct nf_ct_ext_ndpi {
-	struct nf_ct_ext_ndpi	*next;		// 4/8
-	struct ndpi_flow_struct	*flow;		// 4/8
-	struct ndpi_id_struct   *src,*dst;	// 8/16
-	char			*host;		// 4/8 bytes
-	char			*ssl;		// 4/8 bytes
-	struct flow_info	flinfo;		// 108 bytes
-	ndpi_protocol		proto;		// 4 bytes
-	spinlock_t		lock;		// 2/4 bytes
-	uint8_t			l4_proto,	// 1
-				dumped,		// 1
-				for_delete,	// 1
-				detect_done:1,  // 1
-				ipv6:1,
-				rev:1,
-				snat:1,
-				dnat:1,
-				userid:1;
-#if __SIZEOF_LONG__ == 4
-	uint8_t			pad[2];
-#endif
-/* 
- * 32bit - 144 bytes, 64bit - 172 bytes;
- */
-} __attribute ((packed));
-
-// #ifndef NF_CT_CUSTOM
 #define MAGIC_CT 0xa55a
 struct nf_ct_ext_labels { /* max size 128 bit */
 	/* words must be first byte for compatible with NF_CONNLABELS
@@ -207,7 +174,6 @@ struct nf_ct_ext_labels { /* max size 128 bit */
 #endif
 	struct nf_ct_ext_ndpi	*ndpi_ext;
 } __attribute ((packed));
-//#endif
 
 struct ndpi_cb {
 	void		*last_ct;
@@ -217,16 +183,16 @@ struct ndpi_cb {
 
 static ndpi_protocol proto_null = NDPI_PROTOCOL_NULL;
 
-static unsigned long  ndpi_enable_flow=0;
+unsigned long  ndpi_enable_flow=0;
 unsigned long  ndpi_log_debug=0;
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
 static unsigned long  ndpi_lib_trace=0;
 #endif
 static unsigned long  ndpi_mtu=48000;
 static unsigned long  bt_log_size=128;
-static unsigned long  bt_hash_size=0;
-static unsigned long  bt6_hash_size=0;
-static unsigned long  bt_hash_tmo=1200;
+unsigned long  bt_hash_size=0;
+unsigned long  bt6_hash_size=0;
+unsigned long  bt_hash_tmo=1200;
 
 static unsigned long  max_packet_unk_tcp=20;
 static unsigned long  max_packet_unk_udp=20;
@@ -355,8 +321,6 @@ unsigned long
 	       ndpi_puo=0;
 
 
-static int ndpi_delete_acct(struct ndpi_net *n,int all,int start);
-
 static int ndpi_net_id;
 static inline struct ndpi_net *ndpi_pernet(struct net *net)
 {
@@ -369,7 +333,7 @@ static uint32_t detection_tick_resolution = 1000;
 static	enum nf_ct_ext_id nf_ct_ext_id_ndpi = 0;
 static	struct kmem_cache *osdpi_flow_cache = NULL;
 static	struct kmem_cache *osdpi_id_cache = NULL;
-static	struct kmem_cache *ct_info_cache = NULL;
+struct kmem_cache *ct_info_cache = NULL;
 struct kmem_cache *bt_port_cache = NULL;
 
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
@@ -451,8 +415,6 @@ void set_debug_trace( struct ndpi_net *n) {
 #endif
 
 static char *ct_info(const struct nf_conn * ct,char *buf,size_t buf_size);
-
-#define XCHGP(a,b) { void *__c = a; a = b; b = __c; }
 
 static void *malloc_wrapper(size_t size)
 {
@@ -647,11 +609,6 @@ static inline void ndpi_init_ct_struct_rev(struct nf_ct_ext_ndpi *ct_ndpi,
 				ct_ndpi);
 }
 
-static inline int ndpi_ct_counters0(struct nf_ct_ext_ndpi *ct) {
-	return	(ct->flinfo.p[0] == ct->flinfo.p[2]) && 
-		(ct->flinfo.p[1] == ct->flinfo.p[3]) ;
-}
-
 static inline void ndpi_ct_counters(struct nf_ct_ext_ndpi *ct_ndpi,
 		size_t len, int rev,uint32_t m_time) {
 
@@ -688,16 +645,6 @@ static inline void __ndpi_free_ct_ndpi_id(struct ndpi_net *n, struct nf_ct_ext_n
 	spin_unlock_bh (&n->id_lock);
 }
 
-static inline void __ndpi_free_ct_proto(struct nf_ct_ext_ndpi *ct_ndpi) {
-	if(ct_ndpi->host) {
-		kfree(ct_ndpi->host);
-		ct_ndpi->host = NULL;
-	}
-	if(ct_ndpi->ssl) {
-		kfree(ct_ndpi->ssl);
-		ct_ndpi->ssl = NULL;
-	}
-}
 static int
 __ndpi_free_flow (struct nf_conn * ct,void *data) {
 	struct ndpi_net *n = data;
@@ -1728,7 +1675,7 @@ static void bt_port_gc(unsigned long data) {
 
 }
 
-static int inet_ntop_port(int family,void *ip, u_int16_t port, char *lbuf, size_t bufsize) {
+int inet_ntop_port(int family,void *ip, u_int16_t port, char *lbuf, size_t bufsize) {
 u_int8_t *ipp = (u_int8_t *)ip;
 u_int16_t *ip6p = (u_int16_t *)ip;
 return  family == AF_INET6 ?
@@ -1740,126 +1687,12 @@ return  family == AF_INET6 ?
 			ipp[0],ipp[1],ipp[2],ipp[3],htons(port));
 }
 
-static ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
-                              size_t count, loff_t *ppos,int family)
-{
-        struct ndpi_detection_module_struct *ndpi_struct = n->ndpi_struct;
-	struct hash_ip4p_table *ht,*ht4 = ndpi_struct->bt_ht;
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-	struct hash_ip4p_table *ht6 = ndpi_struct->bt6_ht;
-#endif
-	char lbuf[128];
-	struct hash_ip4p *t;
-	size_t p;
-	int l;
-	ht = 
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-		family == AF_INET6 ? ht6:
-#endif
-		ht4;
-	if(!ht) {
-	    if(!*ppos) {
-	        l =  snprintf(lbuf,sizeof(lbuf)-1, "hash disabled\n");
-		if (!(access_ok(VERIFY_WRITE, buf, l) &&
-				! __copy_to_user(buf, lbuf, l))) return -EFAULT;
-		(*ppos)++;
-		return l;
-	    }
-	    return 0;
-	}
-	if(n->n_hash < 0 || n->n_hash >= ht->size-1) {
-	    int tmin,tmax,i;
-
-	    if(!*ppos) {
-		tmin = 0x7fffffff;
-		tmax = 0;
-		t = &ht->tbl[0];
-
-		for(i = ht->size-1; i >= 0 ;i--,t++) {
-			if(t->len > 0 && t->len < tmin) tmin = t->len;
-			if(t->len > tmax) tmax = t->len;
-		}
-		if(!atomic_read(&ht->count)) tmin = 0;
-	        l =  snprintf(lbuf,sizeof(lbuf)-1,
-			"hash_size %lu hash timeout %lus count %u min %d max %d gc %d\n",
-				(family == AF_INET6 ? bt6_hash_size:bt_hash_size)*1024,
-				bt_hash_tmo, atomic_read(&ht->count),tmin,tmax,n->gc_count );
-
-		if (!(access_ok(VERIFY_WRITE, buf, l) &&
-				! __copy_to_user(buf, lbuf, l))) return -EFAULT;
-		(*ppos)++;
-		return l;
-	    }
-	    /* ppos > 0 */
-#define BSS1 144
-#define BSS2 12
-	    if(*ppos * BSS1 >= (family == AF_INET6 ? bt6_hash_size:bt_hash_size)*1024) return 0;
-
-	    t = &ht->tbl[(*ppos-1)*BSS1];
-	    p=0;
-	    for(i=0; i < BSS1;i++,t++) {
-		if(!(i % BSS2)) {
-		        l = snprintf(lbuf,sizeof(lbuf)-1, "%d:\t",(int)(i+(*ppos-1)*BSS1));
-			if (!(access_ok(VERIFY_WRITE, buf+p, l) && !__copy_to_user(buf+p, lbuf, l)))
-				return -EFAULT;
-			p += l;
-		}
-	        l = snprintf(lbuf,sizeof(lbuf)-1, "%5zu%c",
-				t->len, (i % BSS2) == (BSS2-1) ? '\n':' ');
-		
-		if (!(access_ok(VERIFY_WRITE, buf+p, l) &&
-				!__copy_to_user(buf+p, lbuf, l)))
-			return -EFAULT;
-		p += l;
-	    }
-	    (*ppos)++;
-	    return p;
-	}
-	t = &ht->tbl[n->n_hash];
-	if(!*ppos) {
-	        l =  snprintf(lbuf,sizeof(lbuf)-1, "index %d len %zu\n",
-				n->n_hash,t->len);
-		if (!(access_ok(VERIFY_WRITE, buf, l) &&
-				!__copy_to_user(buf, lbuf, l))) return -EFAULT;
-		(*ppos)++;
-		return l;
-	}
-	if(*ppos > 1) return 0;
-	p = 0;
-	spin_lock_bh(&t->lock);
-	do {
-		struct hash_ip4p_node *x = t->top;
-	 	struct timespec tm;
-
-	        getnstimeofday(&tm);
-		while(x && p < count - 128) {
-		        l =  inet_ntop_port(family,&x->ip,x->port,lbuf,sizeof(lbuf)-2);
-			l += snprintf(&lbuf[l],sizeof(lbuf)-l-1, " %d %x %u\n",
-				(int)(tm.tv_sec - x->lchg),x->flag,x->count);
-
-			if (!(access_ok(VERIFY_WRITE, buf+p, l) &&
-				!__copy_to_user(buf+p, lbuf, l))) return -EFAULT;
-			p += l;
-			x = x->next;
-		}
-	} while(0);
-	spin_unlock_bh(&t->lock);
-	(*ppos)++;
-	return p;
-}
-
 static int ninfo_proc_open(struct inode *inode, struct file *file)
 {
         return 0;
 }
-static ssize_t ninfo_proc_read(struct file *file, char __user *buf,
-                              size_t count, loff_t *ppos)
-{
-return _ninfo_proc_read(PDE_DATA(file_inode(file)),buf,count,ppos,AF_INET);
-}
 
-
-static int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
+int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 	struct nf_ct_ext_ndpi *ct_ndpi,*next,*prev,*flow_h;
 	int i1 = 0, i2 = 0, del;
 	int i1max;
@@ -1935,111 +1768,9 @@ static int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 	return i2;
 }
 
-static void nflow_proc_read_start(struct ndpi_net *n) {
-int i2 = 0, i3 = 0;
-
-	i2 = ndpi_delete_acct(n,0,1);
-	n->acc_end = 0;
-	n->flow_l = NULL;
-	i3 = atomic_read(&n->acc_work);
-	printk("%s: Start dump. Delete %d work CT %d\n",__func__, i2, i3);
-}
-
-
-static int nflow_proc_open(struct inode *inode, struct file *file) {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-
-	if(!ndpi_enable_flow) return -EINVAL;
-
-	if(atomic_xchg(&n->acc_open,1)) {
-		return -EBUSY;
-	}
-	spin_lock(&n->rem_lock); // wait end of ndpi_delete_acct()
-	spin_unlock(&n->rem_lock);
-	if(!n->acc_wait) n->acc_wait = 60;
-	nflow_proc_read_start(n);
-	return 0;
-}
-
-static int nflow_proc_close(struct inode *inode, struct file *file)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	if(!ndpi_enable_flow) return -EINVAL;
-	n->acc_gc = jiffies + n->acc_wait*HZ;
-	atomic_set(&n->acc_open,0);
-        return 0;
-}
-
-static ssize_t acct_info_len = 256;
-static ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,struct nf_ct_ext_ndpi *ct) {
-	const char *t_proto;
-	ssize_t l = 0;
-	*buf = 0;
-
-	WRITE_ONCE(ct->dumped,1);
-	if(ndpi_ct_counters0(ct)) return 0;
-	buflen -= 2;
-	l = snprintf(buf,buflen,"%u %u %c %d ",
-		ct->flinfo.time_start,ct->flinfo.time_end,
-		ct->ipv6 ? '6':'4', ct->l4_proto);
-	if(ct->ipv6) {
-	    l += snprintf(&buf[l],buflen-l,"%pI6c %d %pI6c %d %llu %llu %u %u ",
-		&ct->flinfo.ip_s, htons(ct->flinfo.sport),
-		&ct->flinfo.ip_d, htons(ct->flinfo.dport),
-		ct->flinfo.b[0]-ct->flinfo.b[2],
-		ct->flinfo.b[1]-ct->flinfo.b[3],
-		ct->flinfo.p[0]-ct->flinfo.p[2],
-		ct->flinfo.p[1]-ct->flinfo.p[3]);
-	} else {
-	    l += snprintf(&buf[l],buflen-l,"%pI4n %d %pI4n %d %llu %llu %u %u",
-		&ct->flinfo.ip_s, htons(ct->flinfo.sport),
-		&ct->flinfo.ip_d, htons(ct->flinfo.dport),
-		ct->flinfo.b[0]-ct->flinfo.b[2],
-		ct->flinfo.b[1]-ct->flinfo.b[3],
-		ct->flinfo.p[0]-ct->flinfo.p[2],
-		ct->flinfo.p[1]-ct->flinfo.p[3]);
-	    if(ct->snat) {
-		l += snprintf(&buf[l],buflen-l," SN=%pI4n:%d",
-				&ct->flinfo.ip_snat,htons(ct->flinfo.sport_nat));
-	    }
-	    if(ct->dnat) {
-		l += snprintf(&buf[l],buflen-l," DN=%pI4n:%d",
-				&ct->flinfo.ip_dnat,htons(ct->flinfo.dport_nat));
-	    }
-	    // FIXME userid!
-	}
-	ct->flinfo.b[2] = ct->flinfo.b[0];
-	ct->flinfo.b[3] = ct->flinfo.b[1];
-	ct->flinfo.p[2] = ct->flinfo.p[0];
-	ct->flinfo.p[3] = ct->flinfo.p[1];
-
-	l += snprintf(&buf[l],buflen-l," I=%d,%d",ct->flinfo.ifidx,ct->flinfo.ofidx);
-
-	t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.app_protocol);
-	l += snprintf(&buf[l],buflen-l," %s",t_proto);
-	if(ct->proto.master_protocol != NDPI_PROTOCOL_UNKNOWN) {
-	    t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.master_protocol);
-	    l += snprintf(&buf[l],buflen-l,".%s",t_proto);
-	}
-	if(ct->ssl)
-	    l += snprintf(&buf[l],buflen-l," C=%s",ct->ssl);
-	if(ct->host)
-	    l += snprintf(&buf[l],buflen-l," H=%s",ct->host);
-
-	buf[l++] = '\n';
-	buf[l] = 0;
-	if(l > acct_info_len ) {
-		printk("%s: max len %d\n'%s'\n",__func__,(int)l, buf);
-		acct_info_len = l;
-	}
-	return l;
-}
-
-
-static ssize_t nflow_proc_read(struct file *file, char __user *buf,
+ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
 	struct nf_ct_ext_ndpi *ct_ndpi,*next,*prev,*flow_h;
 	int p,del;
 	ssize_t la;
@@ -2114,258 +1845,6 @@ static ssize_t nflow_proc_read(struct file *file, char __user *buf,
 	return p;
 }
 
-static ssize_t nflow_proc_write(struct file *file, const char __user *buffer,
-                     size_t length, loff_t *loff)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	char buf[32];
-	int idx;
-
-	if(!ndpi_enable_flow) return -EINVAL;
-
-        if (length > 0) {
-		memset(buf,0,sizeof(buf));
-		if (!(access_ok(VERIFY_READ, buffer, length) && 
-			!__copy_from_user(&buf[0], buffer, min(length,sizeof(buf)-1))))
-			        return -EFAULT;
-		if(sscanf(buf,"timeout=%d",&idx) == 1) {
-			if(idx < 1 || idx > 600) return -EINVAL;
-			n->acc_wait = idx;
-		} else
-			return -EINVAL;
-        }
-        return length;
-}
-
-static loff_t nflow_proc_llseek(struct file *file, loff_t offset, int whence) {
-	if(whence == SEEK_SET && offset == 0) {
-		struct ndpi_net *n = PDE_DATA(file_inode(file));
-		nflow_proc_read_start(n);
-		return vfs_setpos(file,offset,OFFSET_MAX);
-	}
-	if(whence == SEEK_CUR && offset == 0) {
-		return noop_llseek(file,offset,whence);
-	}
-	return -EINVAL;
-}
-
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-static ssize_t ninfo6_proc_read(struct file *file, char __user *buf,
-                              size_t count, loff_t *ppos)
-{
-return _ninfo_proc_read(PDE_DATA(file_inode(file)),buf,count,ppos,AF_INET6);
-}
-#endif
-
-static ssize_t
-ninfo_proc_write(struct file *file, const char __user *buffer,
-                     size_t length, loff_t *loff)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	char buf[32];
-	int idx;
-
-        if (length > 0) {
-		memset(buf,0,sizeof(buf));
-		if (!(access_ok(VERIFY_READ, buffer, length) && 
-			!__copy_from_user(&buf[0], buffer, min(length,sizeof(buf)-1))))
-			        return -EFAULT;
-		if(sscanf(buf,"%d",&idx) != 1) return -EINVAL;
-		n->n_hash = idx;
-        }
-        return length;
-}
-
-#ifdef BT_ANNOUNCE
-static ssize_t nann_proc_read(struct file *file, char __user *buf,
-                              size_t count, loff_t *ppos)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-        struct ndpi_detection_module_struct *ndpi_struct = n->ndpi_struct;
-	struct bt_announce *b = ndpi_struct->bt_ann;
-	int  bt_len = ndpi_struct->bt_ann_len;
-	char lbuf[512],ipbuf[64];
-	int i,l,p;
-
-	for(i = 0,p = 0; i < bt_len; i++,b++) {
-		if(!b->time) break;
-
-		if(i < *ppos ) continue;
-		if(!b->ip[0] && !b->ip[1] && b->ip[2] == 0xfffffffful)
-			inet_ntop_port(AF_INET,&b->ip[3],b->port,ipbuf,sizeof(ipbuf));
-		    else
-			inet_ntop_port(AF_INET6,&b->ip,b->port,ipbuf,sizeof(ipbuf));
-	        l =  snprintf(lbuf,sizeof(lbuf)-1, "%08x%08x%08x%08x%08x %s %u '%.*s'\n",
-				htonl(b->hash[0]),htonl(b->hash[1]),
-				htonl(b->hash[2]),htonl(b->hash[3]),htonl(b->hash[4]),
-				ipbuf,b->time,b->name_len,b->name);
-
-		if(count < l) break;
-
-		if (!(access_ok(VERIFY_WRITE, buf+p, l) &&
-				!__copy_to_user(buf+p, lbuf, l))) return -EFAULT;
-		p += l;
-		count -= l;
-		(*ppos)++;
-	}
-	return p;
-}
-#endif
-
-static int n_ipdef_proc_open(struct inode *inode, struct file *file)
-{
-        return 0;
-}
-
-static int n_ipdef_proc_close(struct inode *inode, struct file *file)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	generic_proc_close(n,parse_ndpi_ipdef,W_BUF_IP);
-        return 0;
-}
-
-static ssize_t
-n_ipdef_proc_write(struct file *file, const char __user *buffer,
-                     size_t length, loff_t *loff)
-{
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
-			parse_ndpi_ipdef, 4060 , W_BUF_IP);
-}
-
-static ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
-                              size_t count, loff_t *ppos)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	patricia_tree_t *pt;
-	prefix_t *px;
-	patricia_node_t *Xstack[PATRICIA_MAXBITS+1], **Xsp, *node;
-	char lbuf[512];
-	char ibuf[64];
-	int i,l,p;
-
-	i = 0; p = 0;
-	pt = n->ndpi_struct->protocols_ptree;
-
-	Xsp = &Xstack[0];
-	node = pt->head;
-	while (node) {
-	    if (node->prefix) {
-
-	      if(i >= *ppos ) {
-
-		l = i ? 0: snprintf(lbuf,sizeof(lbuf),"#ip              proto\n");
-		
-		px = node->prefix;
-		{
-		int k;
-		inet_ntop(px->family,(void *)&px->add,ibuf,sizeof(ibuf)-1);
-		k = strlen(ibuf);
-		if((px->family == AF_INET  && px->bitlen < 32 ) ||
-		   (px->family == AF_INET6 && px->bitlen < 128 ))
-			snprintf(&ibuf[k],sizeof(ibuf)-k,"/%d",px->bitlen);
-		}
-		if(node->value.user_value != NDPI_PROTOCOL_UNKNOWN)
-		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%-16s %s\n",ibuf,
-			node->value.user_value >= NDPI_NUM_BITS ?
-				"unknown":ndpi_get_proto_by_id(n->ndpi_struct,node->value.user_value));
-		if(node->data) {
-			struct ndpi_port_def *pd = node->data;
-			ndpi_port_range_t *pt = pd->p;
-			if(pd->count[0]+pd->count[1] > 0) {
-			l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%-16s ",ibuf);
-			l += ndpi_print_port_range(pt,pd->count[0]+pd->count[1],
-					&lbuf[l],sizeof(lbuf)-l,n->ndpi_struct);
-			l += snprintf(&lbuf[l],sizeof(lbuf)-l,"\n");
-			}
-		}
-		if(count < l) break;
-		
-		if (!(access_ok(VERIFY_WRITE, buf+p, l) &&
-				!__copy_to_user(buf+p, lbuf, l))) return -EFAULT;
-		p += l;
-		count -= l;
-		(*ppos)++;
-	      }
-	      i++;
-	    }
-	    if (node->l) {
-		if (node->r) {
-		    *Xsp++ = node->r;
-		}
-		node = node->l;
-		continue;
-	    }
-	    if (node->r) {
-		node = node->r;
-		continue;
-	    }
-	    node = Xsp != Xstack ? *(--Xsp): NULL;
-	}
-	return p;
-}
-
-static ssize_t nproto_proc_read(struct file *file, char __user *buf,
-                              size_t count, loff_t *ppos)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	char lbuf[128];
-	char c_buf[12];
-	int i,l,p;
-
-	for(i = 0,p = 0; i < NDPI_NUM_BITS; i++) {
-		const char *t_proto = ndpi_get_proto_by_id(n->ndpi_struct,i);
-		if(!t_proto) {
-			snprintf(c_buf,sizeof(c_buf)-1,"custom%d",i);
-			t_proto = c_buf;
-		}
-
-		if(i < *ppos ) continue;
-		l = i ? 0: snprintf(lbuf,sizeof(lbuf),
-				"#id     mark ~mask     name   # count #version %s\n",
-				NDPI_GIT_RELEASE);
-		if(!n->mark[i].mark && !n->mark[i].mask)
-		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%02x  %17s %-16s # %d\n",
-				i,"disabled",t_proto ? t_proto:"bad",
-				atomic_read(&n->protocols_cnt[i]));
-		else
-		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%02x  %8x/%08x %-16s # %d debug=%d\n",
-				i,n->mark[i].mark,n->mark[i].mask,t_proto ? t_proto :"bad",
-				atomic_read(&n->protocols_cnt[i]),
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-					n->debug_level[i]
-#else
-					0
-#endif
-					);
-
-		if(count < l) break;
-
-		if (!(access_ok(VERIFY_WRITE, buf+p, l) &&
-				!__copy_to_user(buf+p, lbuf, l))) return -EFAULT;
-		p += l;
-		count -= l;
-		(*ppos)++;
-	}
-	return p;
-}
-
-static int nproto_proc_close(struct inode *inode, struct file *file)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	generic_proc_close(n,parse_ndpi_proto,W_BUF_PROTO);
-        return 0;
-}
-
-static ssize_t
-nproto_proc_write(struct file *file, const char __user *buffer,
-                     size_t length, loff_t *loff)
-{
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
-			parse_ndpi_proto, 256, W_BUF_PROTO);
-}
-
-/********************* ndpi host_def  *********************************/
-
 static const char *__acerr2txt[] = {
     [ACERR_SUCCESS] = "OK", /* No error occurred */
     [ACERR_DUPLICATE_PATTERN] = "ERR:DUP", /* Duplicate patterns */
@@ -2377,220 +1856,6 @@ static const char *__acerr2txt[] = {
 
 const char *acerr2txt(AC_ERROR_t r) {
 	return r >= ACERR_SUCCESS && r <= ACERR_ERROR ? __acerr2txt[r]:"UNKNOWN";
-}
-
-static int n_hostdef_proc_open(struct inode *inode, struct file *file)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	str_collect_t *ph;
-	char *host;
-	AC_PATTERN_t ac_pattern;
-	AC_ERROR_t r;
-	int np,nh,ret = 0;
-
-spin_lock(&n->host_lock);
-do {
-	if(n->hosts_tmp) {
-		ret = EBUSY; break;
-	}
-		
-	n->hosts_tmp = str_collect_clone(n->hosts);
-	if(!n->hosts_tmp) {
-		ret = ENOMEM; break;
-	}
-
-	if((file->f_mode & (FMODE_READ|FMODE_WRITE)) == FMODE_READ)
-		break;
-
-	if(n->host_ac) {
-		ret = EBUSY; break;
-	}
-
-	n->host_ac = ndpi_init_automa();
-
-	if(!n->host_ac) {
-		str_hosts_done(n->hosts_tmp);
-		n->hosts_tmp = NULL;
-		ret = ENOMEM; break;
-	}
-	if(ndpi_log_debug > 1)
-		pr_info("host_ac %px new\n",n->host_ac);
-
-	n->host_error = 0;
-
-	for(np = 0; np < NDPI_NUM_BITS; np++) {
-		ph = n->hosts_tmp->p[np];
-		if(ph) {
-			nh = 0;
-			for(nh = 0 ; nh < ph->last && ph->s[nh] ;
-					nh += (uint8_t)ph->s[nh] + 2) {
-				host = &ph->s[nh+1];
-				ac_pattern.astring = host;
-				ac_pattern.length = strlen(host);
-				ac_pattern.rep.number = np;
-				r = ac_automata_add(n->host_ac, &ac_pattern);
-				if(r != ACERR_SUCCESS) {
-					pr_err("%s: host add '%s' : %s : skipped\n",__func__,
-							host,acerr2txt(r));
-				}
-			}
-		}
-	}
-} while(0);
-
-	spin_unlock(&n->host_lock);
-	if(ndpi_log_debug > 1)
-		pr_info("open: host_ac %px old %px\n",
-				(void *)n->host_ac,
-				ndpi_automa_host(n->ndpi_struct));
-        return ret;
-}
-
-static ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
-                              size_t count, loff_t *ppos)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	char lbuf[256+32],*host;
-	const char *t_proto;
-	str_collect_t *ph;
-	int i, l=0, p=0, bpos = 0, hl, pl;
-	int hdp = 0, hdh = 0;
-	loff_t cpos = 0;
-
-	if(ndpi_log_debug > 1)
-		pr_info("read: start ppos %lld\n",*ppos);
-
-	while(hdp < NDPI_NUM_BITS ) {
-		if(!cpos) {
-			strcpy(lbuf,"#Proto:host\n");
-			l = strlen(lbuf);
-		}
-
-		ph = n->hosts_tmp->p[hdp];
-		host = NULL;
-		if(ph && ph->last && hdh < ph->last ) {
-			t_proto = ndpi_get_proto_by_id(n->ndpi_struct,hdp);
-			pl = strlen(t_proto);
-			i = 0; p = 0;
-			for( ; (uint8_t)ph->s[hdh] ;
-					hdh += (uint8_t)ph->s[hdh] + 2) {
-				host = &ph->s[hdh+1];
-				hl = strlen(host);
-
-				if(i && l - p + hl > 80) break;
-
-				if(hl + 1 + (!i ? pl:0) + l + 5 > sizeof(lbuf)) {
-					if(hl + pl + 3 > sizeof(lbuf)) {
-						pr_err("ndpi: lbuf too small\n");
-						continue;
-					}
-					if(ndpi_log_debug > 1) 
-						pr_info("read:3 lbuff full\n");
-					break;
-				}
-				if(!i) { // start line from protocol name
-				    if(p) lbuf[l++] = '\n';
-				    strcpy(&lbuf[l],t_proto);
-				    l += pl;
-				    lbuf[l] = '\0';
-				}
-				lbuf[l++] = i ? ',':':';
-				strcpy(&lbuf[l],host);
-				l += hl;
-				lbuf[l] = '\0';
-
-				i++;
-			}
-			lbuf[l++] = '\n'; lbuf[l] = '\0';
-
-			if(hdh == ph->last) // last hostdef for current protocol
-				host = NULL;
-			if(ndpi_log_debug > 1) 
-				pr_info("read:4 lbuf:%d '%s'\n",l,lbuf);
-
-			if(cpos + l < *ppos) {
-				cpos += l;
-			} else {
-				p = 0;
-				// ppos: buf + count, cpos: lbuf + l
-				if(cpos < *ppos) {
-					p = *ppos - cpos;
-					l -= p;
-				}
-				if( l > count) l = count;
-				if (!(access_ok(VERIFY_WRITE, buf+bpos, l) &&
-					!__copy_to_user(buf+bpos, lbuf+p, l))) return -EFAULT;
-				if(ndpi_log_debug > 1) 
-					pr_info("read:5 copy bpos %d p %d l %d\n",bpos,p,l);
-				(*ppos) += l;
-				bpos  += l;
-				cpos  += l+p;
-				count -= l;
-				if(!count) {
-					if(ndpi_log_debug > 1) 
-						pr_info("read:6 buf full, bpos %d\n",bpos);
-					return bpos;
-				}
-			}
-			l = 0;
-		}
-
-		if(!host) {
-			hdp++;
-			hdh = 0;
-			continue;
-		}
-		if(ndpi_log_debug > 1) 
-			pr_info("read:7 next\n");
-	}
-	if(ndpi_log_debug > 1) 
-		pr_info("read:8 return bpos %d\n",bpos);
-	return bpos;
-}
-
-static int n_hostdef_proc_close(struct inode *inode, struct file *file)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	ndpi_mod_str_t *nstr = n->ndpi_struct;
-
-	generic_proc_close(n,parse_ndpi_hostdef,W_BUF_HOST);
-
-	spin_lock(&n->host_lock);
-
-	if(n->host_ac) {
-		if(!n->host_error) {
-
-			ac_automata_finalize((AC_AUTOMATA_t*)n->host_ac);
-
-			spin_lock_bh(&nstr->host_automa_lock);
-			XCHGP(nstr->host_automa.ac_automa,n->host_ac);
-			spin_unlock_bh(&nstr->host_automa_lock);
-
-			XCHGP(n->hosts,n->hosts_tmp);
-
-		} else {
-			pr_err("xt_ndpi: Can't update host_proto with errors\n");
-		}
-
-		if(ndpi_log_debug > 1)
-			pr_info("close: release host_ac %px\n",n->host_ac);
-
-		ac_automata_release((AC_AUTOMATA_t*)n->host_ac);
-		n->host_ac = NULL;
-	}
-	str_hosts_done(n->hosts_tmp);
-	n->hosts_tmp = NULL;
-
-	spin_unlock(&n->host_lock);
-        return 0;
-}
-
-static ssize_t
-n_hostdef_proc_write(struct file *file, const char __user *buffer,
-                     size_t length, loff_t *loff)
-{
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
-			parse_ndpi_hostdef, 4060, W_BUF_HOST);
 }
 
 
@@ -2625,6 +1890,7 @@ static const struct file_operations ninfo6_proc_fops = {
 	.llseek  = noop_llseek,
 };
 #endif
+
 #ifdef BT_ANNOUNCE
 static const struct file_operations nann_proc_fops = {
         .open    = ninfo_proc_open,

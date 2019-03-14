@@ -8,7 +8,6 @@
 #include "ndpi_config.h"
 #undef HAVE_HYPERSCAN
 #include "ndpi_main.h"
-#include "../lib/third_party/include/ahocorasick.h"
 
 #include "ndpi_strcol.h"
 #include "ndpi_main_netfilter.h"
