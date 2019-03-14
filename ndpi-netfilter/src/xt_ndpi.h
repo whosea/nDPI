@@ -40,7 +40,8 @@ struct xt_ndpi_mtinfo {
 
 struct xt_ndpi_tginfo {
        __u32 mark, mask;
-       __u16 p_proto_id:1,m_proto_id:1,any_proto_id,t_accept:1,t_mark:1,t_clsf:1;
+       __u16 p_proto_id:1,m_proto_id:1,any_proto_id:1,
+	     t_accept:1,t_mark:1,t_clsf:1,flow_yes:1;
 };
 
 #endif /* _LINUX_NETFILTER_XT_NDPI_H */

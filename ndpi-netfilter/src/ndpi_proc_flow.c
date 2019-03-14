@@ -18,13 +18,13 @@
 #include "ndpi_proc_flow.h"
 
 void nflow_proc_read_start(struct ndpi_net *n) {
-int i2 = 0, i3 = 0;
+int i2 = 0;
 
 	i2 = ndpi_delete_acct(n,0,1);
 	n->acc_end = 0;
 	n->flow_l = NULL;
-	i3 = atomic_read(&n->acc_work);
-	printk("%s: Start dump. Delete %d work CT %d\n",__func__, i2, i3);
+	printk("%s: Start dump. Delete %d work CT %d rem %d\n",
+		__func__, i2, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
 }
 
 
@@ -36,8 +36,6 @@ int nflow_proc_open(struct inode *inode, struct file *file) {
 	if(atomic_xchg(&n->acc_open,1)) {
 		return -EBUSY;
 	}
-	spin_lock(&n->rem_lock); // wait end of ndpi_delete_acct()
-	spin_unlock(&n->rem_lock);
 	if(!n->acc_wait) n->acc_wait = 60;
 	nflow_proc_read_start(n);
 	return 0;
@@ -58,7 +56,7 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,struct n
 	ssize_t l = 0;
 	*buf = 0;
 
-	WRITE_ONCE(ct->dumped,1);
+	WRITE_ONCE(ct->flow_info,0);
 	if(ndpi_ct_counters0(ct)) return 0;
 	buflen -= 2;
 	l = snprintf(buf,buflen,"%u %u %c %d ",
@@ -88,7 +86,12 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,struct n
 		l += snprintf(&buf[l],buflen-l," DN=%pI4n:%d",
 				&ct->flinfo.ip_dnat,htons(ct->flinfo.dport_nat));
 	    }
-	    // FIXME userid!
+#ifdef USE_HACK_USERID
+	    if(ct->userid) {
+		l += snprintf(&buf[l],buflen-l," UI=%pI4n:%d",
+				&ct->flinfo.ip_snat,htons(ct->flinfo.sport_nat));
+	    }
+#endif
 	}
 	ct->flinfo.b[2] = ct->flinfo.b[0];
 	ct->flinfo.b[3] = ct->flinfo.b[1];
@@ -108,12 +111,13 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,struct n
 	if(ct->host)
 	    l += snprintf(&buf[l],buflen-l," H=%s",ct->host);
 
-	buf[l++] = '\n';
 	buf[l] = 0;
 	if(l > acct_info_len ) {
 		printk("%s: max len %d\n'%s'\n",__func__,(int)l, buf);
 		acct_info_len = l;
 	}
+	buf[l++] = '\n';
+	buf[l] = 0;
 	return l;
 }
 
@@ -142,6 +146,22 @@ ssize_t nflow_proc_write(struct file *file, const char __user *buffer,
 		if(sscanf(buf,"timeout=%d",&idx) == 1) {
 			if(idx < 1 || idx > 600) return -EINVAL;
 			n->acc_wait = idx;
+			printk("%s: acc_wait=%d\n",__func__,n->acc_wait);
+		} else if(sscanf(buf,"limit=%d",&idx) == 1) {
+			if(idx < atomic_read(&n->acc_work) || idx > ndpi_acc_limit)
+				return -EINVAL;
+			n->acc_limit = idx;
+			printk("%s: acc_limit=%d\n",__func__,n->acc_limit);
+		} else if(!strcmp(buf,"read_closed")) {
+			if(n->acc_end || !n->flow_l) {
+				n->acc_read_mode = 1;
+			} else return -EINVAL;
+			printk("%s: acc_read_mode=%d\n",__func__,n->acc_read_mode);
+		} else if(!strcmp(buf,"read_all")) {
+			if(n->acc_end || !n->flow_l) {
+				n->acc_read_mode = 0;
+			} else return -EINVAL;
+			printk("%s: acc_read_mode=%d\n",__func__,n->acc_read_mode);
 		} else
 			return -EINVAL;
         }

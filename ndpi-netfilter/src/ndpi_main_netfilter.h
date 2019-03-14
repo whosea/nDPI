@@ -73,11 +73,17 @@ struct ndpi_net {
 	atomic_t		acc_open;	// flow is open
 	atomic_t		acc_work;	// number of active flow info
 	atomic_t		acc_rem;	// number of inactive flow info
-//	atomic_t		acc_pass;	// label of read process // debug
+	atomic_t		shutdown;	// stop netns
 	unsigned long int	acc_gc;		// next run ndpi_delete_acct (jiffies + X)
 	int			acc_wait;	// delay for next run ndpi_delete_acct
 	int			acc_end;	// EOF for read process
-	atomic_t		shutdown;	// stop netns
+	int			acc_limit;	// if acc_work > acc_limit then drop flow info
+	int			acc_read_mode;	// 0 - read all connections info,
+						// 1 - read closed connections info
+	atomic_t		acc_i_packets_lost; // lost traffic from flow info
+	atomic_t		acc_o_packets_lost;
+	atomic64_t		acc_i_bytes_lost;
+	atomic64_t		acc_o_bytes_lost;
 };
 
 struct flow_info {
@@ -103,11 +109,12 @@ struct nf_ct_ext_ndpi {
 	ndpi_protocol		proto;		// 4 bytes
 	spinlock_t		lock;		// 2/4 bytes
 	uint8_t			l4_proto,	// 1
-				dumped,		// 1
+				flow_info,	// 1
 				for_delete,	// 1
 				detect_done:1,  // 1
+				nat_done:1,
+				flow_yes:1,
 				ipv6:1,
-				rev:1,
 				snat:1,
 				dnat:1,
 				userid:1;

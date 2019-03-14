@@ -267,13 +267,13 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 			strncpy(re_buf,&info->hostname[1],re_len);
 			re_buf[re_len] = '\0';
 
-			pattern = regcomp(re_buf, &re_len);
+			pattern = ndpi_regcomp(re_buf, &re_len);
 
 			if(!pattern) {
 				printf("Bad regexp '%s' '%s'\n",&info->hostname[1],re_buf);
 				return false;
 			}
-			regexec(pattern," "); /* no warning about unused regexec */
+			ndpi_regexec(pattern," "); /* no warning about unused regexec */
 			free(pattern);
 			info->re = 1;
 
@@ -464,6 +464,7 @@ enum {
         O_SET_NDPI_P,
         O_SET_MARK,
         O_SET_CLSF,
+        O_SET_FLOW,
         O_ACCEPT,
         F_SET_VALUE  = 1 << O_SET_VALUE,
         F_SET_NDPI   = 1 << O_SET_NDPI,
@@ -471,6 +472,7 @@ enum {
         F_SET_NDPI_P = 1 << O_SET_NDPI_P,
         F_SET_MARK = 1 << O_SET_MARK,
         F_SET_CLSF = 1 << O_SET_CLSF,
+        F_SET_FLOW = 1 << O_SET_FLOW,
         F_ACCEPT   = 1 << O_ACCEPT,
         F_ANY         = F_SET_VALUE | F_SET_NDPI | F_SET_NDPI_M |
 			F_SET_NDPI_P |F_SET_MARK | F_SET_CLSF |
@@ -487,18 +489,20 @@ static void NDPI_help(void)
 "  --ndpi-id-m                         Set value = (value & ~proto_mask) | proto_mark by master protocol\n"
 "  --set-mark                          Set nfmark = value\n"
 "  --set-clsf                          Set priority = value\n"
+"  --flow-info                         Save flow info\n"
 "  --accept                            -j ACCEPT\n"
 );
 }
 
 static const struct xt_option_entry NDPI_opts[] = {
-        {.name = "value",    .id = O_SET_VALUE,.type = XTTYPE_MARKMASK32},
-        {.name = "ndpi-id",  .id = O_SET_NDPI, .type = XTTYPE_NONE},
+        {.name = "value",     .id = O_SET_VALUE,  .type = XTTYPE_MARKMASK32},
+        {.name = "ndpi-id",   .id = O_SET_NDPI,   .type = XTTYPE_NONE},
         {.name = "ndpi-id-m", .id = O_SET_NDPI_M, .type = XTTYPE_NONE},
         {.name = "ndpi-id-p", .id = O_SET_NDPI_P, .type = XTTYPE_NONE},
-        {.name = "set-mark", .id = O_SET_MARK, .type = XTTYPE_NONE},
-        {.name = "set-clsf", .id = O_SET_CLSF, .type = XTTYPE_NONE},
-        {.name = "accept",   .id = O_ACCEPT,   .type = XTTYPE_NONE},
+        {.name = "set-mark",  .id = O_SET_MARK,   .type = XTTYPE_NONE},
+        {.name = "set-clsf",  .id = O_SET_CLSF,   .type = XTTYPE_NONE},
+        {.name = "flow-info", .id = O_SET_FLOW,   .type = XTTYPE_NONE},
+        {.name = "accept",    .id = O_ACCEPT,     .type = XTTYPE_NONE},
         XTOPT_TABLEEND,
 };
 static void NDPI_parse_v0(struct xt_option_call *cb)
@@ -538,6 +542,9 @@ static void NDPI_parse_v0(struct xt_option_call *cb)
 	case O_SET_CLSF:
 		markinfo->t_clsf = 1;
 		break;
+	case O_SET_FLOW:
+		markinfo->flow_yes = 1;
+		break;
 	case O_ACCEPT:
 		markinfo->t_accept = 1;
 		break;
@@ -556,6 +563,8 @@ static void NDPI_print_v0(const void *ip,
 char buf[128];
 int l;
         l = snprintf(buf,sizeof(buf)-1," NDPI");
+	if(info->flow_yes)
+	     l += snprintf(&buf[l],sizeof(buf)-l-1, " NETFLOW");
 	if(info->t_mark)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1, " set MARK ");
 	if(info->t_clsf)
@@ -606,6 +615,8 @@ static void NDPI_save_v0(const void *ip, const struct xt_entry_target *target)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1, " --set-mark");
 	if(info->t_clsf)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1, " --set-clsf");
+	if(info->flow_yes)
+	     l += snprintf(&buf[l],sizeof(buf)-l-1, " --flow-info");
 	if(info->t_accept)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1," --accept");
 	printf(buf);
@@ -614,12 +625,13 @@ static void NDPI_save_v0(const void *ip, const struct xt_entry_target *target)
 
 static void NDPI_check(struct xt_fcheck_call *cb)
 {
-        if (!(cb->xflags & (F_SET_MARK|F_SET_CLSF))) 
+        if (!(cb->xflags & (F_SET_MARK|F_SET_CLSF|F_SET_FLOW))) 
                 xtables_error(PARAMETER_PROBLEM,
-                           "NDPI target: Parameter --set-mark or --set-clsf"
+                           "NDPI target: Parameter --set-mark, --set-clsf or --flow-info"
                            " is required");
-        if (!(cb->xflags & (F_SET_VALUE|F_SET_NDPI|F_SET_NDPI_M|F_SET_NDPI_P)))
-                xtables_error(PARAMETER_PROBLEM,
+	if(cb->xflags & (F_SET_MARK|F_SET_CLSF))
+           if (!(cb->xflags & (F_SET_VALUE|F_SET_NDPI|F_SET_NDPI_M|F_SET_NDPI_P)))
+                  xtables_error(PARAMETER_PROBLEM,
                            "NDPI target: Parameter --value or --ndpi-id[-[mp]]"
                            " is required");
 }
