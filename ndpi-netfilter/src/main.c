@@ -1887,7 +1887,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 
 		la = snprintf(buf1,sizeof(buf1)-1,"LOST_TRAFIC %u %llu %u %llu\n",
 				cpi,cbi,cpo,cbo);
-		if (!(access_ok(VERIFY_WRITE, buf, la) &&
+		if (!(ACCESS_OK(VERIFY_WRITE, buf, la) &&
 				!__copy_to_user(buf, buf1, la))) {
 				return -EFAULT;
 		}
@@ -1918,7 +1918,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		del  = READ_ONCE(ct_ndpi->for_delete);
 		spin_unlock_bh(&ct_ndpi->lock);
 		if(la) {
-			if (!(access_ok(VERIFY_WRITE, buf+p, la) &&
+			if (!(ACCESS_OK(VERIFY_WRITE, buf+p, la) &&
 					!__copy_to_user(buf+p, buf1, la))) {
 				n->flow_l = prev;
 				spin_unlock(&n->rem_lock);

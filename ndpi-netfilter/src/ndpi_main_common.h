@@ -15,3 +15,8 @@ extern struct kmem_cache *ct_info_cache;
 
 #define XCHGP(a,b) { void *__c = a; a = b; b = __c; }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+#define ACCESS_OK(a,b,c) access_ok(b,c)
+#else
+#define ACCESS_OK(a,b,c) access_ok(a,b,c)
+#endif

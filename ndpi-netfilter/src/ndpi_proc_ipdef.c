@@ -86,7 +86,7 @@ ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
 		}
 		if(count < l) break;
 		
-		if (!(access_ok(VERIFY_WRITE, buf+p, l) &&
+		if (!(ACCESS_OK(VERIFY_WRITE, buf+p, l) &&
 				!__copy_to_user(buf+p, lbuf, l))) return -EFAULT;
 		p += l;
 		count -= l;

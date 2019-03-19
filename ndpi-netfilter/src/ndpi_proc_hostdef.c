@@ -158,7 +158,7 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 					l -= p;
 				}
 				if( l > count) l = count;
-				if (!(access_ok(VERIFY_WRITE, buf+bpos, l) &&
+				if (!(ACCESS_OK(VERIFY_WRITE, buf+bpos, l) &&
 					!__copy_to_user(buf+bpos, lbuf+p, l))) return -EFAULT;
 				if(ndpi_log_debug > 1) 
 					pr_info("read:5 copy bpos %d p %d l %d\n",bpos,p,l);

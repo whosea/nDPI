@@ -140,7 +140,7 @@ ssize_t nflow_proc_write(struct file *file, const char __user *buffer,
 
         if (length > 0) {
 		memset(buf,0,sizeof(buf));
-		if (!(access_ok(VERIFY_READ, buffer, length) && 
+		if (!(ACCESS_OK(VERIFY_READ, buffer, length) && 
 			!__copy_from_user(&buf[0], buffer, min(length,sizeof(buf)-1))))
 			        return -EFAULT;
 		if(sscanf(buf,"timeout=%d",&idx) == 1) {

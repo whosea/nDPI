@@ -1,6 +1,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/version.h>
 
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -10,6 +11,7 @@
 #include "ndpi_main.h"
 
 #include "ndpi_strcol.h"
+#include "ndpi_main_common.h"
 #include "ndpi_main_netfilter.h"
 #include "ndpi_proc_generic.h"
 
@@ -79,7 +81,7 @@ generic_proc_write(struct ndpi_net *n, const char __user *buffer,
 		l = min(length,sizeof(buf)-1);
 	
 		memset(buf,0,sizeof(buf));
-		if (!(access_ok(VERIFY_READ, buffer+pos, l) && 
+		if (!(ACCESS_OK(VERIFY_READ, buffer+pos, l) && 
 			!__copy_from_user(&buf[0], buffer+pos, l)))
 			        return -EFAULT;
 		for(i = 0; i < l; i++) {
