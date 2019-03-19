@@ -47,8 +47,7 @@
 #include <linux/netfilter/x_tables.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_extend.h>
-struct nf_nat_range2;
-#include <net/netfilter/nf_nat_l3proto.h>
+#include <net/netfilter/nf_nat.h>
 
 #define BT_ANNOUNCE 
 
@@ -639,7 +638,7 @@ static inline void ndpi_ct_counters(struct nf_ct_ext_ndpi *ct_ndpi,
 	ct_ndpi->flinfo.p[rev] ++;
 	ct_ndpi->flinfo.time_end = m_time;
 	if(ndpi_log_debug > 1)
-		pr_info("ndpi: ct_counters ct_ndpi %pK %lu\n",
+		pr_info("ndpi: ct_counters ct_ndpi %pK %zu\n",
 				ct_ndpi,len);
 }
 		
