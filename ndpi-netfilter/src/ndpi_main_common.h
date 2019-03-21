@@ -6,7 +6,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all,int start);
 ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	            size_t count, loff_t *ppos);
 
-extern unsigned long  ndpi_acc_limit;
+extern unsigned long  ndpi_flow_limit;
 extern unsigned long  bt_hash_size;
 extern unsigned long  bt6_hash_size;
 extern unsigned long  bt_hash_tmo;

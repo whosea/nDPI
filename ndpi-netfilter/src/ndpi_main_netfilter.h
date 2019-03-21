@@ -75,11 +75,13 @@ struct ndpi_net {
 	atomic_t		acc_rem;	// number of inactive flow info
 	atomic_t		shutdown;	// stop netns
 	unsigned long int	acc_gc;		// next run ndpi_delete_acct (jiffies + X)
+	unsigned long int	acc_open_time;	// time of reading from pos 0
 	int			acc_wait;	// delay for next run ndpi_delete_acct
 	int			acc_end;	// EOF for read process
 	int			acc_limit;	// if acc_work > acc_limit then drop flow info
 	int			acc_read_mode;	// 0 - read all connections info,
 						// 1 - read closed connections info
+						// 2 - read connections info w/o reset counter
 	atomic_t		acc_i_packets_lost; // lost traffic from flow info
 	atomic_t		acc_o_packets_lost;
 	atomic64_t		acc_i_bytes_lost;
@@ -125,22 +127,6 @@ struct nf_ct_ext_ndpi {
  * 32bit - 144 bytes, 64bit - 172 bytes;
  */
 } __attribute ((packed));
-
-static inline int ndpi_ct_counters0(struct nf_ct_ext_ndpi *ct) {
-        return  (ct->flinfo.p[0] == ct->flinfo.p[2]) &&
-                (ct->flinfo.p[1] == ct->flinfo.p[3]) ;
-}
-
-static inline void __ndpi_free_ct_proto(struct nf_ct_ext_ndpi *ct_ndpi) {
-        if(ct_ndpi->host) {
-                kfree(ct_ndpi->host);
-                ct_ndpi->host = NULL;
-        }
-        if(ct_ndpi->ssl) {
-                kfree(ct_ndpi->ssl);
-                ct_ndpi->ssl = NULL;
-        }
-}
 
 extern unsigned long ndpi_log_debug;
 

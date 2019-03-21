@@ -5,3 +5,4 @@ The major differences
 2. Added the ability to parse the DHT messages BitTorrent protocol to detect connections with encryption. It uses hash-table. To enable analysis of DHT messages, when the module is loaded xt_ndpi specify two parameters: bt_hash_size and bt_hash_timeout.
 By default analysis DHT messages off.
 
+3. Added interface for getting connection data (see FLOW_INFO.txt)

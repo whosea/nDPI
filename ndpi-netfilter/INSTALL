@@ -105,18 +105,16 @@ Note that the list is long, you best try: "iptables -m ndpi --help | more"
 
 An example rule would be (as root):
 
-        iptables -A OUTPUT -m ndpi --http -j REJECT
-
-------------------------------------------------------------------
-
-WARNING! You can't use form '--protoname' for user-defined protocols!
-Only '--proto protoname' form is allowed!
-(Iptables not allow  over 256 options on extensions)
-
-------------------------------------------------------------------
+        iptables -A OUTPUT -m ndpi --proto http -j REJECT
 
 This wouldn't allow any HTTP traffic that originates from the machine where the
 rule was added.
+
+------------------------------------------------------------------
+WARNING! You can't use form '--protoname' for user-defined protocols!
+Only '--proto protoname' form is allowed!
+(Iptables not allow  over 256 options on extensions)
+------------------------------------------------------------------
 
 ------------------------------------------------------------------
 BIG FAT WARNING!
@@ -213,7 +211,8 @@ lib_trace:	Maximem debug level for nDPI library. Default 0.
 
 mtu:    Skip non-linear skb (GRO/LRO) if packet size > mtu. Default 48000.
 
-bt_hash_size:  size of BT hash (2-32) entry*1024. Default 0 (off).
+bt_hash_size:  size of BT hash (2-512) entry*1024. Default 0 (off).
+bt6_hash_size: size of BT hash for IPv6 (2-32) entry*1024. Default 0 (off).
 
 bt_hash_timeout: Storage time (sec) of history BT peers. Default 1200.
                  (Only if bt_hash_size > 0).
@@ -221,6 +220,8 @@ bt_hash_timeout: Storage time (sec) of history BT peers. Default 1200.
 bt_log_size: size of log BT announces (kb). 192 bytes per announce. Default 128.
                  (Only if bt_hash_size > 0).
 
+ndpi_enable_flow: Enable netflow info. See FLOW_INFO.txt
+ndpi_flow_limit:  Limit netflow records. Default 10000000 (~4.3Gb RAM). See FLOW_INFO.txt
 
 ---------------
 7. procfs files
