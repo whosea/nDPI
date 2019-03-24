@@ -1,9 +1,9 @@
 		Collect and show NDPI flow info.
 
 To activate the "flow info" need load a module with the parameter "ndpi_enable_flow=1".
-Information about network traffic will be available in the /proc/net/xt_ndpi/flow file.
+Information about network traffic will be available in the /proc/net/xt_ndpi/flows file.
 Data is collected only on the traffic that was selected by "-j NDPI --flow-info".
-If you do not have such a rule, the file /proc/net/xt_ndpi/flow will always be empty!
+If you do not have such a rule, the file /proc/net/xt_ndpi/flows will always be empty!
 
 The "-j NDPI --flow-info" rule can be used anywhere in the mangle and filter tables,
 allowing you to flexibly choose the traffic that interests us.
@@ -16,7 +16,7 @@ interface eth1 :
 	iptables -t mangle -A PREROUTING -i eth1  -m ndpi ! --error -j NDPI --flow-info
 	iptables -t mangle -A POSTROUTING -o eth1 -m ndpi ! --error -j NDPI --flow-info
 
-For information about traffic, you need to open the /proc/net/xt_ndpi/flow file
+For information about traffic, you need to open the /proc/net/xt_ndpi/flows file
 and read it to the end of the file.
 ( The process of reading data needs to be done as quickly as possible.
 Not recommended to read by one the line. For a single read operation, 
@@ -25,7 +25,7 @@ you can get up to 256 KB of data. )
 
 Example:
 
-	cat /proc/net/xt_ndpi/flow
+	cat /proc/net/xt_ndpi/flows
 
 ------------------------------------------------------------------------------
 TIME 1553364302
@@ -75,12 +75,12 @@ released and the next time the data is read, the first line will be
 
 The limit can be set in two ways:
  1) module option ndpi_flow_limit=N
- 2) echo "limit=N" >/proc/net/xt_ndpi/flow
+ 2) echo "limit=N" >/proc/net/xt_ndpi/flows
  ( Information about one connection takes from 176 to 432 bytes )
 
 To prevent memory overflow, there is one more parameter "timeout" - the
-maximum time interval between reading data from the file /proc/net/xt_ndpi/flow.
-This parameter can be changed with the command "echo 330> /proc/net/xt_ndpi/flow".
+maximum time interval between reading data from the file /proc/net/xt_ndpi/flows
+This parameter can be changed with the command "echo 330> /proc/net/xt_ndpi/flows"
 If this interval is exceeded, then information about closing connections will
 be deleted immediately.
 
@@ -93,9 +93,9 @@ We have three modes of reading traffic information:
 
 You can change the reading mode with the command
 
-echo "mode" >/proc/net/xt_ndpi/flow
+echo "mode" >/proc/net/xt_ndpi/flows
 
-Each time the /proc/net/xt_ndpi/flow file is opened, the read mode is reset to "read_all".
+Each time the /proc/net/xt_ndpi/flows file is opened, the read mode is reset to "read_all".
 Changing the read mode can be done only if the current position is 0 or when
 the EOF is reached.
 
