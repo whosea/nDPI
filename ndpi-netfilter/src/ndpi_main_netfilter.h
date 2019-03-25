@@ -15,6 +15,7 @@ typedef enum write_buf_id {
 	W_BUF_IP=0,
 	W_BUF_HOST,
 	W_BUF_PROTO,
+	W_BUF_FLOW,
 	W_BUF_LAST
 } write_buf_id_t;
 
@@ -109,6 +110,7 @@ struct nf_ct_ext_ndpi {
 	char			*ssl;		// 4/8 bytes
 	struct flow_info	flinfo;		// 108 bytes
 	ndpi_protocol		proto;		// 4 bytes
+	uint32_t		connmark;	// 4 bytes
 	spinlock_t		lock;		// 2/4 bytes
 	uint8_t			l4_proto,	// 1
 				flow_info,	// 1
@@ -124,7 +126,7 @@ struct nf_ct_ext_ndpi {
 	uint8_t			pad[2];
 #endif
 /* 
- * 32bit - 144 bytes, 64bit - 172 bytes;
+ * 32bit - 148 bytes, 64bit - 176 bytes;
  */
 } __attribute ((packed));
 

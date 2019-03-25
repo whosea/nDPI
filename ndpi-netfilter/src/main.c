@@ -1228,6 +1228,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	    !ct_ndpi->nat_done && !ct_proto_get_flow_nat(c_proto)) {
 		ct_proto_set_flow_nat(c_proto,1);
 	}
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+	if(ct->mark && ct->mark != ct_ndpi->connmark)
+		ct_ndpi->connmark = ct->mark;
+#endif
 
 #ifdef USE_HACK_USERID
 	if(!ct_ndpi->userid &&

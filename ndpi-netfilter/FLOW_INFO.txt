@@ -46,7 +46,7 @@ line when reading the beginning of the data.
 
 "LOST_TRAFFIC x x x x" - summary information on lost traffic (see below).
 
-Each line of connection information has 14 required fields and 4 additional fields:
+Each line of connection information has 14 required fields and 5 additional fields:
 
 1.  Connection start time.
 2.  The time of the last connection packet.
@@ -61,11 +61,12 @@ Each line of connection information has 14 required fields and 4 additional fiel
 11. Bytes from destination to sourse
 12. Packets from destination to sourse
 13. Interface indexes. Format: "I=<in_ifindex>,<out_ifindex>"
-14. Source NAT. Optional, only for IPv4. Format: "SN=ipv4_address:port"
-15. Destination NAT. Optional, only for IPv4. Format: "DN=ipv4_address:port"
-16. NDPI protocol. Format: "P=xxx"
-17. NDPI hostname info. Optional. Only for DNS,HTTP. Format: "H=hostname"
-18. NDPI SSL info. Optional. Only for SSL. Format: "C=cert_name"
+14. Connection mark. Optional. Format: "CM=<hexmark>"
+15. Source NAT. Optional, only for IPv4. Format: "SN=ipv4_address:port"
+16. Destination NAT. Optional, only for IPv4. Format: "DN=ipv4_address:port"
+17. NDPI protocol. Format: "P=xxx"
+18. NDPI hostname info. Optional. Only for DNS,HTTP. Format: "H=hostname"
+19. NDPI SSL info. Optional. Only for SSL. Format: "C=cert_name"
 
 We must read the file until we get an EOF. In the process of reading data, the
 memory occupied by closed connections is released. If the number of records of

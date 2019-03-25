@@ -16,6 +16,7 @@
 #include "ndpi_strcol.h"
 #include "ndpi_main_netfilter.h"
 #include "ndpi_proc_flow.h"
+#include "ndpi_proc_generic.h"
 
 void nflow_proc_read_start(struct ndpi_net *n) {
 
@@ -24,29 +25,6 @@ void nflow_proc_read_start(struct ndpi_net *n) {
 	n->flow_l = NULL;
 }
 
-
-int nflow_proc_open(struct inode *inode, struct file *file) {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-
-	if(!ndpi_enable_flow) return -EINVAL;
-
-	if(atomic_xchg(&n->acc_open,1)) {
-		return -EBUSY;
-	}
-	n->acc_read_mode = 0;
-	if(!n->acc_wait) n->acc_wait = 60;
-	nflow_proc_read_start(n);
-	return 0;
-}
-
-int nflow_proc_close(struct inode *inode, struct file *file)
-{
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	if(!ndpi_enable_flow) return -EINVAL;
-	n->acc_gc = jiffies + n->acc_wait*HZ;
-	atomic_set(&n->acc_open,0);
-        return 0;
-}
 
 static ssize_t acct_info_len = 256;
 ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
@@ -78,7 +56,10 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 	}
 
 	l += snprintf(&buf[l],buflen-l," I=%d,%d",ct->flinfo.ifidx,ct->flinfo.ofidx);
-
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+	if(ct->connmark)
+	    l += snprintf(&buf[l],buflen-l," CM=%x",ct->connmark);
+#endif
 	if(!ct->ipv6) {
 	    if(ct->snat) {
 		l += snprintf(&buf[l],buflen-l," SN=%pI4n:%d",
@@ -124,48 +105,74 @@ ssize_t nflow_proc_read(struct file *file, char __user *buf,
 	return nflow_read(n, buf, count, ppos);
 }
 
-ssize_t nflow_proc_write(struct file *file, const char __user *buffer,
-                     size_t length, loff_t *loff)
+static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
-	char buf[32];
 	int idx;
 
 	if(!ndpi_enable_flow) return -EINVAL;
 
-        if (length > 0) {
-		memset(buf,0,sizeof(buf));
-		if (!(ACCESS_OK(VERIFY_READ, buffer, length) && 
-			!__copy_from_user(&buf[0], buffer, min(length,sizeof(buf)-1))))
-			        return -EFAULT;
-		if(sscanf(buf,"timeout=%d",&idx) == 1) {
-			if(idx < 1 || idx > 600) return -EINVAL;
-			n->acc_wait = idx;
-			printk("%s: set timeout=%d\n",__func__,n->acc_wait);
-		} else if(sscanf(buf,"limit=%d",&idx) == 1) {
-			if(idx < atomic_read(&n->acc_work) || idx > ndpi_flow_limit)
-				return -EINVAL;
-			n->acc_limit = idx;
-			printk("%s: set limit=%d\n",__func__,n->acc_limit);
-		} else if(!strcmp(buf,"read_closed")) {
-			if(n->acc_end || !n->flow_l) {
-				n->acc_read_mode = 1;
-			} else return -EINVAL;
-			printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
-		} else if(!strcmp(buf,"read_flows")) {
-			if(n->acc_end || !n->flow_l) {
-				n->acc_read_mode = 2;
-			} else return -EINVAL;
-			printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
-		} else if(!strcmp(buf,"read_all")) {
-			if(n->acc_end || !n->flow_l) {
-				n->acc_read_mode = 0;
-			} else return -EINVAL;
-			printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
-		} else
+        if(!buf[0]) return 0;
+
+	if(sscanf(buf,"timeout=%d",&idx) == 1) {
+		if(idx < 1 || idx > 600) return -EINVAL;
+		n->acc_wait = idx;
+		printk("%s: set timeout=%d\n",__func__,n->acc_wait);
+	} else if(sscanf(buf,"limit=%d",&idx) == 1) {
+		if(idx < atomic_read(&n->acc_work) || idx > ndpi_flow_limit)
 			return -EINVAL;
-        }
-        return length;
+		n->acc_limit = idx;
+		printk("%s: set limit=%d\n",__func__,n->acc_limit);
+	} else if(!strcmp(buf,"read_closed")) {
+		if(n->acc_end || !n->flow_l) {
+			n->acc_read_mode = 1;
+		} else return -EINVAL;
+		printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
+	} else if(!strcmp(buf,"read_flows")) {
+		if(n->acc_end || !n->flow_l) {
+			n->acc_read_mode = 2;
+		} else return -EINVAL;
+		printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
+	} else if(!strcmp(buf,"read_all")) {
+		if(n->acc_end || !n->flow_l) {
+			n->acc_read_mode = 0;
+		} else return -EINVAL;
+		printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
+	} else
+		return -EINVAL;
+	return 0;
+}
+
+int nflow_proc_open(struct inode *inode, struct file *file) {
+        struct ndpi_net *n = PDE_DATA(file_inode(file));
+
+	if(!ndpi_enable_flow) return -EINVAL;
+
+	if(atomic_xchg(&n->acc_open,1)) {
+		return -EBUSY;
+	}
+	n->acc_read_mode = 0;
+	if(!n->acc_wait) n->acc_wait = 60;
+	nflow_proc_read_start(n);
+	return 0;
+}
+
+int nflow_proc_close(struct inode *inode, struct file *file)
+{
+        struct ndpi_net *n = PDE_DATA(file_inode(file));
+	if(!ndpi_enable_flow) return -EINVAL;
+	generic_proc_close(n,parse_ndpi_flow,W_BUF_FLOW);
+	n->acc_gc = jiffies + n->acc_wait*HZ;
+	atomic_set(&n->acc_open,0);
+        return 0;
+}
+
+ssize_t
+nflow_proc_write(struct file *file, const char __user *buffer,
+		                     size_t length, loff_t *loff)
+{
+	if(!ndpi_enable_flow) return -EINVAL;
+	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+				  parse_ndpi_flow, 4060 , W_BUF_FLOW);
 }
 
 loff_t nflow_proc_llseek(struct file *file, loff_t offset, int whence) {
