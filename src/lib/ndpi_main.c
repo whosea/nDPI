@@ -6340,14 +6340,14 @@ void ndpi_set_log_level(struct ndpi_detection_module_struct *ndpi_mod, u_int l) 
 /* LRU cache */
 
 struct ndpi_lru_cache* ndpi_lru_cache_init(u_int32_t num_entries) {
-  struct ndpi_lru_cache *c = (struct ndpi_lru_cache*)malloc(sizeof(struct ndpi_lru_cache));
+  struct ndpi_lru_cache *c = (struct ndpi_lru_cache*)ndpi_malloc(sizeof(struct ndpi_lru_cache));
 
   if(!c) return(NULL);
 
-  c->entries = (u_int32_t*)calloc(num_entries, sizeof(u_int32_t));
+  c->entries = (u_int32_t*)ndpi_calloc(num_entries, sizeof(u_int32_t));
 
   if(!c->entries) {
-    free(c);
+    ndpi_free(c);
     return(NULL);
   } else  
     c->num_entries = num_entries;
@@ -6356,8 +6356,8 @@ struct ndpi_lru_cache* ndpi_lru_cache_init(u_int32_t num_entries) {
 }
 
 void ndpi_lru_free_cache(struct ndpi_lru_cache *c) {
-  free(c->entries);
-  free(c);
+  ndpi_free(c->entries);
+  ndpi_free(c);
 }
 
 
