@@ -16,7 +16,6 @@ libndpi_a_include_HEADERS = ../include/ndpi_api.h \
 			     ../include/ndpi_protocols.h    \
 			     ../include/ndpi_typedefs.h     \
 			     third_party/include/libcache.h \
-			     third_party/include/lruc.h \
 			     third_party/include/ht_hash.h
 
 libndpi_a_SOURCES = ndpi_content_match.c.inc \
@@ -91,6 +90,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/memcached.c \
 		     protocols/mining.c \
 		     protocols/mgcp.c \
+		     protocols/modbus.c \
 		     protocols/mpegts.c \
 		     protocols/mqtt.c \
 		     protocols/msn.c \
@@ -187,7 +187,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     third_party/src/node.c \
 		     third_party/src/sort.c \
 		     third_party/src/libcache.c \
-		     third_party/src/lruc.c \
 		     third_party/src/btlib.c \
 		     third_party/src/ndpi_patricia.c
 
