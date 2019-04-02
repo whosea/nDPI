@@ -107,9 +107,37 @@ static inline void *PDE_DATA(const struct inode *inode)
 #endif
 #endif
 
-# if LINUX_VERSION_CODE < KERNEL_VERSION(4,11,0)
-# define xt_in(par)  par->in
-# define xt_out(par)  par->out
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
+static inline struct net *xt_net(const struct xt_action_param *par)
+{
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,19,0)
+        const struct net_device *dev = par->in;
+        if(!dev) dev = par->out;
+        return dev ? dev_net(dev): NULL;
+#else
+        return par->net;
+#endif
+}
+static inline u_int8_t xt_family(const struct xt_action_param *par)
+{
+        return par->family;
+}
+static inline unsigned int xt_hooknum(const struct xt_action_param *par)
+{
+        return par->hooknum;
+}
+static inline const struct net_device *xt_in(const struct xt_action_param *par)
+{
+        return par->in;
+}
+static inline const struct net_device *xt_out(const struct xt_action_param *par)
+{
+        return par->out;
+}
+#endif
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,19,0)
+#define nf_register_net_hooks(net,a,s) nf_register_hooks(a,s)
+#define nf_unregister_net_hooks(net,a,s) nf_unregister_hooks(a,s)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,11,0)
@@ -2106,15 +2134,21 @@ static const struct file_operations n_hostdef_proc_fops = {
         .llseek  = noop_llseek,
         .release = n_hostdef_proc_close,
 };
-
-
+#if  LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
+static unsigned int ndpi_nat_do_chain(const struct nf_hook_ops *ops,
+                                         struct sk_buff *skb,
+                                         const struct net_device *in,
+                                         const struct net_device *out,
+                                         int (*okfn)(struct sk_buff *))
+{
+#else
 static unsigned int ndpi_nat_do_chain(void *priv,
 					 struct sk_buff *skb,
 					 const struct nf_hook_state *state)
 {
-
-    enum ip_conntrack_info ctinfo;
+#endif
     struct nf_conn * ct;
+    enum ip_conntrack_info ctinfo;
     struct nf_ct_ext_ndpi *ct_ndpi;
     struct ndpi_cb *c_proto;
 
@@ -2137,7 +2171,12 @@ static unsigned int ndpi_nat_do_chain(void *priv,
 	spin_lock_bh (&ct_ndpi->lock);
 	if(!ct_ndpi->nat_done) {
 		ndpi_nat_detect(ct_ndpi,ct);
-		if(state->hook != NF_INET_PRE_ROUTING) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
+		if(ops->hooknum != NF_INET_PRE_ROUTING)
+#else
+		if(state->hook != NF_INET_PRE_ROUTING)
+#endif
+		{
 			ct_ndpi->nat_done = 1;
 			ct_proto_set_flow_nat(c_proto,3);
 		}
@@ -2148,7 +2187,7 @@ static unsigned int ndpi_nat_do_chain(void *priv,
     return NF_ACCEPT;
 }
 
-static const struct nf_hook_ops nf_nat_ipv4_ops[] = {
+static struct nf_hook_ops nf_nat_ipv4_ops[] = {
 	{
 		.hook		= ndpi_nat_do_chain,
 		.pf		= NFPROTO_IPV4,
