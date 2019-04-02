@@ -442,7 +442,7 @@ static char *ct_info(const struct nf_conn * ct,char *buf,size_t buf_size,int dir
 
 static void *malloc_wrapper(size_t size)
 {
-	return kmalloc(size, GFP_KERNEL);
+	return kmalloc(size,(in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL);
 }
 
 static void free_wrapper(void *freeable)
@@ -1222,6 +1222,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	if(ndpi_log_debug > 3)
 		packet_trace(skb,ct,"Start      ");
 
+	barrier();
 	spin_lock_bh (&ct_ndpi->lock);
 
 	if( ndpi_enable_flow && ct_ndpi->flow_yes && 
@@ -1726,7 +1727,6 @@ static void bt_port_gc(unsigned long data) {
 	}
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
 	if(ht6 && spin_trylock_bh(&ht6->lock))  {
-	    spin_lock_bh(&ht6->lock);
 	    gc_1 = 1;
 	    for(i=0; i < ht6->size/128;i++) {
 		if(n->gc_index6 < 0 ) n->gc_index6 = 0;
