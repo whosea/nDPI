@@ -2475,7 +2475,7 @@ int ndpi_get_custom_category_match(struct ndpi_detection_module_struct *ndpi_str
   if(!ndpi_struct->custom_categories.categories_loaded)
     return -1;
 
-  strncpy(ipbuf, name_or_ip, sizeof(ipbuf));
+  strncpy(ipbuf, name_or_ip, sizeof(ipbuf)-1);
   ptr = strrchr(ipbuf, '/');
 
   if(ptr)
