@@ -3309,7 +3309,15 @@ int orginal_main(int argc, char **argv) {
 #else
   int main(int argc, char **argv) {
 #endif
-    int i;    
+    int i;
+
+    if(!getenv("TZ")) {
+        if(!access("/etc/localtime",R_OK))
+            setenv("TZ",":/etc/localtime",0);
+        else
+            fprintf(stderr,"Warning TZ not defined and /etc/localtime not readable!\n");
+    }
+    tzset();
 
     if(ndpi_get_api_version() != NDPI_API_VERSION) {
       printf("nDPI Library version mismatch: please make sure this code and the nDPI library are in sync\n");
