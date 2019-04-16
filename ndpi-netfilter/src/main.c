@@ -2488,6 +2488,7 @@ static int __net_init ndpi_net_init(struct net *net)
 			}
 		}
 		if(hm) {
+			ac_automata_finalize((AC_AUTOMATA_t*)n->host_ac);
 			XCHGP(n->ndpi_struct->host_automa.ac_automa,n->host_ac);
 			ac_automata_release(n->host_ac);
 			n->host_ac = NULL;
