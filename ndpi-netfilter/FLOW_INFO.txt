@@ -57,8 +57,8 @@ Each line of connection information has 14 required fields and 5 additional fiel
 7.  Destination address
 8.  Destination port (0 if not exist)
 9.  Bytes from sourse to destination
-10. Packets from sourse to destination
-11. Bytes from destination to sourse
+10. Bytes from destination to sourse
+11. Packets from sourse to destination
 12. Packets from destination to sourse
 13. Interface indexes. Format: "I=<in_ifindex>,<out_ifindex>"
 14. Connection mark. Optional. Format: "CM=<hexmark>"
