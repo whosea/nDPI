@@ -110,7 +110,7 @@ static inline void *PDE_DATA(const struct inode *inode)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
 static inline struct net *xt_net(const struct xt_action_param *par)
 {
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,19,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
         const struct net_device *dev = par->in;
         if(!dev) dev = par->out;
         return dev ? dev_net(dev): NULL;
@@ -135,7 +135,7 @@ static inline const struct net_device *xt_out(const struct xt_action_param *par)
         return par->out;
 }
 #endif
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,19,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
 #define nf_register_net_hooks(net,a,s) nf_register_hooks(a,s)
 #define nf_unregister_net_hooks(net,a,s) nf_unregister_hooks(a,s)
 #endif
@@ -2140,6 +2140,11 @@ static unsigned int ndpi_nat_do_chain(const struct nf_hook_ops *ops,
                                          const struct net_device *in,
                                          const struct net_device *out,
                                          int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
+static unsigned int ndpi_nat_do_chain(const struct nf_hook_ops *priv,
+                                         struct sk_buff *skb,
+                                         const struct nf_hook_state *state)
 {
 #else
 static unsigned int ndpi_nat_do_chain(void *priv,
