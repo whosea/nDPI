@@ -706,10 +706,6 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 				pr_err("NDPI: '%s' exists\n",v);
 				return 0;
 			}
-			if(atomic_read(&n->protocols_cnt[0])) {
-				pr_err("NDPI: iptables in use. can't create custom protocol! See README\n");
-				return 1;
-			}
 			v--;
 			*v = '@';
 			id = ndpi_handle_rule(n->ndpi_struct, v , 1);
