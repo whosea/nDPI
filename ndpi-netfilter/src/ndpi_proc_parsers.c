@@ -720,19 +720,20 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 			n->mark[e_proto].mask = 0x1ff;
 			return 0;
 		}
-
-		if(kstrtoint(hid,16,&id)) {
+		if(!any && !all) {
+		    if(kstrtoint(hid,16,&id)) {
 			id = -1;
 			id = ndpi_get_proto_by_name(n->ndpi_struct,hid);
 			if(id == NDPI_PROTOCOL_UNKNOWN && !(all || any)) {
 				pr_err("NDPI: '%s' unknown protocol or not hexID\n",hid);
 				return 1;
 			}
-		} else {
+		    } else {
 			if(id < 0 || id >= NDPI_NUM_BITS) {
 				pr_err("NDPI: bad id %d\n",id);
 				id = -1;
 			}
+		    }
 		}
 		if(!strncmp(v,"debug",5)) {
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
@@ -796,7 +797,7 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 			pr_err("NDPI: iptables in use! Can't disable protocol\n");
 			return 1;
 		}
-		if(id != -1) {
+		if(id >= 0) {
 			n->mark[id].mark = mark;
 			if(*m) 	n->mark[id].mask = mask;
 			return 0;
