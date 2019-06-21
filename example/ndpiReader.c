@@ -689,7 +689,10 @@ static void parseOptions(int argc, char **argv) {
 #endif
 
 #ifdef DEBUG_TRACE
-  if(trace && trace != stderr) fclose(trace);
+  if(trace && trace != stderr) {
+	  fclose(trace);
+	  trace = NULL;
+  }
 #endif
 }
 
