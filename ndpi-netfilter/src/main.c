@@ -205,18 +205,27 @@ struct nf_ct_ext_labels { /* max size 128 bit */
 } __attribute ((packed));
 
 struct ndpi_cb {
-	unsigned long 	last_ct;
+	unsigned long 	last_ct; // sizeof(unsigned long) == sizeof(void *)
 	uint32_t	proto;
 	uint32_t	magic;
 } __attribute ((packed));
 
+static inline struct ndpi_cb *skb_get_cproto(const struct sk_buff *skb)
+{
+	return (struct ndpi_cb *)&skb->cb[sizeof(skb->cb)-sizeof(struct ndpi_cb)];
+}
 
-static inline struct nf_conn *ct_proto_last(struct ndpi_cb *cb) {
+static inline struct nf_conn *ct_proto_last(struct ndpi_cb *cb)
+{
 	return (struct nf_conn *)(READ_ONCE(cb->last_ct) & ~0x7ul);
 }
-static inline unsigned int ct_proto_get_flow_nat(struct ndpi_cb *cb) {
+static inline unsigned int ct_proto_get_flow_nat(struct ndpi_cb *cb)
+{
 	return READ_ONCE(cb->last_ct) & 7;
 }
+#define FLOW_NAT_START 1
+#define FLOW_NAT_END 2
+
 static inline void ct_proto_set_flow_nat(struct ndpi_cb *cb,uint8_t v) {
 	unsigned long o,n;
 	do {
@@ -225,8 +234,8 @@ static inline void ct_proto_set_flow_nat(struct ndpi_cb *cb,uint8_t v) {
 	} while( o != n && cmpxchg(&cb->last_ct,o,n) != o);
 }
 
-static inline void ct_proto_set_flow(struct ndpi_cb *cb,void *ct, uint8_t v) {
-
+static inline void ct_proto_set_flow(struct ndpi_cb *cb,void *ct, uint8_t v)
+{
 	WRITE_ONCE(cb->last_ct,(unsigned long int)ct | v);
 }
 
@@ -588,6 +597,9 @@ static void ndpi_ct_list_add(struct ndpi_net *n,
 	    h = READ_ONCE(n->flow_h);
 	    WRITE_ONCE(ct_ndpi->next,h);
 	} while(cmpxchg(&n->flow_h,h,ct_ndpi) != h);
+
+	ct_ndpi->flow_yes = 1;
+	atomic_inc(&n->acc_work);
 }
 
 static void ndpi_init_ct_struct(struct ndpi_net *n, 
@@ -601,6 +613,7 @@ static void ndpi_init_ct_struct(struct ndpi_net *n,
 	spin_lock_init(&ct_ndpi->lock);
 	ct_ndpi->l4_proto = l4_proto;
 	ct_ndpi->ipv6 = is_ipv6 != 0;
+
 	if(!ndpi_enable_flow) return;
 
 	tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
@@ -620,8 +633,6 @@ static void ndpi_init_ct_struct(struct ndpi_net *n,
 	}
 
 	ct_ndpi->flinfo.time_start = s_time;
-	ndpi_ct_list_add(n,ct_ndpi);
-	atomic_inc(&n->acc_work);
 	if(ndpi_log_debug > 1)
 	  pr_info("ndpi: init_ct_struct ct_ndpi %pK prot %u\n",
 			ct_ndpi,l4_proto);
@@ -634,8 +645,6 @@ static void ndpi_nat_detect(struct nf_ct_ext_ndpi *ct_ndpi, struct nf_conn * ct)
 	int ns_ip,nd_ip,ns_port=0,nd_port=0;
 	const struct nf_conntrack_tuple *tuple;
 
-	if(!ndpi_enable_flow) return;
-	
 	tuple = &ct->tuplehash[IP_CT_DIR_REPLY].tuple;
 	ns_ip = memcmp(&ct_ndpi->flinfo.ip_d, &tuple->src.u3,addr_size);
 	nd_ip = memcmp(&ct_ndpi->flinfo.ip_s, &tuple->dst.u3,addr_size);
@@ -704,14 +713,19 @@ static inline void __ndpi_free_ct_proto(struct nf_ct_ext_ndpi *ct_ndpi) {
         }
 }
 
+/* free ndpi info on ndpi_net_exit() */
 static int
 __ndpi_free_flow (struct nf_conn * ct,void *data) {
 	struct ndpi_net *n = data;
 	struct nf_ct_ext_labels *ext_l = nf_ct_ext_find_label(ct);
 
 	struct nf_ct_ext_ndpi *ct_ndpi = nf_ct_get_ext_ndpi(ext_l);
-	
+	int delete;
+
 	if(!ct_ndpi) return 1;
+
+	spin_lock_bh(&ct_ndpi->lock);
+
 	atomic_dec(&n->acc_work);
 	WRITE_ONCE(ext_l->magic,0);
 	WRITE_ONCE(ext_l->ndpi_ext,NULL);
@@ -721,9 +735,13 @@ __ndpi_free_flow (struct nf_conn * ct,void *data) {
 	__ndpi_free_ct_proto(ct_ndpi);
 	WRITE_ONCE(ct_ndpi->for_delete,1);
 	WRITE_ONCE(ct_ndpi->flow_info,0);
+	delete = ct_ndpi->flow_yes == 0;
+
+	spin_unlock_bh(&ct_ndpi->lock);
+
 	if(ndpi_log_debug > 1)
 		pr_info("ndpi: __free_flow ct_ndpi %pK\n", ct_ndpi);
-	if(!ndpi_enable_flow) 
+	if(delete)
 		kmem_cache_free (ct_info_cache, ct_ndpi);
 	    else
 		atomic_inc(&n->acc_rem);
@@ -739,6 +757,7 @@ nf_ndpi_free_flow (struct nf_conn * ct)
 	struct nf_ct_ext_ndpi *ct_ndpi = nf_ct_get_ext_ndpi(ext_l);
 
 	if(ct_ndpi) {
+	    int delete = 0;
 	    if(ndpi_log_debug > 1)
 		pr_info("ndpi: free_flow ct %pK ct_ndpi %pk %s\n",
 				ct,ct_ndpi,ct_ndpi->flow_yes ? "flow":"");
@@ -756,6 +775,7 @@ nf_ndpi_free_flow (struct nf_conn * ct)
 	    if( !ndpi_enable_flow || !ct_ndpi->flow_yes || !ct_ndpi->flow_info) {
 		__ndpi_free_ct_proto(ct_ndpi);
 		WRITE_ONCE(ct_ndpi->flow_info,0);
+		delete = ct_ndpi->flow_yes == 0;
 	    }
 	    spin_unlock_bh(&ct_ndpi->lock);
 	    atomic_inc(&n->acc_rem);
@@ -763,7 +783,7 @@ nf_ndpi_free_flow (struct nf_conn * ct)
 	    if(ndpi_log_debug > 1)
 		pr_info("ndpi: free_flow ct_ndpi %pK\n", ct_ndpi);
 
-	    if(!ndpi_enable_flow) 
+	    if(delete) // !ndpi_enable_flow || !ct_ndpi->flow_yes 
 		kmem_cache_free (ct_info_cache, ct_ndpi);
 	}
 }
@@ -1164,7 +1184,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	proto.app_protocol = NDPI_PROCESS_ERROR;
 
-	c_proto = (void *)&skb->cb[sizeof(skb->cb)-sizeof(struct ndpi_cb)];
+	c_proto = skb_get_cproto(skb);
 
     do {
 	if(c_proto->magic == NDPI_ID &&
@@ -1253,10 +1273,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	barrier();
 	spin_lock_bh (&ct_ndpi->lock);
 
-	if( ndpi_enable_flow && ct_ndpi->flow_yes && 
-	    !ct_ndpi->nat_done && !ct_proto_get_flow_nat(c_proto)) {
-		ct_proto_set_flow_nat(c_proto,1);
-	}
+	if( ct_ndpi->flow_yes && 
+	    !ct_ndpi->nat_done && !ct_proto_get_flow_nat(c_proto))
+		ct_proto_set_flow_nat(c_proto,FLOW_NAT_START);
+
 #if defined(CONFIG_NF_CONNTRACK_MARK)
 	if(ct->mark && ct->mark != ct_ndpi->connmark)
 		ct_ndpi->connmark = ct->mark;
@@ -1320,10 +1340,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		proto = ct_ndpi->proto;
 		c_proto->magic = NDPI_ID;
 		c_proto->proto = pack_proto(proto);
-		if(ndpi_enable_flow)
+
+		if(ct_ndpi->flow_yes)
 			ct_proto_set_flow(c_proto,ct,
-				(ct_ndpi->nat_done ? 2:0) |
-				(ct_ndpi->flow_yes ? 1:0) );
+				ct_ndpi->nat_done ? FLOW_NAT_END:FLOW_NAT_START);
 
 		if(info->hostname[0])
 			host_match = ndpi_host_match(info,ct_ndpi);
@@ -1362,10 +1382,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 		c_proto->magic = NDPI_ID;
 		c_proto->proto = r_proto;
-		if(ndpi_enable_flow)
+		if(ct_ndpi->flow_yes)
 			ct_proto_set_flow(c_proto,ct,
-				(ct_ndpi->nat_done ? 2:0) |
-				(ct_ndpi->flow_yes ? 1:0) );
+				ct_ndpi->nat_done ? FLOW_NAT_END:FLOW_NAT_START);
+			
 
 		COUNTER(ndpi_pd);
 
@@ -1594,7 +1614,7 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	struct ndpi_cb *c_proto;
 	int mode = 0;
 
-	c_proto = (void *)&skb->cb[sizeof(skb->cb)-sizeof(struct ndpi_cb)];
+	c_proto = skb_get_cproto(skb);
 
 	if(c_proto->magic != NDPI_ID) {
 		if(ndpi_log_debug > 1)
@@ -1602,21 +1622,16 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 		return XT_CONTINUE;
 	}
 
-	if(c_proto->proto != NDPI_PROCESS_ERROR) {
-		uint32_t tmp_p = READ_ONCE(c_proto->proto);
-		proto.master_protocol = tmp_p & 0xffff;
-		proto.app_protocol = (tmp_p >> 16) & 0xffff; 
-	}
-
-	if(info->flow_yes) {
+	if(ndpi_enable_flow && info->flow_yes) {
 	    if(ndpi_log_debug > 2)
-		pr_info("%s: flow_yes flow_nat %u\n",__func__,ct_proto_get_flow_nat(c_proto));
+		pr_info("%s: flow_yes flow_nat %u\n",
+			__func__,ct_proto_get_flow_nat(c_proto));
 	    do {
 		enum ip_conntrack_info ctinfo;
 		struct nf_conn * ct;
 		struct nf_ct_ext_ndpi *ct_ndpi;
 
-		if(ct_proto_get_flow_nat(c_proto)) break;
+//		if(ct_proto_get_flow_nat(c_proto)) break;
 		ct = nf_ct_get (skb, &ctinfo);
 		if(!ct) break;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0)
@@ -1626,15 +1641,24 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 #endif
 		ct_ndpi = nf_ct_ext_find_ndpi(ct);
 		if(!ct_ndpi) break;
+
 		spin_lock_bh (&ct_ndpi->lock);
-		if(info->flow_yes && !ct_ndpi->nat_done) {
-		    ct_ndpi->flow_yes = 1;
-		    ct_proto_set_flow_nat(c_proto,1);
-		    if(ndpi_log_debug > 2)
-			pr_info("%s: set flow_yes, wait NAT done\n",__func__);
+
+		if(!ct_ndpi->flow_yes)
+		    ndpi_ct_list_add(n,ct_ndpi);
+
+		if(!ct_ndpi->nat_done && 
+		   !ct_proto_get_flow_nat(c_proto)) {
+			ct_proto_set_flow_nat(c_proto,FLOW_NAT_START);
 		}
 		spin_unlock_bh (&ct_ndpi->lock);
 	    } while(0);
+	}
+
+	if(c_proto->proto != NDPI_PROCESS_ERROR) {
+		uint32_t tmp_p = READ_ONCE(c_proto->proto);
+		proto.master_protocol = tmp_p & 0xffff;
+		proto.app_protocol = (tmp_p >> 16) & 0xffff; 
 	}
 
 	if(info->t_mark || info->t_clsf) {
@@ -2159,11 +2183,11 @@ static unsigned int ndpi_nat_do_chain(void *priv,
 
     do {
 
-	c_proto = (void *)&skb->cb[sizeof(skb->cb)-sizeof(struct ndpi_cb)];
+	c_proto = skb_get_cproto(skb);
 
 	if(c_proto->magic != NDPI_ID) break;
 	if(c_proto->proto == NDPI_PROCESS_ERROR) break;
-	if(ct_proto_get_flow_nat(c_proto) != 1) break;
+	if(ct_proto_get_flow_nat(c_proto) != FLOW_NAT_START) break;
 
 	ct = nf_ct_get (skb, &ctinfo);
 	if (ct == NULL) break;
@@ -2183,7 +2207,7 @@ static unsigned int ndpi_nat_do_chain(void *priv,
 #endif
 		{
 			ct_ndpi->nat_done = 1;
-			ct_proto_set_flow_nat(c_proto,3);
+			ct_proto_set_flow_nat(c_proto,FLOW_NAT_END);
 		}
 	}
 	spin_unlock_bh (&ct_ndpi->lock);
