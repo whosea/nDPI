@@ -479,12 +479,21 @@ static char *ct_info(const struct nf_conn * ct,char *buf,size_t buf_size,int dir
 
 static void *malloc_wrapper(size_t size)
 {
+	if(size > 32*1024) {
+		/*
+		 * Workarround for 32bit systems
+		 * Large memory areas (more than 128 KB) are requested 
+		 * only during initial initialization. 
+		 * In this case, we can use kvmalloc() instead of kmalloc().
+		 */
+		return kvmalloc(size,GFP_KERNEL);
+	}
 	return kmalloc(size,(in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL);
 }
 
 static void free_wrapper(void *freeable)
 {
-	kfree(freeable);
+	kvfree(freeable);
 }
 
 static void fill_prefix_any(prefix_t *p, union nf_inet_addr *ip,int family) {
@@ -2741,6 +2750,9 @@ static int __init ndpi_mt_init(void)
 		" IPv6=YES"
 #else
 		" IPv6=no"
+#endif
+#ifdef USE_HACK_USERID
+		" USERID=YES"
 #endif
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
 		" debug_message=YES"

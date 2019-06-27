@@ -9,6 +9,9 @@ ccflags-y += -DHAVE_CONFIG_H -DNDPI_LIB_COMPILATION -DOPENDPI_NETFILTER_MODULE -
 MODULES_DIR := /lib/modules/$(shell uname -r)
 KERNEL_DIR := ${MODULES_DIR}/build
 
+ifeq ($(shell grep -c userid ${MODULES_DIR}/source/include/linux/skbuff.h),1)
+ccflags-y += -DUSE_HACK_USERID=1
+endif
 
 NDPI_PROTO_SRC := $(shell cd $(src) ; echo $(NDPI_PRO)/*.c)
 
@@ -31,7 +34,7 @@ test::
 	@echo $(xt_ndpi-y)
 
 modules:
-	$(info $$xt_ndpi-y is [${xt_ndpi-y}]) \
+	$(info $$xt_ndpi-y is [${xt_ndpi-y}] ${ccflags-y}) \
 	make  -C ${KERNEL_DIR} M=$$PWD $@ $(MFLAGS);
 
 modules_install:
