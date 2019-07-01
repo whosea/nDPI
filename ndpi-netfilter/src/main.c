@@ -42,6 +42,9 @@
 #include <linux/icmp.h>
 #include <linux/inetdevice.h>
 #include <linux/if_ether.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0)
+#include <linux/vmalloc.h>
+#endif
 
 
 #include <linux/netfilter/x_tables.h>
@@ -486,7 +489,11 @@ static void *malloc_wrapper(size_t size)
 		 * only during initial initialization. 
 		 * In this case, we can use kvmalloc() instead of kmalloc().
 		 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,12,0)
 		return kvmalloc(size,GFP_KERNEL);
+#else
+		return vmalloc(size);
+#endif
 	}
 	return kmalloc(size,(in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL);
 }
