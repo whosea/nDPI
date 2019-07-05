@@ -1180,7 +1180,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct xt_ndpi_mtinfo *info = par->matchinfo;
 
 	enum ip_conntrack_info ctinfo;
-	struct nf_conn * ct;
+	struct nf_conn * ct = NULL;
 	struct sk_buff *linearized_skb = NULL;
 	const struct sk_buff *skb_use = NULL;
 	struct nf_ct_ext_ndpi *ct_ndpi = NULL;
@@ -1223,8 +1223,6 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	ct = nf_ct_get (skb, &ctinfo);
 	if (ct == NULL) {
 		COUNTER(ndpi_p31);
-		if(ndpi_log_debug > 2)
-			printk("nf_ct_get(%p) NULL\n",(void *)skb);
 		break;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0)
@@ -1644,7 +1642,7 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 			__func__,ct_proto_get_flow_nat(c_proto));
 	    do {
 		enum ip_conntrack_info ctinfo;
-		struct nf_conn * ct;
+		struct nf_conn * ct = NULL;
 		struct nf_ct_ext_ndpi *ct_ndpi;
 
 //		if(ct_proto_get_flow_nat(c_proto)) break;
@@ -1775,10 +1773,10 @@ static void bt_port_gc(unsigned long data) {
 #endif
 	struct timespec tm;
 	int i;
+	uint32_t st_j;
+	uint32_t en_j;
 	
-	n->gc.expires = jiffies + HZ/2;
-	add_timer(&n->gc);
-
+	st_j = READ_ONCE(jiffies);
 	getnstimeofday(&tm);
 	if(ht && spin_trylock_bh(&ht->lock)) {
 	    gc_1 = 1;
@@ -1808,13 +1806,19 @@ static void bt_port_gc(unsigned long data) {
 	}
 #endif
 	ndpi_bt_gc = n->gc_count;
+	en_j = READ_ONCE(jiffies);
+	barrier();
+	if(en_j != st_j) { 
+		printk("%s: BT jiffies %u\n",__func__,en_j - st_j);
+		st_j = en_j;
+	}
 
-	if(!ndpi_enable_flow) return;
+	if(ndpi_enable_flow) {
 
-	if(atomic_read(&n->acc_rem) > n->acc_limit) {
+	    if(atomic_read(&n->acc_rem) > n->acc_limit) {
 		n->acc_gc = ndpi_delete_acct(n,2,0) < 0 ?
 			jiffies + HZ/5 : jiffies + HZ;
-	} else {
+	    } else {
 		if(!atomic_read(&n->acc_open)) {
 		    if(time_after(jiffies,n->acc_gc)) {
 			if( atomic_read(&n->acc_work) > 0 || 
@@ -1823,7 +1827,14 @@ static void bt_port_gc(unsigned long data) {
 		    }
 		    n->acc_gc = jiffies + 5*HZ;
 		}
+	    }
 	}
+	en_j = READ_ONCE(jiffies);
+	barrier();
+
+	if(en_j != st_j) printk("%s: FLOW jiffies %u\n",__func__,en_j - st_j);
+
+	mod_timer(&n->gc,jiffies + HZ/2);
 }
 
 int inet_ntop_port(int family,void *ip, u_int16_t port, char *lbuf, size_t bufsize) {
@@ -1845,7 +1856,6 @@ static int ninfo_proc_open(struct inode *inode, struct file *file)
 
 /*
  * all:
- *  0 - delete only for_deleted and not flow_info
  *  1 - delete only for_deleted if reader inactived.
  *  2 - delete only for_deleted, add lost counters if not empty.
  *  3 - remove all ( remove xt_ndpi оr netns )
@@ -1882,12 +1892,10 @@ int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 		barrier();
 		del = 0;
 		switch(all) {
-		case 0: del = ct_ndpi->for_delete && (!ct_ndpi->flow_info || !ct_ndpi->flow_yes);
-			break;
 		case 1: del = ct_ndpi->for_delete;
 			break;
 		case 2: if(ct_ndpi->for_delete) {
-			    if(skip_del > 0) skip_del--;
+			    if(ct_ndpi->flow_info && skip_del > 0) skip_del--;
 				else del = 1;
 			}
 			break;
@@ -2192,7 +2200,7 @@ static unsigned int ndpi_nat_do_chain(void *priv,
 					 const struct nf_hook_state *state)
 {
 #endif
-    struct nf_conn * ct;
+    struct nf_conn * ct = NULL;
     enum ip_conntrack_info ctinfo;
     struct nf_ct_ext_ndpi *ct_ndpi;
     struct ndpi_cb *c_proto;
