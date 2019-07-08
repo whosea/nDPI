@@ -19,10 +19,15 @@
 #include "ndpi_proc_generic.h"
 
 void nflow_proc_read_start(struct ndpi_net *n) {
+	struct timespec tm;
 
-	n->acc_end = 0;
-	n->acc_open_time = 0;
-	n->flow_l = NULL;
+	getnstimeofday(&tm);
+	n->acc_end  = 0;
+	n->acc_open_time = tm.tv_sec;
+	n->flow_l   = NULL;
+	n->cnt_view = 0;
+	n->cnt_del  = 0;
+	n->cnt_out  = 0;
 }
 
 
@@ -161,6 +166,9 @@ int nflow_proc_close(struct inode *inode, struct file *file)
         struct ndpi_net *n = PDE_DATA(file_inode(file));
 	if(!ndpi_enable_flow) return -EINVAL;
 	generic_proc_close(n,parse_ndpi_flow,W_BUF_FLOW);
+	if(flow_read_debug)
+		printk("%s: view %ld dumped %ld deleted %ld\n",
+			__func__,n->cnt_view,n->cnt_out,n->cnt_del);
 	n->acc_gc = jiffies + n->acc_wait*HZ;
 	atomic_set(&n->acc_open,0);
         return 0;

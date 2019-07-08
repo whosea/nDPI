@@ -87,6 +87,7 @@ struct ndpi_net {
 	atomic_t		acc_o_packets_lost;
 	atomic64_t		acc_i_bytes_lost;
 	atomic64_t		acc_o_bytes_lost;
+	unsigned long int	cnt_view,cnt_del,cnt_out;
 };
 
 struct flow_info {

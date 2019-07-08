@@ -261,6 +261,8 @@ static unsigned long  max_packet_unk_tcp=20;
 static unsigned long  max_packet_unk_udp=20;
 static unsigned long  max_packet_unk_other=20;
 
+unsigned long  flow_read_debug=0;
+
 static unsigned long  ndpi_size_flow_struct=0;
 static unsigned long  ndpi_size_id_struct=0;
 static unsigned long  ndpi_size_hash_ip4p_node=0;
@@ -328,6 +330,7 @@ MODULE_PARM_DESC(ndpi_flow_limit,"Limit netflow records. Default 10000000 (~4.3G
 module_param_named(max_unk_tcp,max_packet_unk_tcp,ulong, 0600);
 module_param_named(max_unk_udp,max_packet_unk_udp,ulong, 0600);
 module_param_named(max_unk_other,max_packet_unk_other,ulong, 0600);
+module_param_named(flow_read_debug,flow_read_debug,ulong, 0600);
 
 module_param_named(ndpi_size_flow_struct,ndpi_size_flow_struct,ulong, 0400);
 module_param_named(ndpi_size_id_struct,ndpi_size_id_struct,ulong, 0400);
@@ -1974,6 +1977,8 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	int p,del;
 	ssize_t sl;
 	char buf1[256+128];
+	int cnt_view=0,cnt_del=0,cnt_out=0;
+	loff_t st_pos;
 
 	if(!ndpi_enable_flow) return -EINVAL;
 
@@ -1996,11 +2001,6 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		}
 		p += sl; count -= sl;
 	}
-	if(!n->acc_open_time) {
-		struct timespec tm;
-		getnstimeofday(&tm);
-		n->acc_open_time = tm.tv_sec;
-	}
 	if(*ppos == 0) {
 		printk("%s: Start dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
@@ -2011,7 +2011,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		}
 		p += sl; count -= sl;
 	}
-
+	st_pos = *ppos;
 	prev = NULL;
 
     restart:
@@ -2025,6 +2025,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	while(ct_ndpi) {
 
 		spin_lock_bh(&ct_ndpi->lock);
+		cnt_view++;
 		next = ct_ndpi->next;
 		del  = READ_ONCE(ct_ndpi->for_delete);
 	
@@ -2085,6 +2086,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 				spin_unlock(&n->rem_lock);
 				return -EFAULT;
 			}
+			cnt_out++;
 			p += sl; count -= sl;
 			(*ppos)++;
 		}
@@ -2093,6 +2095,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 			kmem_cache_free (ct_info_cache, ct_ndpi);
 			atomic_dec(&n->acc_work);
 			atomic_dec(&n->acc_rem);
+			cnt_del++;
 		} else {
 			prev = ct_ndpi;
 		}
@@ -2100,14 +2103,22 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 
 	}
 
+	n->cnt_view += cnt_view;
+	n->cnt_del  += cnt_del;
+	n->cnt_out  += cnt_out;
+
 	spin_unlock(&n->rem_lock);
+
 
 	if( !p || !*ppos ) {
 		n->acc_end = 1;
 		n->flow_l = NULL;
 		printk("%s: End   dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
-	}
+	} else if(flow_read_debug) {
+			printk("%s: pos %7lld view %d dumped %d deleted %d\n",
+				__func__, st_pos, cnt_view, cnt_out, cnt_del);
+		}
 
 	n->acc_gc = jiffies + n->acc_wait * HZ;
 	

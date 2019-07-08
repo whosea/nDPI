@@ -11,6 +11,7 @@ extern unsigned long  bt_hash_size;
 extern unsigned long  bt6_hash_size;
 extern unsigned long  bt_hash_tmo;
 extern unsigned long  ndpi_enable_flow;
+extern unsigned long  flow_read_debug;
 extern struct kmem_cache *ct_info_cache;
 
 #define XCHGP(a,b) { void *__c = a; a = b; b = __c; }
