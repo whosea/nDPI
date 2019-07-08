@@ -1200,6 +1200,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	ip6h = ipv6_hdr(skb);
 	is_ipv6 = ip6h && ip6h->version == 6;
 #endif
+	n = ndpi_pernet(xt_net(par));
+	if(!atomic_read(&n->init_done)) return 0; // ndpi_net_init() not completed! 
 
 	proto.app_protocol = NDPI_PROCESS_ERROR;
 
@@ -1237,8 +1239,6 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		COUNTER(ndpi_p31);
 		break;
 	}
-
-	n = ndpi_pernet(xt_net(par));
 
 	{
 	    struct nf_ct_ext_labels *ct_label = nf_ct_ext_find_label(ct);
@@ -1630,6 +1630,8 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	struct ndpi_net *n = ndpi_pernet(xt_net(par));
 	struct ndpi_cb *c_proto;
 	int mode = 0;
+
+	if(!atomic_read(&n->init_done)) return XT_CONTINUE; // ndpi_net_init() not completed!
 
 	c_proto = skb_get_cproto(skb);
 
@@ -2029,7 +2031,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		next = ct_ndpi->next;
 		del  = READ_ONCE(ct_ndpi->for_delete);
 	
-		switch(n->acc_read_mode) {
+		switch(n->acc_read_mode & 0x3) {
 		case 0:
 			sl = ct_ndpi->flow_yes && ct_ndpi->flow_info  ?
 				ndpi_dump_acct_info(n,buf1,sizeof(buf1)-1,ct_ndpi) : 0;
@@ -2098,6 +2100,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 			cnt_del++;
 		} else {
 			prev = ct_ndpi;
+			n->flow_l = prev;
 		}
 		ct_ndpi=next;
 
@@ -2109,13 +2112,12 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 
 	spin_unlock(&n->rem_lock);
 
-
-	if( !p || !*ppos ) {
+	if(!ct_ndpi ) {
 		n->acc_end = 1;
 		n->flow_l = NULL;
 		printk("%s: End   dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
-	} else if(flow_read_debug) {
+	} else if(flow_read_debug > 1) {
 			printk("%s: pos %7lld view %d dumped %d deleted %d\n",
 				__func__, st_pos, cnt_view, cnt_out, cnt_del);
 		}
@@ -2357,6 +2359,7 @@ static int __net_init ndpi_net_init(struct net *net)
 	/* init global detection structure */
 
 	n = ndpi_pernet(net);
+	atomic_set(&n->init_done,0);
 	spin_lock_init(&n->id_lock);
 	spin_lock_init(&n->ipq_lock);
 	spin_lock_init(&n->host_lock);
@@ -2582,6 +2585,7 @@ static int __net_init ndpi_net_init(struct net *net)
 		    nf_register_net_hooks(net, nf_nat_ipv4_ops,
 	                                   ARRAY_SIZE(nf_nat_ipv4_ops))) break;
 		/* All success! */
+		atomic_set(&n->init_done,1);
 		return 0;
 	} while(0);
 

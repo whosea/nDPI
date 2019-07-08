@@ -71,6 +71,7 @@ struct ndpi_net {
 	spinlock_t		rem_lock;	// lock ndpi_delete_acct
 	struct nf_ct_ext_ndpi 	*flow_h;	// Head of info list
 	struct nf_ct_ext_ndpi	*flow_l;	// save point for next read info
+	atomic_t		init_done;	// ndpi_net_init() complete
 	atomic_t		acc_open;	// flow is open
 	atomic_t		acc_work;	// number of active flow info
 	atomic_t		acc_rem;	// number of inactive flow info
