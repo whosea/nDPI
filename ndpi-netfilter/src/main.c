@@ -2040,6 +2040,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		case 2:
 			sl = !del && ct_ndpi->flow_yes ?
 				ndpi_dump_acct_info(n,buf1,sizeof(buf1)-1,ct_ndpi) : 0;
+			break;
 		default:
 			sl = 0;
 		}
