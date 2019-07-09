@@ -104,6 +104,47 @@ struct flow_info {
 }  __attribute ((packed)); // 108 bytes
 
 
+#define f_flow_info	0x1
+#define f_for_delete	0x2
+#define f_detect_done	0x4
+#define f_nat_done	0x8
+#define f_flow_yes	0x10
+#define f_ipv6		0x20
+#define f_snat		0x40
+#define f_dnat		0x80
+#define f_userid	0x100
+
+#define test_flow_info(ct_ndpi)	test_bit(f_flow_info,&ct_ndpi->flags)
+#define test_for_delete(ct_ndpi)	test_bit(f_for_delete,&ct_ndpi->flags)
+#define test_detect_done(ct_ndpi)	test_bit(f_detect_done,&ct_ndpi->flags)
+#define test_nat_done(ct_ndpi)	test_bit(f_nat_done,&ct_ndpi->flags)
+#define test_flow_yes(ct_ndpi)	test_bit(f_flow_yes,&ct_ndpi->flags)
+#define test_ipv6(ct_ndpi)		test_bit(f_ipv6,&ct_ndpi->flags)
+#define test_snat(ct_ndpi)		test_bit(f_snat,&ct_ndpi->flags)
+#define test_dnat(ct_ndpi)		test_bit(f_dnat,&ct_ndpi->flags)
+#define test_userid(ct_ndpi)		test_bit(f_userid,&ct_ndpi->flags)
+
+#define set_flow_info(ct_ndpi)	set_bit(f_flow_info,&ct_ndpi->flags)
+#define set_for_delete(ct_ndpi)	set_bit(f_for_delete,&ct_ndpi->flags)
+#define set_detect_done(ct_ndpi)	set_bit(f_detect_done,&ct_ndpi->flags)
+#define set_nat_done(ct_ndpi)	set_bit(f_nat_done,&ct_ndpi->flags)
+#define set_flow_yes(ct_ndpi)	set_bit(f_flow_yes,&ct_ndpi->flags)
+#define set_ipv6(ct_ndpi)	set_bit(f_ipv6,&ct_ndpi->flags)
+#define set_snat(ct_ndpi)	set_bit(f_snat,&ct_ndpi->flags)
+#define set_dnat(ct_ndpi)	set_bit(f_dnat,&ct_ndpi->flags)
+#define set_userid(ct_ndpi)	set_bit(f_userid,&ct_ndpi->flags)
+
+#define clear_flow_info(ct_ndpi)	clear_bit(f_flow_info,&ct_ndpi->flags)
+#define clear_for_delete(ct_ndpi) clear_bit(f_for_delete,&ct_ndpi->flags)
+#define clear_detect_done(ct_ndpi) clear_bit(f_detect_done,&ct_ndpi->flags)
+#define clear_nat_done(ct_ndpi)	clear_bit(f_nat_done,&ct_ndpi->flags)
+#define clear_flow_yes(ct_ndpi)	clear_bit(f_flow_yes,&ct_ndpi->flags)
+#define clear_ipv6(ct_ndpi)	clear_bit(f_ipv6,&ct_ndpi->flags)
+#define clear_snat(ct_ndpi)	clear_bit(f_snat,&ct_ndpi->flags)
+#define clear_dnat(ct_ndpi)	clear_bit(f_dnat,&ct_ndpi->flags)
+#define clear_userid(ct_ndpi)	clear_bit(f_userid,&ct_ndpi->flags)
+
+
 struct nf_ct_ext_ndpi {
 	struct nf_ct_ext_ndpi	*next;		// 4/8
 	struct ndpi_flow_struct	*flow;		// 4/8
@@ -111,24 +152,15 @@ struct nf_ct_ext_ndpi {
 	char			*host;		// 4/8 bytes
 	char			*ssl;		// 4/8 bytes
 	struct flow_info	flinfo;		// 108 bytes
-	ndpi_protocol		proto;		// 4 bytes
+	ndpi_protocol		proto;		// 8 bytes
+	long unsigned int	flags;		// 4/8 bytes
 	uint32_t		connmark;	// 4 bytes
 	spinlock_t		lock;		// 2/4 bytes
-	uint8_t			l4_proto,	// 1
-				flow_info,	// 1
-				for_delete,	// 1
-				detect_done:1,  // 1
-				nat_done:1,
-				flow_yes:1,
-				ipv6:1,
-				snat:1,
-				dnat:1,
-				userid:1;
-#if __SIZEOF_LONG__ == 4
-	uint8_t			pad[2];
-#endif
+						// ?/56 bytes with debug spinlock
+
+	uint8_t			l4_proto;	// 1
 /* 
- * 32bit - 148 bytes, 64bit - 176 bytes;
+ * 32bit - 148 bytes, 64bit - 233+7 bytes;
  */
 } __attribute ((packed));
 

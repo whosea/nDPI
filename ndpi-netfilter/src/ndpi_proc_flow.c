@@ -36,13 +36,14 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 		struct nf_ct_ext_ndpi *ct) {
 	const char *t_proto;
 	ssize_t l = 0;
+	int is_ipv6 = test_ipv6(ct);
 	*buf = 0;
 
 	buflen -= 2; // space for \n \0
 	l = snprintf(buf,buflen,"%u %u %c %d ",
 		ct->flinfo.time_start,ct->flinfo.time_end,
-		ct->ipv6 ? '6':'4', ct->l4_proto);
-	if(ct->ipv6) {
+		is_ipv6 ? '6':'4', ct->l4_proto);
+	if(is_ipv6) {
 	    l += snprintf(&buf[l],buflen-l,"%pI6c %d %pI6c %d %llu %llu %u %u ",
 		&ct->flinfo.ip_s, htons(ct->flinfo.sport),
 		&ct->flinfo.ip_d, htons(ct->flinfo.dport),
@@ -65,17 +66,17 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 	if(ct->connmark)
 	    l += snprintf(&buf[l],buflen-l," CM=%x",ct->connmark);
 #endif
-	if(!ct->ipv6) {
-	    if(ct->snat) {
+	if(!is_ipv6) {
+	    if(test_snat(ct)) {
 		l += snprintf(&buf[l],buflen-l," SN=%pI4n:%d",
 				&ct->flinfo.ip_snat,htons(ct->flinfo.sport_nat));
 	    }
-	    if(ct->dnat) {
+	    if(test_dnat(ct)) {
 		l += snprintf(&buf[l],buflen-l," DN=%pI4n:%d",
 				&ct->flinfo.ip_dnat,htons(ct->flinfo.dport_nat));
 	    }
 #ifdef USE_HACK_USERID
-	    if(ct->userid) {
+	    if(test_userid(ct)) {
 		l += snprintf(&buf[l],buflen-l," UI=%pI4n:%d",
 				&ct->flinfo.ip_snat,htons(ct->flinfo.sport_nat));
 	    }
