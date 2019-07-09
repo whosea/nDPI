@@ -242,7 +242,10 @@ static inline void ct_proto_set_flow(struct ndpi_cb *cb,void *ct, uint8_t v)
 	WRITE_ONCE(cb->last_ct,(unsigned long int)ct | v);
 }
 
-#define flow_have_info(c) ((READ_ONCE(c->flags) & (f_flow_yes|f_flow_info)) == (f_flow_yes|f_flow_info))
+static inline int flow_have_info( struct nf_ct_ext_ndpi *c) {
+	unsigned long int m = (1 << f_flow_yes) | (1 << f_flow_info);
+	return (READ_ONCE(c->flags) & m) == m;
+}
 
 static ndpi_protocol proto_null = NDPI_PROTOCOL_NULL;
 

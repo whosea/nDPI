@@ -104,15 +104,15 @@ struct flow_info {
 }  __attribute ((packed)); // 108 bytes
 
 
-#define f_flow_info	0x1
-#define f_for_delete	0x2
-#define f_detect_done	0x4
-#define f_nat_done	0x8
-#define f_flow_yes	0x10
-#define f_ipv6		0x20
-#define f_snat		0x40
-#define f_dnat		0x80
-#define f_userid	0x100
+#define f_flow_info	0
+#define f_for_delete	1
+#define f_detect_done	2
+#define f_nat_done	3
+#define f_flow_yes	4
+#define f_ipv6		5
+#define f_snat		6
+#define f_dnat		7
+#define f_userid	8
 
 #define test_flow_info(ct_ndpi)	test_bit(f_flow_info,&ct_ndpi->flags)
 #define test_for_delete(ct_ndpi)	test_bit(f_for_delete,&ct_ndpi->flags)
