@@ -33,29 +33,105 @@ struct dump_data {
 };
 
 #define MAX_PROTO_NAMES 320
+
+int verbose = 0;
 char *proto_name[MAX_PROTO_NAMES];
+int ndpi_last_proto=0;
 
 struct dump_data *head = NULL, *tail = NULL;
 
+static char *proto_buf = NULL;
+static size_t proto_buf_len = 0;
+static size_t proto_buf_pos = 0;
+
+int append_buf(char *data,size_t len) {
+	if(!proto_buf) {
+		proto_buf_len = 4096;
+		proto_buf = calloc(1,proto_buf_len);
+	}
+	if(!proto_buf) return 1;
+	if(proto_buf_pos + len > proto_buf_len) {
+		char *tmp = realloc(proto_buf,proto_buf_len+4096);
+		if(!tmp) return 1;
+		proto_buf = tmp;
+		proto_buf_len+=4096;
+	}
+	memcpy(proto_buf+proto_buf_pos,data,len);
+	proto_buf_pos += len;
+	return 0;
+}
+
+void write_proto_name(int fd) {
+char lbuf[256+8],*n;
+struct flow_data_common *c = (struct flow_data_common *)lbuf;
+uint16_t *p;
+int id,len;
+
+memset(lbuf,0,sizeof(lbuf));
+n = (char *)&c->time_start;
+p = (uint16_t *)&c->proto;
+
+for(id=0; id <= ndpi_last_proto; id++) {
+	*p = id;	
+	if(proto_name[id]) {
+		len = strlen(proto_name[id]);
+		if(len > 255) len = 255;
+		memcpy(n,proto_name[id],len);
+	} else {
+		len = snprintf(n,255,"proto%d",id);
+	}
+	c->host_len = len;
+	append_buf(lbuf,(n-lbuf)+len);
+}
+if(proto_buf && proto_buf_pos)
+	write(fd,proto_buf,proto_buf_pos);
+if(proto_buf) {
+	free(proto_buf);
+	proto_buf = 0;
+}
+
+}
+
 void ndpi_get_proto_names(void) {
 char lbuf[256],mark[64],name[64];
-unsigned int id;
-FILE *fd = fopen("/proc/net/xt_ndpi/proto","r");
+unsigned int id,max=0;
+FILE *fd;
 
-if(!fd) return;
+	if(ndpi_last_proto != 0) return;
 
-do {
-	if(!fgets(lbuf,sizeof(lbuf)-1,fd)) break;
-	if(lbuf[0] != '#') break;
-	while(fgets(lbuf,sizeof(lbuf)-1,fd)) {
-		if(sscanf(lbuf,"%x %s %s",&id,mark,name) == 3) {
-			if(id >= MAX_PROTO_NAMES) break;
-			proto_name[id] = strdup(name);
-//			fprintf(stderr,"%d %s\n",id,name);
-		}
+	fd = fopen("/proc/net/xt_ndpi/proto","r");
+
+	if(!fd) {
+		ndpi_last_proto = -1;
+		return;
 	}
-} while(0);
-fclose(fd);
+
+	do {
+		if(!fgets(lbuf,sizeof(lbuf)-1,fd)) break;
+		if(lbuf[0] != '#') {
+			ndpi_last_proto = -1;
+			fclose(fd);
+			return;
+		}
+		while(fgets(lbuf,sizeof(lbuf)-1,fd)) {
+			if(sscanf(lbuf,"%x %s %s",&id,mark,name) == 3) {
+				if(id >= MAX_PROTO_NAMES) continue;
+				if(!strncmp(mark,"disabled",8) ||
+				   !strcmp(mark,"Free"))  {
+					snprintf(name,sizeof(name)-1,"proto%d",id);
+					proto_name[id] = strdup(name);
+					continue;
+				}
+				proto_name[id] = strdup(name);
+				if(verbose > 1) fprintf(stderr,"%d %s\n",id,name);
+				if(id > max) max = id;
+			}
+		}
+	} while(0);
+	fclose(fd);
+	if(max != 0) ndpi_last_proto = max;
+	if(verbose)
+		fprintf(stderr,"Last ID %d\n",ndpi_last_proto);
 }
 
 static const char *ndpi_proto_name(unsigned int id) {
@@ -69,8 +145,9 @@ struct flow_data_v6 *v6;
 char *data,buff[512],
      a1[64],a2[64],a3[32],a4[32],
      p1[8],p2[8],p3[8],p4[8],
-     pn[64];
+     pn[64],*tp;
 int offs,l,rl;
+uint16_t id;
 
 	data = (char*)&dump->data[0];
 	offs = 0;
@@ -79,7 +156,21 @@ int offs,l,rl;
 		c = (struct flow_data_common *)&data[offs];
 		switch(c->rec_type) {
 		case 0:
-			return -1;
+			if( !c->host_len ) return -1;
+			rl = 4 + c->host_len;
+			if(offs+rl > dump->len) return -1;
+			id = *(uint16_t *)&c->proto;
+			tp = malloc(rl);
+			if(tp) {
+				memcpy(tp,&data[offs+4],c->host_len);
+				tp[c->host_len] = '\0';
+				if(proto_name[id]) free(proto_name[id]);
+				proto_name[id] = tp;
+				if(verbose > 1)
+					fprintf(stderr,"proto %d '%s'\n",id,tp);
+			}
+			offs += rl;
+			break;
 		case 1:
 			if(offs+8 > dump->len) return -1;
 			l = snprintf(buff,sizeof(buff)-1,"START %u\n",c->time_start);
@@ -186,30 +277,43 @@ int offs,l,rl;
 }
 
 void help(void) {
-	fprintf(stderr,"%s [-s] [-S output_biary_file] [-i input_binary_file]\n",
-			"flow_dump");
+	fprintf(stderr,"ndpi_flow_dump [-v] [-m mode] [-i input_binary_file] [-s] [-S output_biary_file]\n"
+	"  -v             Verbose + 1\n"
+	"  -m closed|flows Set read mode. Default 'read_all'\n"
+	"  -s             Human readable output (stdout)\n"
+	"  -S file        Write binary data to 'file'\n"
+	"  -i file        Read binary data from the 'file' instead /proc/net/xt_ndpi/flows\n"
+	);
 	exit(1);
 }
 
 int main(int argc,char **argv) {
-	int fd,e,n,q=0;
+	int fd,e,n;
 	size_t blk_size;
 	long long int r;
 	int file_read;
 	struct dump_data *c;
 	char *src_file= NULL;
 	char *bin_file= NULL;
+	char *read_mode="read_all_bin\n";
 	int text_dump = 0;
 	struct stat src_st;
 	struct timeval tv1,tv2;
 	long int delta;
 
-	while((n=getopt(argc,argv,"qsS:i:")) != -1) {
+	while((n=getopt(argc,argv,"vsS:i:m:")) != -1) {
 	  switch(n) {
-	      case 'q': q = 1; break;
+	      case 'v': verbose++; break;
 	      case 's': text_dump = 1; break;
 	      case 'S': bin_file  = strdup(optarg); break;
 	      case 'i': src_file  = strdup(optarg); break;
+	      case 'm':
+			if(!strcmp(optarg,"closed"))
+				read_mode="read_closed_bin\n";
+			else if(!strcmp(optarg,"flows"))
+				read_mode="read_flows_bin\n";
+			else help();
+			break;
 	      default: help();
 	  }
 	}
@@ -217,15 +321,15 @@ int main(int argc,char **argv) {
 		fprintf(stderr,"-s or -S required!\n");
 		exit(1);
 	}
-	ndpi_get_proto_names();
 	if(!src_file) {
+		ndpi_get_proto_names();
 		fd = open("/proc/net/xt_ndpi/flows",O_RDWR);
 		if(fd < 0) {
 			perror("open /proc/net/xt_ndpi/flows");
 			exit(1);
 		}
-		if(write(fd,"read_all_bin\n",13) != 13) {
-			perror("Set mode read_all_bin failed");
+		if(write(fd,read_mode,strlen(read_mode)) != strlen(read_mode)) {
+			perror("Set mode failed");
 			close(fd);
 			exit(1);
 			exit(1);
@@ -289,7 +393,7 @@ int main(int argc,char **argv) {
 	delta = tv2.tv_sec*1000000 + tv2.tv_usec - tv1.tv_usec;
 	if(!delta) delta=1;
 
-	if(!q)
+	if(verbose)
 		fprintf(stderr,"read %llu bytes %ld ms, speed %d MB/s \n",r,delta/1000,(int)(r/delta));
 
 	if(bin_file) {
@@ -304,6 +408,10 @@ int main(int argc,char **argv) {
 				perror("create");
 				exit(1);
 			}
+			if(!ndpi_last_proto)
+				ndpi_get_proto_names();
+			if(!file_read && ndpi_last_proto > 0)
+				write_proto_name(fd);
 			for(c = head; c; c = c->next ) {
 				e = write(fd,&c->data[0],c->len);
 				if(e != c->len) {

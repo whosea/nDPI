@@ -194,7 +194,7 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 
 	buf[l] = 0;
 	if(l > acct_info_len ) {
-		printk("%s: max len %d\n'%s'\n",__func__,(int)l, buf);
+		pr_info("%s: max len %d\n'%s'\n",__func__,(int)l, buf);
 		acct_info_len = l;
 	}
 	buf[l++] = '\n';
@@ -211,13 +211,13 @@ ssize_t nflow_proc_read(struct file *file, char __user *buf,
 }
 
 static char *read_modes[8]= {
-	"read_all",	// 0
-	"read_closed",	// 1
-	"read_flows",	// 2
-	"",		// 3 unused
-	"read_all_bin",	// 4
-	"read_closed",	// 5
-	"read_flows",	// 6
+	"read_all",		// 0
+	"read_closed",		// 1
+	"read_flows",		// 2
+	"",			// 3 unused
+	"read_all_bin",		// 4
+	"read_closed_bin",	// 5
+	"read_flows_bin",	// 6
 	NULL
 };
 
@@ -232,14 +232,16 @@ static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 	if(sscanf(buf,"timeout=%d",&idx) == 1) {
 		if(idx < 1 || idx > 600) return -EINVAL;
 		n->acc_wait = idx;
-		printk("%s: set timeout=%d\n",__func__,n->acc_wait);
+		if(flow_read_debug)
+			pr_info("%s: set timeout=%d\n",__func__,n->acc_wait);
 		return 0;
 	}
 	if(sscanf(buf,"limit=%d",&idx) == 1) {
 		if(idx < atomic_read(&n->acc_work) || idx > ndpi_flow_limit)
 			return -EINVAL;
 		n->acc_limit = idx;
-		printk("%s: set limit=%d\n",__func__,n->acc_limit);
+		if(flow_read_debug)
+			pr_info("%s: set limit=%d\n",__func__,n->acc_limit);
 		return 0;
 	}
 
@@ -248,7 +250,8 @@ static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 			if(n->acc_end || !n->flow_l) {
 				n->acc_read_mode = idx;
 			} else return -EINVAL;
-			printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
+			if(flow_read_debug)
+				pr_info("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
 			return 0;
 		}
 	}
@@ -275,7 +278,7 @@ int nflow_proc_close(struct inode *inode, struct file *file)
 	if(!ndpi_enable_flow) return -EINVAL;
 	generic_proc_close(n,parse_ndpi_flow,W_BUF_FLOW);
 	if(flow_read_debug)
-		printk("%s: view %ld dumped %ld deleted %ld\n",
+		pr_info("%s: view %ld dumped %ld deleted %ld\n",
 			__func__,n->cnt_view,n->cnt_out,n->cnt_del);
 	n->acc_gc = jiffies + n->acc_wait*HZ;
 	atomic_set(&n->acc_open,0);

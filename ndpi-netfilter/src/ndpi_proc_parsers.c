@@ -306,7 +306,7 @@ if(!proto) { // udp
 
 #ifdef NDPI_IPPORT_DEBUG
 ndpi_print_port_range(pd1->p,pd1->count[0]+pd1->count[1],dbuf,sizeof(dbuf),ndpi_str);
-printk("%s: res %d,%d %s\n",__func__,pd1->count[0],pd1->count[1],dbuf);
+pr_info("%s: res %d,%d %s\n",__func__,pd1->count[0],pd1->count[1],dbuf);
 #endif
 
 ndpi_free(pd);
@@ -349,7 +349,7 @@ tp = &pd->p[i];
 k = 0;
 
 #ifdef NDPI_IPPORT_DEBUG
-#define DD1 printk("%s: k=%d tmp %d-%d i=%d tp %d-%d np %d-%d \n", \
+#define DD1 pr_info("%s: k=%d tmp %d-%d i=%d tp %d-%d np %d-%d \n", \
 		__func__,k,tmp[k].start,tmp[k].end,i,tp->start,tp->end,np->start,np->end);
 #else
 #define DD1
@@ -413,7 +413,7 @@ check_eq_proto:
 {
 char dbuf[128];
 ndpi_print_port_range(tmp,k,dbuf,sizeof(dbuf),ndpi_str);
-printk("%s: k=%d: %s\n",__func__,k,dbuf);
+pr_info("%s: k=%d: %s\n",__func__,k,dbuf);
 }
 #endif
 
@@ -790,7 +790,7 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 			}
 		    }
 		}
-//		printk("NDPI: proto %s id %d mark %x mask %s\n",
+//		pr_info("NDPI: proto %s id %d mark %x mask %s\n",
 //				hid,id,mark,m);
 		if(atomic_read(&n->protocols_cnt[0]) &&
 			!mark && !mask) {
@@ -811,7 +811,7 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 			n->mark[i].mark = mark;
 			if(*m) 	n->mark[i].mask = mask;
 			ok++;
-//			printk("Proto %s id %02x mark %08x/%08x\n",
+//			pr_info("Proto %s id %02x mark %08x/%08x\n",
 //					cmd,i,n->mark[i].mark,n->mark[i].mask);
 		}
 		return 0;

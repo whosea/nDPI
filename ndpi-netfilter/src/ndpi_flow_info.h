@@ -1,6 +1,7 @@
 
 struct flow_data_common {
-	uint8_t			rec_type:2, // 1 - start, 2 - flow, 3 - lost traffic
+	uint8_t			rec_type:2, // 0 - proto name,
+					    // 1 - start, 2 - flow, 3 - lost traffic
 				family:1,   // 0 - ipv4, 1 - ipv6
 				nat_flags:3,// 1 - snat, 2 - dnat, 4 - userid
 				proto,      // transport protocol

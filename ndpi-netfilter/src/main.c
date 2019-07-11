@@ -901,12 +901,12 @@ static void packet_trace(const struct sk_buff *skb,const struct nf_conn * ct, ch
   if(iph && iph->version == 4) {
 	if(iph->protocol == IPPROTO_TCP || iph->protocol == IPPROTO_UDP) {
 		 struct udphdr *udph = (struct udphdr *)(((const u_int8_t *) iph) + iph->ihl * 4); 
-		 printk("%s skb %p ct %p proto %d %pI4:%d -> %pI4:%d len %d\n",
+		 pr_info("%s skb %p ct %p proto %d %pI4:%d -> %pI4:%d len %d\n",
 			msg ? msg:"",(void *)skb,(void *)ct,
 			iph->protocol,&iph->saddr,htons(udph->source),
 			&iph->daddr,htons(udph->dest),skb->len);
   	} else
-		 printk("%s skb %p ct %p proto %d %pI4 -> %pI4 len %d\n",
+		 pr_info("%s skb %p ct %p proto %d %pI4 -> %pI4 len %d\n",
 			msg ? msg:"",(void *)skb,(void *)ct,
 			iph->protocol,&iph->saddr, &iph->daddr,skb->len);
   }
@@ -1162,7 +1162,7 @@ do {
 } while(0);
 
 if(ndpi_log_debug > 2)
-    printk("%s: match%s %s %s '%s' %s,%s %d\n", __func__,
+    pr_info("%s: match%s %s %s '%s' %s,%s %d\n", __func__,
 	info->re ? "-re":"", info->host ? "host":"", info->ssl ? "ssl":"",
 	info->hostname,ct_ndpi->host ? ct_ndpi->host:"-",
 	ct_ndpi->ssl ? ct_ndpi->ssl:"-",res);
@@ -1269,14 +1269,14 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 				WRITE_ONCE(ct_label->magic, MAGIC_CT);
 				ndpi_init_ct_struct(n,ct_ndpi,l4_proto,ct,is_ipv6,tm.tv_sec);
 				if(ndpi_log_debug > 2)
-					printk("Create  ct_ndpi %p ct %p %s\n",
+					pr_info("Create  ct_ndpi %p ct %p %s\n",
 						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
 			}
 		} else {
 			if(ct_label->magic == MAGIC_CT) {
 				ct_ndpi = ct_label->ndpi_ext;
 				if(ndpi_log_debug > 2)
-					printk("Reuse   ct_ndpi %p ct %p %s\n",
+					pr_info("Reuse   ct_ndpi %p ct %p %s\n",
 						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
 			  } else
 				COUNTER(ndpi_p34);
@@ -1822,8 +1822,8 @@ static void bt_port_gc(unsigned long data) {
 	ndpi_bt_gc = n->gc_count;
 	en_j = READ_ONCE(jiffies);
 	barrier();
-	if(en_j > st_j+1) { 
-		printk("%s: BT jiffies %u\n",__func__,en_j - st_j);
+	if(en_j > st_j+1 && 0) { 
+		pr_info("%s: BT jiffies %u\n",__func__,en_j - st_j);
 		st_j = en_j;
 	}
 
@@ -1846,21 +1846,16 @@ static void bt_port_gc(unsigned long data) {
 	en_j = READ_ONCE(jiffies);
 	barrier();
 
-	if(en_j != st_j) printk("%s: FLOW jiffies %u\n",__func__,en_j - st_j);
+	if(en_j != st_j+1 && flow_read_debug) 
+		pr_info("%s: FLOW jiffies %u\n",__func__,en_j - st_j);
 
 	mod_timer(&n->gc,jiffies + HZ/2);
 }
 
 int inet_ntop_port(int family,void *ip, u_int16_t port, char *lbuf, size_t bufsize) {
-u_int8_t *ipp = (u_int8_t *)ip;
-u_int16_t *ip6p = (u_int16_t *)ip;
 return  family == AF_INET6 ?
-		snprintf(lbuf,bufsize-1, "%x:%x:%x:%x:%x:%x:%x:%x.%d",
-			htons(ip6p[0]),htons(ip6p[1]),htons(ip6p[2]),htons(ip6p[3]),
-			htons(ip6p[4]),htons(ip6p[5]),htons(ip6p[6]),htons(ip6p[7]),
-			htons(port))
-	      :	snprintf(lbuf,bufsize-1, "%d.%d.%d.%d:%d",
-			ipp[0],ipp[1],ipp[2],ipp[3],htons(port));
+		snprintf(lbuf,bufsize-1, "%pI6c.%d",ip, htons(port))
+	      :	snprintf(lbuf,bufsize-1, "%pI4n:%d",ip,htons(port));
 }
 
 static int ninfo_proc_open(struct inode *inode, struct file *file)
