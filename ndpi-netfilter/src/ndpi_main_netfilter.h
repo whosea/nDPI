@@ -84,6 +84,7 @@ struct ndpi_net {
 	int			acc_read_mode;	// 0 - read all connections info,
 						// 1 - read closed connections info
 						// 2 - read connections info w/o reset counter
+						// +4 - binary mode
 	atomic_t		acc_i_packets_lost; // lost traffic from flow info
 	atomic_t		acc_o_packets_lost;
 	atomic64_t		acc_i_bytes_lost;

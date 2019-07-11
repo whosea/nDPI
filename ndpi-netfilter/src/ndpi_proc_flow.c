@@ -14,6 +14,7 @@
 
 #include "ndpi_main_common.h"
 #include "ndpi_strcol.h"
+#include "ndpi_flow_info.h"
 #include "ndpi_main_netfilter.h"
 #include "ndpi_proc_flow.h"
 #include "ndpi_proc_generic.h"
@@ -30,6 +31,100 @@ void nflow_proc_read_start(struct ndpi_net *n) {
 	n->cnt_out  = 0;
 }
 
+size_t ndpi_dump_lost_rec(char *buf,size_t bufsize,
+          uint32_t cpi, uint32_t cpo, uint64_t cbi, uint64_t cbo)
+{
+	struct flow_data_common *c;
+
+	if(bufsize < sizeof(struct flow_data_common)) return 0;
+	memset(buf,0,sizeof(struct flow_data_common));
+	c = (struct flow_data_common *)buf;
+	c->rec_type = 3;
+	c->p[0] = cpi;
+	c->p[1] = cpo;
+	c->b[0] = cbi;
+	c->b[1] = cbo;
+	return sizeof(struct flow_data_common);
+}
+
+size_t ndpi_dump_start_rec(char *buf, size_t bufsize, uint32_t tm)
+{
+	struct flow_data_common *c;
+
+	if(bufsize < 8) return 0;
+	memset(buf,0,8);
+	c = (struct flow_data_common *)buf;
+	c->rec_type = 1;
+	c->time_start = tm;
+	return 8;
+}
+
+ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
+		char *buf, size_t buflen, struct nf_ct_ext_ndpi *ct)
+{
+	struct flow_data_common *c;
+	struct flow_data *d;
+	struct flow_info *i;
+	ssize_t ret_len;
+	int c_len,h_len;
+
+	ret_len = v6 ? flow_data_v6_size : flow_data_v4_size;
+	c_len = ct->ssl ? strlen(ct->ssl):0;
+	h_len = ct->host ? strlen(ct->host):0;
+	ret_len += c_len + h_len;
+
+	if(buflen < ret_len) return 0;
+	memset(buf,0,ret_len);
+	d = (struct flow_data *)buf;
+	c = &d->c;
+	i = &ct->flinfo;
+
+	c->rec_type	= 2;
+	c->family	= v6 != 0;
+	c->proto	= ct->l4_proto;
+	c->cert_len	= c_len;
+	c->host_len	= h_len;
+	c->time_start	= i->time_start;
+	c->p[0]		= i->p[0];
+	c->p[1]		= i->p[1];
+	c->b[0]		= i->b[0];
+	c->b[1]		= i->b[1];
+	c->time_end	= i->time_end;
+	c->ifidx	= i->ifidx;
+	c->ofidx	= i->ofidx;
+	c->proto_master	= ct->proto.master_protocol;
+	c->proto_app	= ct->proto.app_protocol;
+	c->connmark	= ct->connmark;
+	if(!v6) {
+		struct flow_data_v4 *a = &d->d.v4;
+		a->ip_s = i->ip_s.ip;
+		a->ip_d = i->ip_d.ip;
+		a->ip_snat = i->ip_snat;
+		a->ip_dnat = i->ip_dnat;
+		a->sport = i->sport;
+		a->dport = i->dport;
+		a->sport_nat = i->sport_nat;
+		a->dport_nat = i->dport_nat;
+		c->nat_flags = ct->flags >> f_snat; // f_snat,f_dnat,f_userid
+	} else {
+		struct flow_data_v6 *a = &d->d.v6;
+		memcpy(a->ip_s,(char *)&i->ip_s,16);
+		memcpy(a->ip_d,(char *)&i->ip_d,16);
+		a->sport = i->sport;
+		a->dport = i->dport;
+	}
+	if(c_len + h_len) {
+		char *s = (char *)c + (v6 ? flow_data_v6_size : flow_data_v4_size);
+		if(c_len) {
+			memcpy(s,ct->ssl,c_len);
+			s += c_len;
+		}
+		if(h_len)
+			memcpy(s,ct->host,h_len);
+	}
+	return ret_len;
+}
+
 
 static ssize_t acct_info_len = 256;
 ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
@@ -37,6 +132,10 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 	const char *t_proto;
 	ssize_t l = 0;
 	int is_ipv6 = test_ipv6(ct);
+
+	if(n->acc_read_mode >= 4)
+		return ndpi_dump_acct_info_bin(n, is_ipv6, buf, buflen, ct);
+
 	*buf = 0;
 
 	buflen -= 2; // space for \n \0
@@ -111,6 +210,17 @@ ssize_t nflow_proc_read(struct file *file, char __user *buf,
 	return nflow_read(n, buf, count, ppos);
 }
 
+static char *read_modes[8]= {
+	"read_all",	// 0
+	"read_closed",	// 1
+	"read_flows",	// 2
+	"",		// 3 unused
+	"read_all_bin",	// 4
+	"read_closed",	// 5
+	"read_flows",	// 6
+	NULL
+};
+
 static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 {
 	int idx;
@@ -123,29 +233,26 @@ static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 		if(idx < 1 || idx > 600) return -EINVAL;
 		n->acc_wait = idx;
 		printk("%s: set timeout=%d\n",__func__,n->acc_wait);
-	} else if(sscanf(buf,"limit=%d",&idx) == 1) {
+		return 0;
+	}
+	if(sscanf(buf,"limit=%d",&idx) == 1) {
 		if(idx < atomic_read(&n->acc_work) || idx > ndpi_flow_limit)
 			return -EINVAL;
 		n->acc_limit = idx;
 		printk("%s: set limit=%d\n",__func__,n->acc_limit);
-	} else if(!strcmp(buf,"read_closed")) {
-		if(n->acc_end || !n->flow_l) {
-			n->acc_read_mode = 1;
-		} else return -EINVAL;
-		printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
-	} else if(!strcmp(buf,"read_flows")) {
-		if(n->acc_end || !n->flow_l) {
-			n->acc_read_mode = 2;
-		} else return -EINVAL;
-		printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
-	} else if(!strcmp(buf,"read_all")) {
-		if(n->acc_end || !n->flow_l) {
-			n->acc_read_mode = 0;
-		} else return -EINVAL;
-		printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
-	} else
-		return -EINVAL;
-	return 0;
+		return 0;
+	}
+
+	for(idx=0; read_modes[idx]; idx++) {
+		if(*read_modes[idx] && !strcmp(buf,read_modes[idx])) {
+			if(n->acc_end || !n->flow_l) {
+				n->acc_read_mode = idx;
+			} else return -EINVAL;
+			printk("%s: set read_mode=%d\n",__func__,n->acc_read_mode);
+			return 0;
+		}
+	}
+	return -EINVAL;
 }
 
 int nflow_proc_open(struct inode *inode, struct file *file) {

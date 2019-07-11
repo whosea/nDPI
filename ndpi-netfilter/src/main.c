@@ -181,6 +181,7 @@ struct osdpi_id_node {
 
 
 #include "ndpi_strcol.h"
+#include "ndpi_flow_info.h"
 #include "ndpi_main_netfilter.h"
 #include "ndpi_main_common.h"
 #include "ndpi_proc_generic.h"
@@ -1787,6 +1788,8 @@ static void bt_port_gc(unsigned long data) {
 	uint32_t st_j;
 	uint32_t en_j;
 	
+	if(!atomic_read(&n->init_done)) return; // ndpi_net_init() not completed!
+
 	st_j = READ_ONCE(jiffies);
 	getnstimeofday(&tm);
 	if(ht && spin_trylock_bh(&ht->lock)) {
@@ -1827,14 +1830,14 @@ static void bt_port_gc(unsigned long data) {
 	if(ndpi_enable_flow) {
 
 	    if(atomic_read(&n->acc_rem) > n->acc_limit) {
-		n->acc_gc = ndpi_delete_acct(n,2,0) < 0 ?
+		n->acc_gc = ndpi_delete_acct(n,2) < 0 ?
 			jiffies + HZ/5 : jiffies + HZ;
 	    } else {
 		if(!atomic_read(&n->acc_open)) {
 		    if(time_after(jiffies,n->acc_gc)) {
 			if( atomic_read(&n->acc_work) > 0 || 
 			    atomic_read(&n->acc_rem)  > 0 )
-				ndpi_delete_acct(n,1,0);
+				ndpi_delete_acct(n,1);
 		    }
 		    n->acc_gc = jiffies + 5*HZ;
 		}
@@ -1872,7 +1875,7 @@ static int ninfo_proc_open(struct inode *inode, struct file *file)
  *  3 - remove all ( remove xt_ndpi оr netns )
  */
 
-int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
+int ndpi_delete_acct(struct ndpi_net *n,int all) {
 	struct nf_ct_ext_ndpi *ct_ndpi,*next,*prev,*flow_h;
 	int i2 = 0, del,skip_del;
 
@@ -1882,7 +1885,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 
 	skip_del = all != 2 ? 0 : n->acc_limit*3/4;
 
-	if(!start) printk("%s: all=%d rem %d skip_del %d\n",
+	if(flow_read_debug) printk("%s: all=%d rem %d skip_del %d\n",
 			__func__,all,atomic_read(&n->acc_rem),skip_del);
 
 	if(atomic_read(&n->shutdown)) all = 3;
@@ -1953,9 +1956,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 			atomic_dec(&n->acc_work);
 			atomic_dec(&n->acc_rem);
 			i2++;
-			if(!start) {
-			    if((all == 1 || all == 2) && (atomic_read(&n->acc_rem) <= 0)) break;
-			}
+			if(all < 3 && (atomic_read(&n->acc_rem) <= 0)) break;
 		} else {
 			prev = ct_ndpi;
 		}
@@ -1964,7 +1965,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all,int start) {
 	}
 
 	spin_unlock(&n->rem_lock);
-	if(all > 1 || (i2 && !start)) 
+	if( (all > 1 || i2) && flow_read_debug)
 		printk("%s: Delete %d flows. Active %d\n",__func__,i2,atomic_read(&n->acc_work));
 
 	return i2;
@@ -1995,26 +1996,31 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	spin_lock(&n->rem_lock);
 
 	p = 0;
-	if(atomic_read(&n->acc_i_packets_lost) || atomic_read(&n->acc_o_packets_lost)) {
-		uint32_t cpi = atomic_xchg(&n->acc_i_packets_lost,0);
-		uint32_t cpo = atomic_xchg(&n->acc_o_packets_lost,0);
-		uint64_t cbi = atomic64_xchg(&n->acc_i_bytes_lost,0);
-		uint64_t cbo = atomic64_xchg(&n->acc_o_bytes_lost,0);
-
-		sl = snprintf(buf1,sizeof(buf1)-1,"LOST_TRAFFIC %u %llu %u %llu\n",
-				cpi,cbi,cpo,cbo);
+	if(*ppos == 0) {
+		if(flow_read_debug)
+		  printk("%s: Start dump: CT total %d deleted %d\n",
+			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
+		sl = n->acc_read_mode > 3 ?
+			ndpi_dump_start_rec(buf1,sizeof(buf1),n->acc_open_time):
+			snprintf(buf1,sizeof(buf1)-1,"TIME %lu\n",n->acc_open_time);
 		if (!(ACCESS_OK(VERIFY_WRITE, buf, sl) &&
 				!__copy_to_user(buf, buf1, sl))) {
 				return -EFAULT;
 		}
 		p += sl; count -= sl;
 	}
-	if(*ppos == 0) {
-		printk("%s: Start dump: CT total %d deleted %d\n",
-			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
-		sl = snprintf(buf1,sizeof(buf1)-1,"TIME %lu\n",n->acc_open_time);
-		if (!(ACCESS_OK(VERIFY_WRITE, buf, sl) &&
-				!__copy_to_user(buf, buf1, sl))) {
+	if(atomic_read(&n->acc_i_packets_lost) || atomic_read(&n->acc_o_packets_lost)) {
+		uint32_t cpi = atomic_xchg(&n->acc_i_packets_lost,0);
+		uint32_t cpo = atomic_xchg(&n->acc_o_packets_lost,0);
+		uint64_t cbi = atomic64_xchg(&n->acc_i_bytes_lost,0);
+		uint64_t cbo = atomic64_xchg(&n->acc_o_bytes_lost,0);
+		sl = n->acc_read_mode > 3 ? 
+			ndpi_dump_lost_rec(buf1,sizeof(buf1),cpi,cpo,cbi,cbo) :
+			snprintf(buf1,sizeof(buf1)-1,
+				"LOST_TRAFFIC %u %llu %u %llu\n",cpi,cbi,cpo,cbo);
+
+		if (!(ACCESS_OK(VERIFY_WRITE, buf+p, sl) &&
+				!__copy_to_user(buf+p, buf1, sl))) {
 				return -EFAULT;
 		}
 		p += sl; count -= sl;
@@ -2055,7 +2061,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		}
 		if(sl) {
 			if(sl <= count) {
-				if(n->acc_read_mode != 2)
+				if((n->acc_read_mode & 0x3) != 2)
 					ndpi_ct_counter_save(ct_ndpi);
 			} else {
 				// we don't delete record if buffer full
@@ -2121,7 +2127,8 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	if(!ct_ndpi ) {
 		n->acc_end = 1;
 		n->flow_l = NULL;
-		printk("%s: End   dump: CT total %d deleted %d\n",
+		if(flow_read_debug)
+		  printk("%s: End   dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
 	} else if(flow_read_debug > 1) {
 			printk("%s: pos %7lld view %d dumped %d deleted %d\n",
@@ -2289,6 +2296,8 @@ static void __net_exit ndpi_net_exit(struct net *net)
 
 	n = ndpi_pernet(net);
 
+	atomic_set(&n->init_done,0);
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 	del_timer(&n->gc);
 #else
@@ -2316,7 +2325,7 @@ static void __net_exit ndpi_net_exit(struct net *net)
 #endif
 
 	if(ndpi_enable_flow) {
-		while(ndpi_delete_acct(n,3,0) == -1)
+		while(ndpi_delete_acct(n,3) == -1)
 			msleep_interruptible(1);
 	}
 
