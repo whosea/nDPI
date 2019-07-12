@@ -61,6 +61,54 @@ int append_buf(char *data,size_t len) {
 	return 0;
 }
 
+#define REC_PROTO 1
+#define REC_START 2
+#define REC_FLOW  4
+#define REC_LOST  8
+
+static int check_flow_data(struct dump_data *dump) {
+struct flow_data_common *c;
+char *data;
+int offs,rl;
+int ret=0;
+	if(!dump) return 0;
+
+	data = (char*)&dump->data[0];
+	offs = 0;
+
+	while(offs < dump->len-4) {
+		c = (struct flow_data_common *)&data[offs];
+		switch(c->rec_type) {
+		case 0:
+			if( !c->host_len ) return -1;
+			rl = 4 + c->host_len;
+			if(offs+rl > dump->len) return -1;
+			ret |= REC_PROTO;
+			offs += rl;
+			break;
+		case 1:
+			if(offs+8 > dump->len) return -1;
+			ret |= REC_START;
+			offs += 8;
+			break;
+		case 3:
+			if(offs+sizeof(struct flow_data_common) > dump->len) return -1;
+			offs += sizeof(struct flow_data_common);
+			ret |= REC_LOST;
+			break;
+		case 2:
+			rl = sizeof(struct flow_data_common) + 
+				( c->family ? sizeof(struct flow_data_v6) :
+				  	      sizeof(struct flow_data_v4));
+			if(offs+rl+c->cert_len+c->host_len > dump->len) return -1;
+			offs += rl + c->cert_len + c->host_len;
+			ret |= REC_FLOW;
+			break;
+		}
+	}
+	return offs != dump->len ? -1: ret;
+}
+
 void write_proto_name(int fd) {
 char lbuf[256+8],*n;
 struct flow_data_common *c = (struct flow_data_common *)lbuf;
@@ -202,10 +250,10 @@ uint16_t id;
 			} else {
 				v4 = (struct flow_data_v4 *)&data[offs+sizeof(struct flow_data_common)];
 				if(c->nat_flags & 0x5) { // snat || userid
-					inet_ntop(AF_INET,&v4->ip_snat,a1,sizeof(a1)-1);
-					snprintf(p1,sizeof(p1)-1,"%d",htons(v4->sport_nat));
-					inet_ntop(AF_INET,&v4->ip_s,a3,sizeof(a3)-1);
-					snprintf(p3,sizeof(p3)-1,"%d",htons(v4->sport));
+					inet_ntop(AF_INET,&v4->ip_s,a1,sizeof(a1)-1);
+					snprintf(p1,sizeof(p1)-1,"%d",htons(v4->sport));
+					inet_ntop(AF_INET,&v4->ip_snat,a3,sizeof(a3)-1);
+					snprintf(p3,sizeof(p3)-1,"%d",htons(v4->sport_nat));
 					
 				} else {
 					inet_ntop(AF_INET,&v4->ip_s,a1,sizeof(a1)-1);
@@ -232,6 +280,8 @@ uint16_t id;
 				c->p[0],c->p[1],c->b[0],c->b[1]);
 
 			pn[0] = '\0';
+			if(!ndpi_last_proto)
+				ndpi_get_proto_names();
 			if(c->proto_app) {
 				if(c->proto_master) {
 					snprintf(pn,sizeof(pn)-1,"%s,%s",
@@ -300,6 +350,7 @@ int main(int argc,char **argv) {
 	struct stat src_st;
 	struct timeval tv1,tv2;
 	long int delta;
+	int flow_flags = 0;
 
 	while((n=getopt(argc,argv,"vsS:i:m:")) != -1) {
 	  switch(n) {
@@ -396,7 +447,16 @@ int main(int argc,char **argv) {
 	if(verbose)
 		fprintf(stderr,"read %llu bytes %ld ms, speed %d MB/s \n",r,delta/1000,(int)(r/delta));
 
-	if(bin_file) {
+	for(flow_flags = 0,c = head; c; c = c->next ) {
+		int e = check_flow_data(c);
+		if(e < 0) {
+			fprintf(stderr,"Decode error.\n");
+			exit(1);
+		}
+		flow_flags |= e;
+	}
+
+	if(bin_file && head) {
 		struct stat st;
 		if(stat(bin_file,&st) == 0 &&
 			st.st_dev == src_st.st_dev &&
@@ -408,9 +468,10 @@ int main(int argc,char **argv) {
 				perror("create");
 				exit(1);
 			}
-			if(!ndpi_last_proto)
+
+			if(!(flow_flags & REC_PROTO) && !ndpi_last_proto)
 				ndpi_get_proto_names();
-			if(!file_read && ndpi_last_proto > 0)
+			if(!(flow_flags & REC_PROTO) && ndpi_last_proto > 0)
 				write_proto_name(fd);
 			for(c = head; c; c = c->next ) {
 				e = write(fd,&c->data[0],c->len);
@@ -422,7 +483,7 @@ int main(int argc,char **argv) {
 			close(fd);
 		}
 	}
-	if(text_dump)
+	if(text_dump && head)
 		for(c = head; c; c = c->next ) {
 			if(decode_flow(1,c) < 0) {
 				fprintf(stderr,"Decode error.\n");
