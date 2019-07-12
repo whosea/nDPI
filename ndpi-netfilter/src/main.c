@@ -1846,7 +1846,7 @@ static void bt_port_gc(unsigned long data) {
 	en_j = READ_ONCE(jiffies);
 	barrier();
 
-	if(en_j != st_j+1 && flow_read_debug) 
+	if(en_j > st_j+1 && flow_read_debug) 
 		pr_info("%s: FLOW jiffies %u\n",__func__,en_j - st_j);
 
 	mod_timer(&n->gc,jiffies + HZ/2);
