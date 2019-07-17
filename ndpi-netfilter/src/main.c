@@ -1880,7 +1880,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 
 	skip_del = all != 2 ? 0 : n->acc_limit*3/4;
 
-	if(flow_read_debug) printk("%s: all=%d rem %d skip_del %d\n",
+	if(flow_read_debug) pr_info("%s: all=%d rem %d skip_del %d\n",
 			__func__,all,atomic_read(&n->acc_rem),skip_del);
 
 	if(atomic_read(&n->shutdown)) all = 3;
@@ -1895,7 +1895,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 		if(!spin_trylock_bh(&ct_ndpi->lock)) {
 			prev = ct_ndpi;
 			ct_ndpi = next;
-//			printk("%s: skip busy ct %px\n",__func__,prev);
+//			pr_info("%s: skip busy ct %px\n",__func__,prev);
 			continue;
 		}
 		barrier();
@@ -1916,7 +1916,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 		if(del) {
 			if(prev) {
 				if(cmpxchg(&prev->next,ct_ndpi,next) != ct_ndpi) {
-					printk("%s: BUG! prev->next %px != ct_ndpi %px\n",__func__,
+					pr_err("%s: BUG! prev->next %px != ct_ndpi %px\n",__func__,
 							prev->next,ct_ndpi);
 					break;
 				}
@@ -1924,7 +1924,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 				if(cmpxchg(&n->flow_h,flow_h,next) == flow_h)
 					flow_h = next;
 			  	else {
-					printk("%s: restart\n",__func__);
+					pr_info("%s: restart\n",__func__);
 					goto restart;
 				}
 			}
@@ -1961,7 +1961,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 
 	spin_unlock(&n->rem_lock);
 	if( (all > 1 || i2) && flow_read_debug)
-		printk("%s: Delete %d flows. Active %d\n",__func__,i2,atomic_read(&n->acc_work));
+		pr_info("%s: Delete %d flows. Active %d\n",__func__,i2,atomic_read(&n->acc_work));
 
 	return i2;
 }
@@ -1993,7 +1993,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	p = 0;
 	if(*ppos == 0) {
 		if(flow_read_debug)
-		  printk("%s: Start dump: CT total %d deleted %d\n",
+		  pr_info("%s: Start dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
 		sl = n->acc_read_mode > 3 ?
 			ndpi_dump_start_rec(buf1,sizeof(buf1),n->acc_open_time):
@@ -2012,7 +2012,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		sl = n->acc_read_mode > 3 ? 
 			ndpi_dump_lost_rec(buf1,sizeof(buf1),cpi,cpo,cbi,cbo) :
 			snprintf(buf1,sizeof(buf1)-1,
-				"LOST_TRAFFIC %u %llu %u %llu\n",cpi,cbi,cpo,cbo);
+				"LOST_TRAFFIC %llu %llu %u %u\n",cbi,cbo,cpi,cpo);
 
 		if (!(ACCESS_OK(VERIFY_WRITE, buf+p, sl) &&
 				!__copy_to_user(buf+p, buf1, sl))) {
@@ -2068,7 +2068,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		if(del) {
 			if(prev) {
 			    if(cmpxchg(&prev->next,ct_ndpi,next) != ct_ndpi) {
-					printk("%s: BUG! prev->next %px != ct_ndpi %px\n",__func__,
+					pr_err("%s: BUG! prev->next %px != ct_ndpi %px\n",__func__,
 							prev->next,ct_ndpi);
 				spin_unlock_bh(&ct_ndpi->lock);
 				n->flow_l = NULL;
@@ -2081,7 +2081,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 					flow_h = next;
 			    	else {
 					spin_unlock_bh(&ct_ndpi->lock);
-					printk("%s: reread!\n",__func__);
+					pr_info("%s: reread!\n",__func__);
 					goto restart;
 				}
 			}
@@ -2123,10 +2123,10 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		n->acc_end = 1;
 		n->flow_l = NULL;
 		if(flow_read_debug)
-		  printk("%s: End   dump: CT total %d deleted %d\n",
+		  pr_info("%s: End   dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
 	} else if(flow_read_debug > 1) {
-			printk("%s: pos %7lld view %d dumped %d deleted %d\n",
+			pr_info("%s: pos %7lld view %d dumped %d deleted %d\n",
 				__func__, st_pos, cnt_view, cnt_out, cnt_del);
 		}
 
