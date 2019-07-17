@@ -51,4 +51,11 @@ struct flow_data {
  *   flow_data_common + flow_data_v6  + cert_name_len + host_name_len 
  *
  * lost trafic record: 48 bytes
+ *
+ * name of protocols records: 4 bytes + proto_name_len
+ *          byte 0: 0,
+ *          byte 1: proto_id & 0xff,
+ *          byte 2: proto_id >> 8,
+ *          byte 3: proto_name_len
+ *          
  */
