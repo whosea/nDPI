@@ -126,7 +126,6 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 }
 
 
-static ssize_t acct_info_len = 256;
 ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 		struct nf_ct_ext_ndpi *ct) {
 	const char *t_proto;
@@ -143,40 +142,43 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 		ct->flinfo.time_start,ct->flinfo.time_end,
 		is_ipv6 ? '6':'4', ct->l4_proto);
 	if(is_ipv6) {
-	    l += snprintf(&buf[l],buflen-l,"%pI6c %d %pI6c %d %llu %llu %u %u ",
+	    l += snprintf(&buf[l],buflen-l,"%pI6c %d %pI6c %d",
 		&ct->flinfo.ip_s, htons(ct->flinfo.sport),
-		&ct->flinfo.ip_d, htons(ct->flinfo.dport),
-		ct->flinfo.b[0]-ct->flinfo.b[2],
-		ct->flinfo.b[1]-ct->flinfo.b[3],
-		ct->flinfo.p[0]-ct->flinfo.p[2],
-		ct->flinfo.p[1]-ct->flinfo.p[3]);
+		&ct->flinfo.ip_d, htons(ct->flinfo.dport));
 	} else {
-	    l += snprintf(&buf[l],buflen-l,"%pI4n %d %pI4n %d %llu %llu %u %u",
+	    l += snprintf(&buf[l],buflen-l,"%pI4n %d %pI4n %d",
 		&ct->flinfo.ip_s, htons(ct->flinfo.sport),
-		&ct->flinfo.ip_d, htons(ct->flinfo.dport),
+		test_dnat(ct) ? (char*)&ct->flinfo.ip_dnat : 
+				(char*)&ct->flinfo.ip_d,
+		test_dnat(ct) ? htons(ct->flinfo.dport_nat):
+				htons(ct->flinfo.dport) );
+	}
+	l += snprintf(&buf[l],buflen-l," %llu %llu %u %u",
 		ct->flinfo.b[0]-ct->flinfo.b[2],
 		ct->flinfo.b[1]-ct->flinfo.b[3],
 		ct->flinfo.p[0]-ct->flinfo.p[2],
 		ct->flinfo.p[1]-ct->flinfo.p[3]);
-	}
 
-	l += snprintf(&buf[l],buflen-l," I=%d,%d",ct->flinfo.ifidx,ct->flinfo.ofidx);
+	if(ct->flinfo.ifidx != ct->flinfo.ofidx)
+		l += snprintf(&buf[l],buflen-l," I=%d,%d",ct->flinfo.ifidx,ct->flinfo.ofidx);
+	else
+		l += snprintf(&buf[l],buflen-l," I=%d",ct->flinfo.ifidx);
 #if defined(CONFIG_NF_CONNTRACK_MARK)
 	if(ct->connmark)
 	    l += snprintf(&buf[l],buflen-l," CM=%x",ct->connmark);
 #endif
 	if(!is_ipv6) {
 	    if(test_snat(ct)) {
-		l += snprintf(&buf[l],buflen-l," SN=%pI4n:%d",
+		l += snprintf(&buf[l],buflen-l," SN=%pI4n,%d",
 				&ct->flinfo.ip_snat,htons(ct->flinfo.sport_nat));
 	    }
 	    if(test_dnat(ct)) {
-		l += snprintf(&buf[l],buflen-l," DN=%pI4n:%d",
-				&ct->flinfo.ip_dnat,htons(ct->flinfo.dport_nat));
+		l += snprintf(&buf[l],buflen-l," DN=%pI4n,%d",
+				&ct->flinfo.ip_d,htons(ct->flinfo.dport));
 	    }
 #ifdef USE_HACK_USERID
 	    if(test_userid(ct)) {
-		l += snprintf(&buf[l],buflen-l," UI=%pI4n:%d",
+		l += snprintf(&buf[l],buflen-l," UI=%pI4n,%d",
 				&ct->flinfo.ip_snat,htons(ct->flinfo.sport_nat));
 	    }
 #endif
@@ -185,18 +187,13 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 	l += snprintf(&buf[l],buflen-l," P=%s",t_proto);
 	if(ct->proto.master_protocol != NDPI_PROTOCOL_UNKNOWN) {
 	    t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.master_protocol);
-	    l += snprintf(&buf[l],buflen-l,".%s",t_proto);
+	    l += snprintf(&buf[l],buflen-l,",%s",t_proto);
 	}
 	if(ct->ssl)
 	    l += snprintf(&buf[l],buflen-l," C=%s",ct->ssl);
 	if(ct->host)
 	    l += snprintf(&buf[l],buflen-l," H=%s",ct->host);
 
-	buf[l] = 0;
-	if(l > acct_info_len ) {
-		pr_info("%s: max len %d\n'%s'\n",__func__,(int)l, buf);
-		acct_info_len = l;
-	}
 	buf[l++] = '\n';
 	buf[l] = 0;
 	return l;

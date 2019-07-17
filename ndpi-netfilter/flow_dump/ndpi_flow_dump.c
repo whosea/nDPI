@@ -221,13 +221,13 @@ uint16_t id;
 			break;
 		case 1:
 			if(offs+8 > dump->len) return -1;
-			l = snprintf(buff,sizeof(buff)-1,"START %u\n",c->time_start);
+			l = snprintf(buff,sizeof(buff)-1,"TIME %u\n",c->time_start);
 			write(fd,buff,l);
 			offs += 8;
 			break;
 		case 3:
 			if(offs+sizeof(struct flow_data_common) > dump->len) return -1;
-			l = snprintf(buff,sizeof(buff)-1,"LOST TRAFFIC %u %u %" PRIu64 " %" PRIu64 "\n",
+			l = snprintf(buff,sizeof(buff)-1,"LOST_TRAFFIC %u %u %" PRIu64 " %" PRIu64 "\n",
 				c->p[0],c->p[1],c->b[0],c->b[1]);
 			write(fd,buff,l);
 			offs += sizeof(struct flow_data_common);
@@ -274,10 +274,10 @@ uint16_t id;
 				}
 			}
 
-			l = snprintf(buff,sizeof(buff)-1,"%u %u %c %d %s %s %s %s %u %u %" PRIu64 " %" PRIu64 ,
-				c->time_end,c->time_start,
+			l = snprintf(buff,sizeof(buff)-1,"%u %u %c %d %s %s %s %s %" PRIu64 " %" PRIu64 " %u %u",
+				c->time_start, c->time_end,
 				c->family ? '6':'4', c->proto, a1, p1, a2, p2,
-				c->p[0],c->p[1],c->b[0],c->b[1]);
+				c->b[0], c->b[1], c->p[0], c->p[1]);
 
 			pn[0] = '\0';
 			if(!ndpi_last_proto)
@@ -285,8 +285,8 @@ uint16_t id;
 			if(c->proto_app) {
 				if(c->proto_master) {
 					snprintf(pn,sizeof(pn)-1,"%s,%s",
-							ndpi_proto_name(c->proto_master),
-							ndpi_proto_name(c->proto_app));
+						ndpi_proto_name(c->proto_app),
+						ndpi_proto_name(c->proto_master));
 				} else
 					strncpy(pn,ndpi_proto_name(c->proto_app),sizeof(pn)-1);
 			} else if(c->proto_master)
@@ -297,9 +297,6 @@ uint16_t id;
 			  else
 				l += snprintf(&buff[l],sizeof(buff)-1-l," I=%d",c->ifidx);
 
-			if(pn[0])
-				l += snprintf(&buff[l],sizeof(buff)-1-l," P=%s",pn);
-
 			if(c->nat_flags) {
 				if(c->nat_flags & 5)
 					l += snprintf(&buff[l],sizeof(buff)-1-l," %s=%s,%s",
@@ -307,6 +304,7 @@ uint16_t id;
 				if(c->nat_flags & 2)
 					l += snprintf(&buff[l],sizeof(buff)-1-l," DN=%s,%s",a4,p4);
 			}
+			l += snprintf(&buff[l],sizeof(buff)-1-l," P=%s",pn[0] ? pn : "Unknown");
 
 			if(c->cert_len)
 				l += snprintf(&buff[l],sizeof(buff)-1-l,
