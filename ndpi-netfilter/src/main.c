@@ -659,8 +659,8 @@ static void ndpi_init_ct_struct(struct ndpi_net *n,
 
 	ct_ndpi->flinfo.time_start = s_time;
 	if(ndpi_log_debug > 1)
-	  pr_info("ndpi: init_ct_struct ct_ndpi %pK prot %u\n",
-			ct_ndpi,l4_proto);
+	  pr_info("ndpi: init_ct_struct ct_ndpi %pK ct %pK prot %u\n",
+			ct_ndpi,ct,l4_proto);
 }
 
 static void ndpi_nat_detect(struct nf_ct_ext_ndpi *ct_ndpi, struct nf_conn * ct) {
@@ -695,13 +695,15 @@ static void ndpi_nat_detect(struct nf_ct_ext_ndpi *ct_ndpi, struct nf_conn * ct)
 }
 
 static inline void ndpi_ct_counters_add(struct nf_ct_ext_ndpi *ct_ndpi,
-		size_t len, enum ip_conntrack_info ctinfo, uint32_t m_time) {
+		size_t npkt, size_t len, enum ip_conntrack_info ctinfo, uint32_t m_time) {
 
 	int rev = CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL ? 1:0;
 	ct_ndpi->flinfo.b[rev] += len;
-	ct_ndpi->flinfo.p[rev] ++;
+	ct_ndpi->flinfo.p[rev] += npkt;
 	ct_ndpi->flinfo.time_end = m_time;
 	set_flow_info(ct_ndpi);
+	if(ndpi_log_debug > 1)
+		pr_info("ndpi: ct_ndpi %pK counter pkt %lu bytes %lu\n",ct_ndpi,npkt,len);
 }
 		
 
@@ -805,7 +807,7 @@ nf_ndpi_free_flow (struct nf_conn * ct)
 	    spin_unlock_bh(&ct_ndpi->lock);
 
 	    if(ndpi_log_debug > 1)
-		pr_info("ndpi: free_flow ct_ndpi %pK\n", ct_ndpi);
+		pr_info("ndpi: ct_ndpi %pK free_flow\n", ct_ndpi);
 
 	    if(delete)
 		kmem_cache_free (ct_info_cache, ct_ndpi);
@@ -831,7 +833,7 @@ ndpi_alloc_flow (struct nf_ct_ext_ndpi *ct_ndpi)
 	__module_get(THIS_MODULE);
 	COUNTER(ndpi_flow_c);
 	if(ndpi_log_debug > 2)
-		pr_info("ndpi: alloc_flow ct_ndpi %pK\n", ct_ndpi);
+		pr_info("ndpi: ct_ndpi %pK alloc_flow\n", ct_ndpi);
         return flow;
 }
 #ifndef NF_CT_CUSTOM
@@ -888,11 +890,12 @@ static void add_stat(unsigned long int n) {
 static char *ct_info(const struct nf_conn * ct,char *buf,size_t buf_size,int dir) {
  const struct nf_conntrack_tuple *t = 
 	 &ct->tuplehash[!dir ? IP_CT_DIR_ORIGINAL: IP_CT_DIR_REPLY].tuple;
-
- snprintf(buf,buf_size,"proto %u %pI4:%d -> %pI4:%d",
+ // fixme ipv6
+ snprintf(buf,buf_size,"proto %u %pI4:%d -> %pI4:%d %s",
 		t->dst.protonum,
 		&t->src.u3.ip, ntohs(t->src.u.all),
-		&t->dst.u3.ip, ntohs(t->dst.u.all));
+		&t->dst.u3.ip, ntohs(t->dst.u.all),
+		dir ? "DIR":"REV");
  return buf;
 }
 
@@ -1289,6 +1292,9 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		COUNTER(ndpi_p31);
 		break;
 	}
+	if(ndpi_log_debug > 2)
+		pr_info("START match ct_ndpi %p ct %p %s\n",
+			(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
 
 	proto.app_protocol = NDPI_PROTOCOL_UNKNOWN;
 	if(ndpi_log_debug > 3)
@@ -1357,8 +1363,19 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		break;
 	}
 #endif
-	if(ndpi_enable_flow)
-		ndpi_ct_counters_add(ct_ndpi, skb->len, ctinfo, tm.tv_sec);
+	if(ndpi_enable_flow && c_proto->magic != NDPI_ID ) {
+		if(ndpi_log_debug > 2 && skb_is_nonlinear(skb)) {
+			const skb_frag_t *frag;
+			int i,f = skb_shinfo(skb)->nr_frags;
+			for (i = 0; i < f; i++) {
+				frag = &skb_shinfo(skb)->frags[i];
+				pr_info(" frag[%d]=%u\n",i,skb_frag_size(frag));
+			}
+		}
+		ndpi_ct_counters_add(ct_ndpi, 
+			skb_is_nonlinear(skb) ? skb_shinfo(skb)->nr_frags:1,
+			skb->len, ctinfo, tm.tv_sec);
+	}
 
 	if(test_detect_done(ct_ndpi)) {
 		proto = ct_ndpi->proto;
@@ -1494,6 +1511,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 	result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.master_protocol) != 0;
     } while(0);
+    if(ndpi_log_debug > 1)
+		packet_trace(skb,ct,"detect_done ");
     return ( result & host_match ) ^ (info->invert != 0);
 }
 
@@ -1656,6 +1675,7 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 		enum ip_conntrack_info ctinfo;
 		struct nf_conn * ct = NULL;
 		struct nf_ct_ext_ndpi *ct_ndpi;
+		char ct_buf[128];
 
 //		if(ct_proto_get_flow_nat(c_proto)) break;
 		ct = nf_ct_get (skb, &ctinfo);
@@ -1667,6 +1687,9 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 #endif
 		ct_ndpi = nf_ct_ext_find_ndpi(ct);
 		if(!ct_ndpi) break;
+		if(ndpi_log_debug > 2)
+			pr_info("START target ct_ndpi %p ct %p %s\n",
+				(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
 
 		spin_lock_bh (&ct_ndpi->lock);
 
