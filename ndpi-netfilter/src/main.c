@@ -1231,6 +1231,9 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		break;
 	}
 
+	if(c_proto->magic != NDPI_ID)
+		ct_proto_set_flow(c_proto,NULL,0);
+
 	COUNTER(ndpi_pk);
 
 	getnstimeofday(&tm);
@@ -1334,7 +1337,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		    packet_trace(skb,ct,"cache      ");
 		break;
 	    } else {
-	    	COUNTER(ndpi_pi3);
+		if(ct_proto_last(c_proto))
+		    	COUNTER(ndpi_pi3);
 	    }
 	} else 
 		COUNTER(ndpi_pi4); // new packet
@@ -1364,17 +1368,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 #endif
 	if(ndpi_enable_flow && c_proto->magic != NDPI_ID ) {
-		if(ndpi_log_debug > 2 && skb_is_nonlinear(skb)) {
-			const skb_frag_t *frag;
-			int i,f = skb_shinfo(skb)->nr_frags;
-			for (i = 0; i < f; i++) {
-				frag = &skb_shinfo(skb)->frags[i];
-				pr_info(" frag[%d]=%u\n",i,skb_frag_size(frag));
-			}
-		}
-		ndpi_ct_counters_add(ct_ndpi, 
-			skb_is_nonlinear(skb) ? skb_shinfo(skb)->nr_frags:1,
-			skb->len, ctinfo, tm.tv_sec);
+		ndpi_ct_counters_add(ct_ndpi,1,skb->len, ctinfo, tm.tv_sec);
 	}
 
 	if(test_detect_done(ct_ndpi)) {
@@ -1382,9 +1376,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		c_proto->magic = NDPI_ID;
 		c_proto->proto = pack_proto(proto);
 
-		if(test_flow_yes(ct_ndpi))
-			ct_proto_set_flow(c_proto,ct,
-				test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START);
+		ct_proto_set_flow(c_proto,ct, !test_flow_yes(ct_ndpi) ? 0:
+			(test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START));
 
 		if(info->hostname[0])
 			host_match = ndpi_host_match(info,ct_ndpi);
@@ -1423,10 +1416,9 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 		c_proto->magic = NDPI_ID;
 		c_proto->proto = r_proto;
-		if(test_flow_yes(ct_ndpi))
-			ct_proto_set_flow(c_proto,ct,
-				test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START);
-			
+
+		ct_proto_set_flow(c_proto,ct, !test_flow_yes(ct_ndpi) ? 0:
+			(test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START));
 
 		COUNTER(ndpi_pd);
 

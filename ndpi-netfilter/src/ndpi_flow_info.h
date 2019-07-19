@@ -42,7 +42,7 @@ struct flow_data {
 #define flow_data_v6_size (sizeof(struct flow_data_common) + sizeof(struct flow_data_v6))
 
 /*
- * start record: 8 bytes (rec_type+family,cert_len,host_len,nat_flags,time_start
+ * start record: 8 bytes (rec_type+family,cert_len,host_len,nat_flags,time_start)
  *
  * ipv4 info: >= 72 bytes
  *   flow_data_common + flow_data_v4  + cert_name_len + host_name_len 

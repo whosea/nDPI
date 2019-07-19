@@ -71,9 +71,12 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 	ret_len = v6 ? flow_data_v6_size : flow_data_v4_size;
 	c_len = ct->ssl ? strlen(ct->ssl):0;
 	h_len = ct->host ? strlen(ct->host):0;
+	if(c_len > 255) c_len = 255;
+	if(h_len > 255) h_len = 255;
 	ret_len += c_len + h_len;
 
 	if(buflen < ret_len) return 0;
+
 	memset(buf,0,ret_len);
 	d = (struct flow_data *)buf;
 	c = &d->c;
@@ -85,10 +88,17 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 	c->cert_len	= c_len;
 	c->host_len	= h_len;
 	c->time_start	= i->time_start;
-	c->p[0]		= i->p[0];
-	c->p[1]		= i->p[1];
-	c->b[0]		= i->b[0];
-	c->b[1]		= i->b[1];
+	if((n->acc_read_mode & 0x3) != 2) {
+		c->p[0]		= i->p[0]-i->p[2];
+		c->p[1]		= i->p[1]-i->p[3];
+		c->b[0]		= i->b[0]-i->b[2];
+		c->b[1]		= i->b[1]-i->b[3];
+	} else {
+		c->p[0]		= i->p[0];
+		c->p[1]		= i->p[1];
+		c->b[0]		= i->b[0];
+		c->b[1]		= i->b[1];
+	}
 	c->time_end	= i->time_end;
 	c->ifidx	= i->ifidx;
 	c->ofidx	= i->ofidx;
@@ -153,11 +163,19 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 		test_dnat(ct) ? htons(ct->flinfo.dport_nat):
 				htons(ct->flinfo.dport) );
 	}
-	l += snprintf(&buf[l],buflen-l," %llu %llu %u %u",
+	if((n->acc_read_mode & 0x3) != 2) {
+	   l += snprintf(&buf[l],buflen-l," %llu %llu %u %u",
 		ct->flinfo.b[0]-ct->flinfo.b[2],
 		ct->flinfo.b[1]-ct->flinfo.b[3],
 		ct->flinfo.p[0]-ct->flinfo.p[2],
 		ct->flinfo.p[1]-ct->flinfo.p[3]);
+	} else {
+	   l += snprintf(&buf[l],buflen-l," %llu %llu %u %u",
+		ct->flinfo.b[0],
+		ct->flinfo.b[1],
+		ct->flinfo.p[0],
+		ct->flinfo.p[1]);
+	}
 
 	if(ct->flinfo.ifidx != ct->flinfo.ofidx)
 		l += snprintf(&buf[l],buflen-l," I=%d,%d",ct->flinfo.ifidx,ct->flinfo.ofidx);

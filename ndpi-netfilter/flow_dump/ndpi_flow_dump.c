@@ -28,6 +28,7 @@
 
 struct dump_data {
 	struct dump_data *next;
+	int		 num;
 	size_t		 len;
 	uint8_t		 data[];
 };
@@ -69,30 +70,32 @@ int append_buf(char *data,size_t len) {
 static int check_flow_data(struct dump_data *dump) {
 struct flow_data_common *c;
 char *data;
-int offs,rl;
+int offs,rl,n;
 int ret=0;
 	if(!dump) return 0;
 
 	data = (char*)&dump->data[0];
 	offs = 0;
-
+	n=0;
 	while(offs < dump->len-4) {
+		n++;
 		c = (struct flow_data_common *)&data[offs];
 		switch(c->rec_type) {
 		case 0:
-			if( !c->host_len ) return -1;
+			if( !c->host_len ) { printf("T0:%d host_len offs %d\n",n,offs); return -1;}
 			rl = 4 + c->host_len;
-			if(offs+rl > dump->len) return -1;
+			if(offs+rl > dump->len) { printf("T0:%d len\n",n); return -1; }
 			ret |= REC_PROTO;
 			offs += rl;
 			break;
 		case 1:
-			if(offs+8 > dump->len) return -1;
+			rl = 8;
+			if(offs+rl > dump->len) { printf("T1:%d len\n",n); return -1; }
 			ret |= REC_START;
-			offs += 8;
+			offs += rl;
 			break;
 		case 3:
-			if(offs+sizeof(struct flow_data_common) > dump->len) return -1;
+			if(offs+sizeof(struct flow_data_common) > dump->len) { printf("T3:%d len\n",n); return -1; }
 			offs += sizeof(struct flow_data_common);
 			ret |= REC_LOST;
 			break;
@@ -100,7 +103,8 @@ int ret=0;
 			rl = sizeof(struct flow_data_common) + 
 				( c->family ? sizeof(struct flow_data_v6) :
 				  	      sizeof(struct flow_data_v4));
-			if(offs+rl+c->cert_len+c->host_len > dump->len) return -1;
+			if(offs+rl+c->cert_len+c->host_len > dump->len) {
+				printf("T2:%d len\n",n); return -1; }
 			offs += rl + c->cert_len + c->host_len;
 			ret |= REC_FLOW;
 			break;
@@ -171,7 +175,7 @@ FILE *fd;
 					continue;
 				}
 				proto_name[id] = strdup(name);
-				if(verbose > 1) fprintf(stderr,"%d %s\n",id,name);
+				if(verbose > 2) fprintf(stderr,"%d %s\n",id,name);
 				if(id > max) max = id;
 			}
 		}
@@ -199,7 +203,6 @@ uint16_t id;
 
 	data = (char*)&dump->data[0];
 	offs = 0;
-
 	while(offs < dump->len-4) {
 		c = (struct flow_data_common *)&data[offs];
 		switch(c->rec_type) {
@@ -214,23 +217,25 @@ uint16_t id;
 				tp[c->host_len] = '\0';
 				if(proto_name[id]) free(proto_name[id]);
 				proto_name[id] = tp;
-				if(verbose > 1)
+				if(verbose > 2)
 					fprintf(stderr,"proto %d '%s'\n",id,tp);
 			}
 			offs += rl;
 			break;
 		case 1:
-			if(offs+8 > dump->len) return -1;
+			rl = 8;
+			if(offs+rl > dump->len) return -1;
 			l = snprintf(buff,sizeof(buff)-1,"TIME %u\n",c->time_start);
 			write(fd,buff,l);
-			offs += 8;
+			offs += rl;
 			break;
 		case 3:
-			if(offs+sizeof(struct flow_data_common) > dump->len) return -1;
+			rl = sizeof(struct flow_data_common);
+			if(offs+rl > dump->len) return -1;
 			l = snprintf(buff,sizeof(buff)-1,"LOST_TRAFFIC %u %u %" PRIu64 " %" PRIu64 "\n",
 				c->p[0],c->p[1],c->b[0],c->b[1]);
 			write(fd,buff,l);
-			offs += sizeof(struct flow_data_common);
+			offs += rl;
 			break;
 		case 2:
 			rl = sizeof(struct flow_data_common) + 
@@ -424,16 +429,19 @@ int main(int argc,char **argv) {
 			free(c);
 			break;
 		}
+		if(verbose)
+			fprintf(stderr,"Block %d read %d bytes\n",n,e);
 		r += e;
 		c->len = e;
 		n++;
+		c->num = n;
 		if(!head) {
 			head = tail = c;
-			c = NULL;
 		} else {
 			tail->next = c;
-			c = NULL;
+			tail = c;
 		}
+		c = NULL;
 		if(file_read) break;
 	}
 	close(fd);
@@ -445,8 +453,10 @@ int main(int argc,char **argv) {
 	if(verbose)
 		fprintf(stderr,"read %llu bytes %ld ms, speed %d MB/s \n",r,delta/1000,(int)(r/delta));
 
-	for(flow_flags = 0,c = head; c; c = c->next ) {
+	for(flow_flags = 0,n=0,c = head; c; n++,c = c->next ) {
 		int e = check_flow_data(c);
+		if(verbose > 1)
+			fprintf(stderr,"part %d %s\n",n,e < 0 ? "BAD":"OK");
 		if(e < 0) {
 			fprintf(stderr,"Decode error.\n");
 			exit(1);
