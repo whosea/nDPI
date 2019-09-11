@@ -26,6 +26,9 @@ void nflow_proc_read_start(struct ndpi_net *n) {
 	n->acc_end  = 0;
 	n->acc_open_time = tm.tv_sec;
 	n->flow_l   = NULL;
+	memset(n->str_buf,0,sizeof(n->str_buf));
+	n->str_buf_len = 0;
+	n->str_buf_offs = 0;
 	n->cnt_view = 0;
 	n->cnt_del  = 0;
 	n->cnt_out  = 0;
@@ -136,14 +139,20 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 }
 
 
-ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
+ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 		struct nf_ct_ext_ndpi *ct) {
 	const char *t_proto;
 	ssize_t l = 0;
+	char *buf = n->str_buf;
+	size_t buflen = sizeof(n->str_buf);
 	int is_ipv6 = test_ipv6(ct);
 
-	if(n->acc_read_mode >= 4)
-		return ndpi_dump_acct_info_bin(n, is_ipv6, buf, buflen, ct);
+	if(n->acc_read_mode >= 4) {
+		l = ndpi_dump_acct_info_bin(n, is_ipv6, buf, buflen, ct);
+		n->str_buf_len = l; 
+		n->str_buf_offs = 0;
+		return l;
+	}
 
 	*buf = 0;
 
@@ -214,6 +223,8 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,char *buf, size_t buflen,
 
 	buf[l++] = '\n';
 	buf[l] = 0;
+	n->str_buf_len = l; 
+	n->str_buf_offs = 0;
 	return l;
 }
 
@@ -319,6 +330,8 @@ loff_t nflow_proc_llseek(struct file *file, loff_t offset, int whence) {
 		if(offset >= atomic_read(&n->acc_work)) {
 			n->acc_end = 1;
 			n->flow_l = NULL;
+			n->str_buf_len = 0;
+			n->str_buf_offs = 0;
 			return vfs_setpos(file,atomic_read(&n->acc_work),OFFSET_MAX);
 		}
 	}

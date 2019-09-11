@@ -1989,13 +1989,44 @@ static void ndpi_ct_counter_save(struct nf_ct_ext_ndpi *ct) {
 	ct->flinfo.p[3] = ct->flinfo.p[1];
 }
 
+static int nflow_put_str(struct ndpi_net *n, char __user *buf,
+	int *p, size_t *count, loff_t *ppos) {
+
+	int ro,rl;
+
+	if(!n->str_buf_len)  return 0;
+
+	rl = n->str_buf_len - n->str_buf_offs;
+	ro = 0;
+	if(rl > *count) {
+		ro = rl - *count;
+		rl = *count;
+	}
+
+	if (!(ACCESS_OK(VERIFY_WRITE, buf+(*p), rl) &&
+	      !__copy_to_user(buf+(*p), &n->str_buf[n->str_buf_offs], rl))) {
+			n->str_buf_len = 0;
+			n->str_buf_offs = 0;
+			return -1;
+	}
+	if(ro) {
+		n->str_buf_offs += rl;
+	} else {
+		n->str_buf_len = 0;
+		n->str_buf_offs = 0;
+	}
+	*count -= rl;
+	*p += rl;
+	(*ppos) += rl;
+	return ro;
+}
+
 ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
                               size_t count, loff_t *ppos)
 {
 	struct nf_ct_ext_ndpi *ct_ndpi,*next,*prev,*flow_h;
-	int p,del;
+	int p,del,r;
 	ssize_t sl;
-	char buf1[256+128];
 	int cnt_view=0,cnt_del=0,cnt_out=0;
 	loff_t st_pos;
 
@@ -2006,34 +2037,50 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	spin_lock(&n->rem_lock);
 
 	p = 0;
+
+	if(n->str_buf_len) {
+		r = nflow_put_str(n,buf,&p,&count,ppos);
+		if (r != 0) {
+			spin_unlock(&n->rem_lock);
+			return r < 0 ? -EINVAL : p;
+		}
+	}
+
 	if(*ppos == 0) {
 		if(flow_read_debug)
 		  pr_info("%s: Start dump: CT total %d deleted %d\n",
 			__func__, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
 		sl = n->acc_read_mode > 3 ?
-			ndpi_dump_start_rec(buf1,sizeof(buf1),n->acc_open_time):
-			snprintf(buf1,sizeof(buf1)-1,"TIME %lu\n",n->acc_open_time);
-		if (!(ACCESS_OK(VERIFY_WRITE, buf, sl) &&
-				!__copy_to_user(buf, buf1, sl))) {
-				return -EFAULT;
-		}
-		p += sl; count -= sl;
-	}
-	if(atomic_read(&n->acc_i_packets_lost) || atomic_read(&n->acc_o_packets_lost)) {
-		uint32_t cpi = atomic_xchg(&n->acc_i_packets_lost,0);
-		uint32_t cpo = atomic_xchg(&n->acc_o_packets_lost,0);
-		uint64_t cbi = atomic64_xchg(&n->acc_i_bytes_lost,0);
-		uint64_t cbo = atomic64_xchg(&n->acc_o_bytes_lost,0);
-		sl = n->acc_read_mode > 3 ? 
-			ndpi_dump_lost_rec(buf1,sizeof(buf1),cpi,cpo,cbi,cbo) :
-			snprintf(buf1,sizeof(buf1)-1,
-				"LOST_TRAFFIC %llu %llu %u %u\n",cbi,cbo,cpi,cpo);
+			ndpi_dump_start_rec(n->str_buf,sizeof(n->str_buf),n->acc_open_time):
+			snprintf(n->str_buf,sizeof(n->str_buf)-1,"TIME %lu\n",n->acc_open_time);
 
-		if (!(ACCESS_OK(VERIFY_WRITE, buf+p, sl) &&
-				!__copy_to_user(buf+p, buf1, sl))) {
-				return -EFAULT;
+		n->str_buf_len = sl; n->str_buf_offs = 0;
+		r = nflow_put_str(n,buf,&p,&count,ppos);
+
+		if (r != 0) {
+			spin_unlock(&n->rem_lock);
+			return r < 0 ? -EFAULT : p;
 		}
-		p += sl; count -= sl;
+
+		if(atomic_read(&n->acc_i_packets_lost) ||
+		   atomic_read(&n->acc_o_packets_lost)) {
+			uint32_t cpi = atomic_xchg(&n->acc_i_packets_lost,0);
+			uint32_t cpo = atomic_xchg(&n->acc_o_packets_lost,0);
+			uint64_t cbi = atomic64_xchg(&n->acc_i_bytes_lost,0);
+			uint64_t cbo = atomic64_xchg(&n->acc_o_bytes_lost,0);
+			sl = n->acc_read_mode > 3 ? 
+				ndpi_dump_lost_rec(n->str_buf,sizeof(n->str_buf),cpi,cpo,cbi,cbo) :
+				snprintf(n->str_buf,sizeof(n->str_buf)-1,
+					"LOST_TRAFFIC %llu %llu %u %u\n",cbi,cbo,cpi,cpo);
+
+			n->str_buf_len = sl; n->str_buf_offs = 0;
+			r = nflow_put_str(n,buf,&p,&count,ppos);
+
+			if (r != 0) {
+				spin_unlock(&n->rem_lock);
+				return r < 0 ? -EFAULT : p;
+			}
+		}
 	}
 	st_pos = *ppos;
 	prev = NULL;
@@ -2053,32 +2100,26 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		next = ct_ndpi->next;
 		del  = test_for_delete(ct_ndpi);
 
+		n->str_buf_len = 0; n->str_buf_offs = 0;
+
 		switch(n->acc_read_mode & 0x3) {
 		case 0:
 			sl = flow_have_info(ct_ndpi) ?
-				ndpi_dump_acct_info(n,buf1,sizeof(buf1)-1,ct_ndpi) : 0;
+				ndpi_dump_acct_info(n,ct_ndpi) : 0;
 			break;
 		case 1:
 			sl = del && flow_have_info(ct_ndpi) ?
-				ndpi_dump_acct_info(n,buf1,sizeof(buf1)-1,ct_ndpi) : 0;
+				ndpi_dump_acct_info(n,ct_ndpi) : 0;
 			break;
 		case 2:
 			sl = !del && test_flow_yes(ct_ndpi) ?
-				ndpi_dump_acct_info(n,buf1,sizeof(buf1)-1,ct_ndpi) : 0;
+				ndpi_dump_acct_info(n,ct_ndpi) : 0;
 			break;
 		default:
 			sl = 0;
 		}
-		if(sl) {
-			if(sl <= count) {
-				if((n->acc_read_mode & 0x3) != 2)
-					ndpi_ct_counter_save(ct_ndpi);
-			} else {
-				// we don't delete record if buffer full
-				n->flow_l = prev;
-				spin_unlock_bh(&ct_ndpi->lock);
-				break;
-			}
+		if(sl && (n->acc_read_mode & 0x3) != 2) {
+				ndpi_ct_counter_save(ct_ndpi);
 		}
 		if(del) {
 			if(prev) {
@@ -2088,6 +2129,8 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 				spin_unlock_bh(&ct_ndpi->lock);
 				n->flow_l = NULL;
 				n->acc_end = 1;
+				n->str_buf_len = 0;
+				n->str_buf_offs = 0;
 				spin_unlock(&n->rem_lock);
 				return -EINVAL;
 			    }
@@ -2104,15 +2147,13 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 		spin_unlock_bh(&ct_ndpi->lock);
 
 		if(sl) {
-			if (!(ACCESS_OK(VERIFY_WRITE, buf+p, sl) &&
-					!__copy_to_user(buf+p, buf1, sl))) {
+			r = nflow_put_str(n,buf,&p,&count,ppos);
+			if(r != 0) {
 				n->flow_l = prev;
 				spin_unlock(&n->rem_lock);
-				return -EFAULT;
+				return r < 0 ? -EFAULT : p;
 			}
 			cnt_out++;
-			p += sl; count -= sl;
-			(*ppos)++;
 		}
 		if(del) {
 			__ndpi_free_ct_proto(ct_ndpi);

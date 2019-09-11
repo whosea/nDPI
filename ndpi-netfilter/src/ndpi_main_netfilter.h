@@ -26,6 +26,8 @@ struct write_proc_cmd {
 
 struct nf_ct_ext_ndpi;
 
+#define NF_STR_LBUF 384
+
 struct ndpi_net {
 	struct ndpi_detection_module_struct *ndpi_struct;
 	struct rb_root osdpi_id_root;
@@ -65,12 +67,15 @@ struct ndpi_net {
 	struct ndpi_mark {
 		uint32_t	mark,mask;
 	} mark[NDPI_NUM_BITS+1];
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-	u_int8_t debug_level[NDPI_NUM_BITS+1];
-#endif
+
+	u_int8_t debug_level[NDPI_NUM_BITS+1]; /* if defined NDPI_ENABLE_DEBUG_MESSAGES */
+
 	spinlock_t		rem_lock;	// lock ndpi_delete_acct
 	struct nf_ct_ext_ndpi 	*flow_h;	// Head of info list
 	struct nf_ct_ext_ndpi	*flow_l;	// save point for next read info
+	char			str_buf[NF_STR_LBUF];	// buffer for nflow_read
+	int			str_buf_len,	// data length
+				str_buf_offs;  // data offset
 	atomic_t		init_done;	// ndpi_net_init() complete
 	atomic_t		acc_open;	// flow is open
 	atomic_t		acc_work;	// number of active flow info
