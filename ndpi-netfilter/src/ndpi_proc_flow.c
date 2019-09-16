@@ -107,7 +107,7 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 	c->ofidx	= i->ofidx;
 	c->proto_master	= ct->proto.master_protocol;
 	c->proto_app	= ct->proto.app_protocol;
-	c->connmark	= ct->connmark;
+	c->connmark	= ct->flinfo.connmark;
 	if(!v6) {
 		struct flow_data_v4 *a = &d->d.v4;
 		a->ip_s = i->ip_s.ip;
@@ -191,8 +191,8 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 	else
 		l += snprintf(&buf[l],buflen-l," I=%d",ct->flinfo.ifidx);
 #if defined(CONFIG_NF_CONNTRACK_MARK)
-	if(ct->connmark)
-	    l += snprintf(&buf[l],buflen-l," CM=%x",ct->connmark);
+	if(ct->flinfo.connmark)
+	    l += snprintf(&buf[l],buflen-l," CM=%x",ct->flinfo.connmark);
 #endif
 	if(!is_ipv6) {
 	    if(test_snat(ct)) {

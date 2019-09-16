@@ -206,13 +206,16 @@ struct nf_ct_ext_labels { /* max size 128 bit */
 	uint8_t			pad2[4];
 #endif
 	struct nf_ct_ext_ndpi	*ndpi_ext;
-} __attribute ((packed));
+};
 
 struct ndpi_cb {
 	unsigned long 	last_ct; // sizeof(unsigned long) == sizeof(void *)
 	uint32_t	proto;
 	uint32_t	magic;
-} __attribute ((packed));
+};
+
+struct nf_ct_ext_ndpi dummy_struct1;
+struct flow_info dummy_struct2;
 
 static inline struct ndpi_cb *skb_get_cproto(const struct sk_buff *skb)
 {
@@ -248,7 +251,7 @@ static inline int flow_have_info( struct nf_ct_ext_ndpi *c) {
 	return (READ_ONCE(c->flags) & m) == m;
 }
 
-static ndpi_protocol proto_null = NDPI_PROTOCOL_NULL;
+static ndpi_protocol_nf proto_null = NDPI_PROTOCOL_NULL;
 
 unsigned long int ndpi_flow_limit=10000000; // 4.3Gb
 unsigned long int ndpi_enable_flow=0;
@@ -1050,8 +1053,10 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		add_stat(flow->packet.parsed_lines);
 	}
 	if( proto.app_protocol != NDPI_PROTOCOL_UNKNOWN ||
-	    proto.master_protocol != NDPI_PROTOCOL_UNKNOWN)
-		ct_ndpi->proto = proto;
+	    proto.master_protocol != NDPI_PROTOCOL_UNKNOWN) {
+		ct_ndpi->proto.app_protocol = proto.app_protocol;
+		ct_ndpi->proto.master_protocol = proto.master_protocol;
+	}
 
 	return proto.app_protocol;
 }
@@ -1187,7 +1192,7 @@ static bool
 ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	uint32_t r_proto;
-	ndpi_protocol proto = NDPI_PROTOCOL_NULL;
+	ndpi_protocol_nf proto = NDPI_PROTOCOL_NULL;
 	uint64_t time;
 	struct timespec tm;
 	const struct xt_ndpi_mtinfo *info = par->matchinfo;
@@ -1311,8 +1316,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		ct_proto_set_flow_nat(c_proto,FLOW_NAT_START);
 
 #if defined(CONFIG_NF_CONNTRACK_MARK)
-	if(ct->mark && ct->mark != ct_ndpi->connmark)
-		ct_ndpi->connmark = ct->mark;
+	if(ct->mark && ct->mark != ct_ndpi->flinfo.connmark)
+		ct_ndpi->flinfo.connmark = ct->mark;
 #endif
 
 #ifdef USE_HACK_USERID
@@ -1327,7 +1332,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 #endif
 	if( c_proto->magic == NDPI_ID ) {
 	    if(ct_proto_last(c_proto) == ct) {
-		proto = ct_ndpi->proto;
+		proto.app_protocol = ct_ndpi->proto.app_protocol;
+		proto.master_protocol = ct_ndpi->proto.master_protocol;
 		if(info->hostname[0])
 			host_match = ndpi_host_match(info,ct_ndpi);
 
