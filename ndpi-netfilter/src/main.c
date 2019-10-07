@@ -396,6 +396,7 @@ unsigned long
 	       ndpi_puo=0;
 
 
+static int net_ns_id=0;
 static int ndpi_net_id;
 static inline struct ndpi_net *ndpi_pernet(struct net *net)
 {
@@ -756,16 +757,16 @@ __ndpi_free_flow (struct nf_conn * ct,void *data) {
 
 	spin_lock_bh(&ct_ndpi->lock);
 
-	atomic_dec(&n->acc_work);
 	WRITE_ONCE(ext_l->magic,0);
 	WRITE_ONCE(ext_l->ndpi_ext,NULL);
 
 	__ndpi_free_ct_flow(ct_ndpi);
 	__ndpi_free_ct_ndpi_id(n,ct_ndpi);
 	__ndpi_free_ct_proto(ct_ndpi);
-	clear_for_delete(ct_ndpi);
 	clear_flow_info(ct_ndpi);
 	delete = test_flow_yes(ct_ndpi) == 0;
+	if(!delete)
+		set_for_delete(ct_ndpi);
 
 	spin_unlock_bh(&ct_ndpi->lock);
 
@@ -801,11 +802,12 @@ nf_ndpi_free_flow (struct nf_conn * ct)
 	    spin_lock_bh(&ct_ndpi->lock);
 	    __ndpi_free_ct_flow(ct_ndpi);
 	    __ndpi_free_ct_ndpi_id(n,ct_ndpi);
-	    set_for_delete(ct_ndpi);
 	    if( !ndpi_enable_flow || !flow_have_info(ct_ndpi)) {
 		__ndpi_free_ct_proto(ct_ndpi);
 		clear_flow_info(ct_ndpi);
 		delete = test_flow_yes(ct_ndpi) == 0;
+		if(!delete)
+			set_for_delete(ct_ndpi);
 	    }
 	    spin_unlock_bh(&ct_ndpi->lock);
 
@@ -1957,7 +1959,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 				__ndpi_free_ct_flow(ct_ndpi);
 			}
 			__ndpi_free_ct_proto(ct_ndpi);
-			if(all == 2) {
+			if(all == 2 && test_flow_info(ct_ndpi)) {
 				// count lost info
 				atomic_add(ct_ndpi->flinfo.p[0]-ct_ndpi->flinfo.p[2],
 						&n->acc_i_packets_lost);
@@ -1968,10 +1970,9 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 				atomic64_add(ct_ndpi->flinfo.b[1]-ct_ndpi->flinfo.b[3],
 						&n->acc_o_bytes_lost);
 			}
-
-			kmem_cache_free (ct_info_cache, ct_ndpi);
 			atomic_dec(&n->acc_work);
 			atomic_dec(&n->acc_rem);
+			kmem_cache_free (ct_info_cache, ct_ndpi);
 			i2++;
 			if(all < 3 && (atomic_read(&n->acc_rem) <= 0)) break;
 		} else {
@@ -1983,7 +1984,9 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 
 	spin_unlock(&n->rem_lock);
 	if( (all > 1 || i2) && flow_read_debug)
-		pr_info("%s: Delete %d flows. Active %d\n",__func__,i2,atomic_read(&n->acc_work));
+		pr_info("%s: Delete %d flows. Active %d, rem %d\n",
+			__func__,i2,atomic_read(&n->acc_work),
+				    atomic_read(&n->acc_rem));
 
 	return i2;
 }
@@ -2352,6 +2355,7 @@ static void __net_exit ndpi_net_exit(struct net *net)
 	struct ndpi_net *n;
 
 	n = ndpi_pernet(net);
+	pr_info("ndpi: %s net %d\n",__func__,n->net_ns_id);
 
 	atomic_set(&n->init_done,0);
 
@@ -2431,6 +2435,7 @@ static int __net_init ndpi_net_init(struct net *net)
 	/* init global detection structure */
 
 	n = ndpi_pernet(net);
+	n->net_ns_id = net_ns_id;
 	atomic_set(&n->init_done,0);
 	spin_lock_init(&n->id_lock);
 	spin_lock_init(&n->ipq_lock);
@@ -2455,9 +2460,6 @@ static int __net_init ndpi_net_init(struct net *net)
        	n->osdpi_id_root = RB_ROOT;
 
 	/* init global detection structure */
-	set_ndpi_ticks_per_second(detection_tick_resolution);
-	set_ndpi_malloc(malloc_wrapper);
-	set_ndpi_free(free_wrapper);
 	n->ndpi_struct = ndpi_init_detection_module();
 	if (n->ndpi_struct == NULL) {
 		pr_err("xt_ndpi: global structure initialization failed.\n");
@@ -2469,8 +2471,6 @@ static int __net_init ndpi_net_init(struct net *net)
 	NDPI_BITMASK_RESET(n->protocols_bitmask);
 	ndpi_set_protocol_detection_bitmask2(n->ndpi_struct, &n->protocols_bitmask);
 
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-	pr_info("ndpi_lib_trace %s\n",ndpi_lib_trace ? "Enabled":"Disabled");
 	n->ndpi_struct->user_data = n;
 	for (i = 0; i < NDPI_NUM_BITS; i++) {
                 atomic_set (&n->protocols_cnt[i], 0);
@@ -2478,6 +2478,8 @@ static int __net_init ndpi_net_init(struct net *net)
 		if(i <= NDPI_LAST_IMPLEMENTED_PROTOCOL) continue;
 		n->mark[i].mark = n->mark[i].mask = 0;
         }
+#ifdef NDPI_ENABLE_DEBUG_MESSAGES
+	pr_info("ndpi_lib_trace %s\n",ndpi_lib_trace ? "Enabled":"Disabled");
 	n->ndpi_struct->ndpi_log_level = ndpi_lib_trace;
 	set_ndpi_debug_function(n->ndpi_struct, ndpi_lib_trace ? debug_printf:NULL);
 #endif
@@ -2658,6 +2660,8 @@ static int __net_init ndpi_net_init(struct net *net)
 	                                   ARRAY_SIZE(nf_nat_ipv4_ops))) break;
 		/* All success! */
 		atomic_set(&n->init_done,1);
+		pr_info("ndpi: %s net %d\n",__func__,n->net_ns_id);
+		net_ns_id++;
 		return 0;
 	} while(0);
 
@@ -2761,6 +2765,9 @@ static int __init ndpi_mt_init(void)
 	ndpi_size_id_struct = sizeof(struct osdpi_id_node);
 	ndpi_size_flow_struct = ndpi_detection_get_sizeof_ndpi_flow_struct();
 	detection_tick_resolution = HZ;
+	set_ndpi_ticks_per_second(detection_tick_resolution);
+	set_ndpi_malloc(malloc_wrapper);
+	set_ndpi_free(free_wrapper);
 
 	if(request_module("nf_conntrack") < 0) {
 		pr_err("xt_ndpi: nf_conntrack required!\n");

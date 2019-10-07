@@ -32,7 +32,7 @@ struct write_proc_cmd {
 
 struct nf_ct_ext_ndpi;
 
-#define NF_STR_LBUF 388
+#define NF_STR_LBUF 384
 
 struct ndpi_net {
         struct		timer_list gc;
@@ -75,6 +75,7 @@ struct ndpi_net {
 	struct nf_ct_ext_ndpi	*flow_l;	// save point for next read info
 
 	
+	int			net_ns_id;
 	int			str_buf_len,	// nflow_read data length
 				str_buf_offs;	// nflow_read data offset
 	char			str_buf[NF_STR_LBUF];	// buffer for nflow_read
