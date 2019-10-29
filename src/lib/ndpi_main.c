@@ -715,9 +715,10 @@ static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_struc
   else
     ac_pattern.length = strlen(ac_pattern.astring);
 
-  spin_lock(&ndpi_struct->host_automa_lock);
+//  no lock needed
+//  spin_lock(&ndpi_struct->host_automa_lock);
   r = ac_automata_add(((AC_AUTOMATA_t*)automa->ac_automa), &ac_pattern);
-  spin_unlock(&ndpi_struct->host_automa_lock);
+//  spin_unlock(&ndpi_struct->host_automa_lock);
   if(r == ACERR_DUPLICATE_PATTERN) {
 	char *tproto = ndpi_get_proto_by_id(ndpi_struct,protocol_id);
 	if(protocol_id == ac_pattern.rep.number) {
@@ -2322,6 +2323,14 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(void) {
 
   ndpi_init_protocol_defaults(ndpi_str);
 
+  ac_automata_finalize(ndpi_str->host_automa.ac_automa);
+//  ndpi_str->host_automa.ac_automa_finalized = 1;
+  ac_automata_finalize(ndpi_str->content_automa.ac_automa);
+//  ndpi_str->content_automa.ac_automa_finalized = 1;
+  ac_automata_finalize(ndpi_str->bigrams_automa.ac_automa);
+//  ndpi_str->bigrams_automa.ac_automa_finalized = 1;
+  
+
   for(i=0; i<NUM_CUSTOM_CATEGORIES; i++)
     snprintf(ndpi_str->custom_category_labels[i],
 	     CUSTOM_CATEGORY_LABEL_LEN, "User custom category %u", i+1);
@@ -2534,10 +2543,8 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_struct
     if(ndpi_struct->tcpRoot != NULL)
       ndpi_tdestroy(ndpi_struct->tcpRoot, ndpi_free);
 
-    spin_lock(&ndpi_struct->host_automa_lock);
     if(ndpi_struct->host_automa.ac_automa != NULL)
       ac_automata_release((AC_AUTOMATA_t*)ndpi_struct->host_automa.ac_automa);
-    spin_unlock(&ndpi_struct->host_automa_lock);
 
     if(ndpi_struct->content_automa.ac_automa != NULL)
       ac_automata_release((AC_AUTOMATA_t*)ndpi_struct->content_automa.ac_automa);
@@ -6082,9 +6089,10 @@ int ndpi_match_string_subprotocol(struct ndpi_detection_module_struct *ndpi_stru
     return(NDPI_PROTOCOL_UNKNOWN);
 
   if(is_host_match)
-	spin_lock(&ndpi_struct->host_automa_lock);
+	spin_lock_bh(&ndpi_struct->host_automa_lock);
 
   if(!automa->ac_automa_finalized) {
+    // FIXME unused code!
     ac_automata_finalize((AC_AUTOMATA_t*)automa->ac_automa);
     automa->ac_automa_finalized = 1;
   }
@@ -6093,7 +6101,7 @@ int ndpi_match_string_subprotocol(struct ndpi_detection_module_struct *ndpi_stru
   ac_automata_search(((AC_AUTOMATA_t*)automa->ac_automa), &ac_input_text, &match);
   ac_automata_reset(((AC_AUTOMATA_t*)automa->ac_automa));
   if(is_host_match)
-  	spin_unlock(&ndpi_struct->host_automa_lock);
+  	spin_unlock_bh(&ndpi_struct->host_automa_lock);
  
   ret_match->protocol_id = match.number,
     ret_match->protocol_category = match.category,
@@ -6229,10 +6237,10 @@ int ndpi_match_bigram(struct ndpi_detection_module_struct *ndpi_struct,
   if((automa->ac_automa == NULL) || (bigram_to_match == NULL))
     return(-1);
 
-  if(!automa->ac_automa_finalized) {
-    ac_automata_finalize((AC_AUTOMATA_t*)automa->ac_automa);
-    automa->ac_automa_finalized = 1;
-  }
+//  if(!automa->ac_automa_finalized) {
+//    ac_automata_finalize((AC_AUTOMATA_t*)automa->ac_automa);
+//    automa->ac_automa_finalized = 1;
+//  }
 
   ac_input_text.astring = bigram_to_match, ac_input_text.length = 2;
   ac_automata_search(((AC_AUTOMATA_t*)automa->ac_automa), &ac_input_text, &match);

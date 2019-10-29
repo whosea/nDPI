@@ -47,7 +47,7 @@ struct write_proc_cmd * alloc_proc_wbuf(struct ndpi_net *n,
 	ret = n->w_buff[id];
 	if(!ret) {
 		ret = kmalloc(sizeof(struct write_proc_cmd) + cmd_len_max + 1,
-				GFP_KERNEL);
+				GFP_ATOMIC); // under spin_lock
 		if(ret) {
 			ret->max = cmd_len_max;
 			ret->cpos = 0;
