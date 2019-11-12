@@ -1614,35 +1614,37 @@ static unsigned int seq_print_ndpi(struct seq_file *s,
 #endif
 #endif
 
-static void ndpi_proto_markmask(struct ndpi_net *n, u_int32_t *var,
-		ndpi_protocol *proto, int mode)
+static u_int32_t ndpi_proto_markmask(struct ndpi_net *n, u_int32_t var,
+		const ndpi_protocol *proto, int mode, const struct xt_ndpi_tginfo *info)
 {
-    if(mode == 1) {
-	if(proto->master_protocol < NDPI_NUM_BITS) {
-		*var &= ~n->mark[proto->master_protocol].mask;
-		*var |=  n->mark[proto->master_protocol].mark;
-	}
-	return;
+    if(mode && ( proto->master_protocol >= NDPI_NUM_BITS ||
+		 proto->app_protocol >= NDPI_NUM_BITS)) return var;
+
+    switch (mode) {
+     case 0:
+	var &= ~info->mask;
+	var |=  info->mark;
+	break;
+     case 1:
+	var &= ~n->mark[proto->master_protocol].mask;
+	var |=  n->mark[proto->master_protocol].mark;
+	break;
+     case 2:
+	var &= ~n->mark[proto->app_protocol].mask;
+	var |=  n->mark[proto->app_protocol].mark;
+	break;
+     case 3:
+	if(proto->app_protocol != NDPI_PROTOCOL_UNKNOWN) {
+	    var &= ~n->mark[proto->app_protocol].mask;
+	    var |=  n->mark[proto->app_protocol].mark;
+	} else
+	  if(proto->master_protocol != NDPI_PROTOCOL_UNKNOWN) {
+		var &= ~n->mark[proto->master_protocol].mask;
+		var |=  n->mark[proto->master_protocol].mark;
+	  }
+	break;
     }
-    if(mode == 2) {
-	if(proto->app_protocol < NDPI_NUM_BITS) {
-		*var &= ~n->mark[proto->app_protocol].mask;
-		*var |=  n->mark[proto->app_protocol].mark;
-	}
-	return;
-    }
-    if(proto->master_protocol != NDPI_PROTOCOL_UNKNOWN) {
-	if(proto->master_protocol < NDPI_NUM_BITS) {
-		*var &= ~n->mark[proto->master_protocol].mask;
-		*var |=  n->mark[proto->master_protocol].mark;
-	}
-    }
-    if(proto->app_protocol != NDPI_PROTOCOL_UNKNOWN) {
-	if(proto->app_protocol < NDPI_NUM_BITS) {
-		*var &= ~(n->mark[proto->app_protocol].mask << 16);
-		*var |=  n->mark[proto->app_protocol].mark << 16;
-	}
-    }
+    return var;
 }
 
 static unsigned int
@@ -1706,6 +1708,7 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
 	if(c_proto->proto != NDPI_PROCESS_ERROR) {
 		uint32_t tmp_p = READ_ONCE(c_proto->proto);
+		/* see pack_proto() */
 		proto.master_protocol = tmp_p & 0xffff;
 		proto.app_protocol = (tmp_p >> 16) & 0xffff; 
 	}
@@ -1715,18 +1718,13 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 		if(info->p_proto_id) mode |= 2;
 		if(info->any_proto_id) mode |= 3;
 	}
+	if(info->t_mark)
+		skb->mark = ndpi_proto_markmask(n,skb->mark,&proto,mode,info);
 
-	if(info->t_mark) {
-	        skb->mark = (skb->mark & ~info->mask) | info->mark;
-		if(mode)
-			ndpi_proto_markmask(n,&skb->mark,&proto,mode);
-	}
-	if(info->t_clsf) {
-	        skb->priority = (skb->priority & ~info->mask) | info->mark;
-		if(mode)
-			ndpi_proto_markmask(n,&skb->priority,&proto,mode);
-	}
-        return info->t_accept ? NF_ACCEPT : XT_CONTINUE;
+	if(info->t_clsf)
+		skb->priority =	ndpi_proto_markmask(n,skb->priority,&proto,mode,info);
+
+ return info->t_accept ? NF_ACCEPT : XT_CONTINUE;
 }
 
 static int
