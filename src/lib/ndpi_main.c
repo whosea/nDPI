@@ -1012,20 +1012,31 @@ int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_mod
 
 /* ******************************************************************** */
 
-static void ndpi_validate_protocol_initialization(struct ndpi_detection_module_struct *ndpi_mod) {
-  int i;
+static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_struct *ndpi_mod) {
+  int i,j;
 
   for(i=0; i<(int)ndpi_mod->ndpi_num_supported_protocols; i++) {
     if(ndpi_mod->proto_defaults[i].protoName == NULL) {
       NDPI_LOG_ERR(ndpi_mod, "[NDPI] INTERNAL ERROR missing protoName initialization for [protoId=%d]: recovering\n",  i);
+      return 1;
     } else {
       if((i != NDPI_PROTOCOL_UNKNOWN)
 	 && (ndpi_mod->proto_defaults[i].protoCategory == NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)) {
 	NDPI_LOG_ERR(ndpi_mod, "[NDPI] INTERNAL ERROR missing category [protoId=%d/%s] initialization: recovering\n",
 		     i, ndpi_mod->proto_defaults[i].protoName ? ndpi_mod->proto_defaults[i].protoName : "???");
+	return 1;
       }
     }
+    if(!strcmp(ndpi_mod->proto_defaults[i].protoName,"Free")) continue;
+    for(j=0; j < i; j++) {
+	if(!strcmp(ndpi_mod->proto_defaults[i].protoName,ndpi_mod->proto_defaults[j].protoName)) {
+      		NDPI_LOG_ERR(ndpi_mod, "[NDPI] INTERNAL ERROR: Name of the protocols are the same for #%d and #%d '%s' \n",i,j,
+				ndpi_mod->proto_defaults[i].protoName);
+		return 1;
+        }
+    }
   }
+  return 0;
 }
 
 /* ******************************************************************** */
@@ -1315,7 +1326,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			    ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
     ndpi_set_proto_defaults(ndpi_mod, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_VIDTO,
 			    0 /* can_have_a_subprotocol */, no_master,
-			    no_master, "PPStream", NDPI_PROTOCOL_CATEGORY_MEDIA,
+			    no_master, "Vidto", NDPI_PROTOCOL_CATEGORY_MEDIA,
 			    ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			    ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
@@ -2016,7 +2027,6 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
     /* calling function for host and content matched protocols */
     init_string_based_protocols(ndpi_mod);
 
-    ndpi_validate_protocol_initialization(ndpi_mod);
 }
 
 /* ****************************************************** */
@@ -2334,6 +2344,11 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(void) {
   for(i=0; i<NUM_CUSTOM_CATEGORIES; i++)
     snprintf(ndpi_str->custom_category_labels[i],
 	     CUSTOM_CATEGORY_LABEL_LEN, "User custom category %u", i+1);
+
+  if(ndpi_validate_protocol_initialization(ndpi_str)) {
+	ndpi_exit_detection_module(ndpi_str);
+	return NULL;
+  }
 
   return ndpi_str;
 }
