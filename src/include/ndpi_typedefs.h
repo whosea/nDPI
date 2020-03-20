@@ -1159,7 +1159,8 @@ struct ndpi_detection_module_struct {
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
   struct hash_ip4p_table *bt6_ht;
 #endif
-
+  /* Limit for tls buffer size */
+  int    max_tls_buf;
   /* BT_ANNOUNCE */
   struct bt_announce *bt_ann;
   int    bt_ann_len;

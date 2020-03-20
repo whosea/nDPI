@@ -263,6 +263,7 @@ static unsigned long  bt_log_size=128;
 unsigned long int bt_hash_size=0;
 unsigned long int bt6_hash_size=0;
 unsigned long int bt_hash_tmo=1200;
+unsigned long int tls_buf_size=4;
 
 static unsigned long  max_packet_unk_tcp=20;
 static unsigned long  max_packet_unk_udp=20;
@@ -316,6 +317,9 @@ MODULE_PARM_DESC(lib_trace,"Debug level for nDPI library (0-off, 1-error, 2-trac
 #endif
 module_param_named(mtu, ndpi_mtu, ulong, 0600);
 MODULE_PARM_DESC(mtu,"Skip checking nonlinear skbuff larger than MTU");
+
+module_param_named(tls_buf_size, tls_buf_size, ulong, 0600);
+MODULE_PARM_DESC(tls_buf_size,"The maximum buffer size in kB for the TLS protocol. default 4, range 2-16");
 
 module_param_named(bt_log_size, bt_log_size, ulong, 0400);
 MODULE_PARM_DESC(bt_log_size,"Keep information about the lastes N bt-hash. default 0, range: 32 - 512");
@@ -2496,6 +2500,10 @@ static int __net_init ndpi_net_init(struct net *net)
 	n->ndpi_struct->ndpi_log_level = ndpi_lib_trace;
 	set_ndpi_debug_function(n->ndpi_struct, ndpi_lib_trace ? debug_printf:NULL);
 #endif
+	if(tls_buf_size < 2) tls_buf_size = 2;
+	if(tls_buf_size > 16) tls_buf_size = 16;
+
+	n->ndpi_struct->max_tls_buf = tls_buf_size*1024;
 
 	if(bt_hash_size > 512) bt_hash_size = 512;
 	if(bt6_hash_size > 32) bt6_hash_size = 32;

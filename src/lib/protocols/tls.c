@@ -137,12 +137,13 @@ void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct
 
   avail_bytes = flow->l4.tcp.tls.message.buffer_len - flow->l4.tcp.tls.message.buffer_used;
   if(avail_bytes < packet->payload_packet_len) {
+    void *newbuf;
     u_int new_len = flow->l4.tcp.tls.message.buffer_len + packet->payload_packet_len;
-#ifdef __KERNEL__
-    if(new_len >= 32*1024) return;
-#endif
-    void *newbuf  = ndpi_realloc(flow->l4.tcp.tls.message.buffer,
-				 flow->l4.tcp.tls.message.buffer_len, new_len);
+
+    if(new_len >= ndpi_struct->max_tls_buf) return;
+
+    newbuf  = ndpi_realloc(flow->l4.tcp.tls.message.buffer,
+			 flow->l4.tcp.tls.message.buffer_len, new_len);
     if(!newbuf) return;
 
 #ifdef DEBUG_TLS_MEMORY
@@ -1267,6 +1268,9 @@ static void ndpi_search_tls_wrapper(struct ndpi_detection_module_struct *ndpi_st
 
 void init_tls_dissector(struct ndpi_detection_module_struct *ndpi_struct,
 			u_int32_t *id, NDPI_PROTOCOL_BITMASK *detection_bitmask) {
+
+  ndpi_struct->max_tls_buf = NDPI_MAX_TLS_REQUEST_SIZE;
+
   ndpi_set_bitmask_protocol_detection("TLS", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_TLS,
 				      ndpi_search_tls_wrapper,
