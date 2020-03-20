@@ -8687,7 +8687,7 @@ ndpi_protocol_match host_match[] = {
   { "amazonaws.com", NULL, "amazonaws" TLD,                                              "Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
   { "amazon-adsystem.com", NULL, "amazon-adsystem" TLD,                                  "Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
   { ".aws.", NULL, "\\.aws\\." TLD,                                                      "Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
-  { ".cloudfront.net", NULL, "\\.cloudfront" TLD,                                        "Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
+// DUP  { ".cloudfront.net", NULL, "\\.cloudfront" TLD,                                        "Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
   { ".us-west-2.compute.amazonaws.com", NULL, "\\.us-west-2\\.compute\\.amazonaws\\.com","Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
 
   /* Microsoft + Azure */
@@ -8992,7 +8992,7 @@ ndpi_protocol_match host_match[] = {
 
   { ".deezer.com", NULL, "\\.deezer" TLD,                              "Deezer",           NDPI_PROTOCOL_DEEZER, NDPI_PROTOCOL_CATEGORY_MUSIC, NDPI_PROTOCOL_FUN },
 
-  { ".microsoft.com", NULL, "\\.microsoft" TLD,                        "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_SAFE },
+// DUP  { ".microsoft.com", NULL, "\\.microsoft" TLD,                        "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_SAFE },
   { "i-msdn.sec.s-msft.com", NULL, "i-msdn.sec\\.s-msft" TLD,          "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_SYSTEM_OS, NDPI_PROTOCOL_ACCEPTABLE },
   { "i2-msdn.sec.s-msft.com", NULL, "i2-msdn\\.sec\\.s-msft" TLD,      "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_SYSTEM_OS, NDPI_PROTOCOL_ACCEPTABLE },
   { ".webtrends.com", NULL, "\\.webtrends" TLD,                        "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
@@ -9017,7 +9017,7 @@ ndpi_protocol_match host_match[] = {
 
   { ".webex.com",      NULL, "\\.webex" TLD,                           "Webex",            NDPI_PROTOCOL_WEBEX, NDPI_PROTOCOL_CATEGORY_VOIP, NDPI_PROTOCOL_ACCEPTABLE },
   { ".zoom.us",        NULL, "\\.zoom" TLD,                            "Zoom",             NDPI_PROTOCOL_ZOOM,  NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_ACCEPTABLE },
-  { ".cloudfront.net", NULL, "\\.cloudfront" TLD,                      "Zoom",             NDPI_PROTOCOL_ZOOM, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_ACCEPTABLE },
+// DUP  { ".cloudfront.net", NULL, "\\.cloudfront" TLD,                      "Zoom",             NDPI_PROTOCOL_ZOOM, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_ACCEPTABLE },
 
   { ".ocsdomain.com", NULL, "\\.ocsdomain" TLD,                        "OCS",              NDPI_PROTOCOL_OCS, NDPI_PROTOCOL_CATEGORY_MEDIA, NDPI_PROTOCOL_FUN },
   { "ocs.fr", NULL, "ocs" TLD,                                         "OCS",              NDPI_PROTOCOL_OCS, NDPI_PROTOCOL_CATEGORY_MEDIA, NDPI_PROTOCOL_FUN },
