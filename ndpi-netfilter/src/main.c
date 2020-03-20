@@ -61,7 +61,6 @@
 #include "xt_ndpi.h"
 
 #include "../lib/third_party/include/ndpi_patricia.h"
-#include "../lib/third_party/include/ahocorasick.h"
 
 extern ndpi_protocol_match host_match[];
 

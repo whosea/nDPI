@@ -21,6 +21,14 @@
 #ifndef _AC_TYPES_H_
 #define _AC_TYPES_H_
 
+#define AC_PATTRN_MAX_LENGTH 256
+
+/* reallocation step for AC_NODE_t.matched_patterns */
+#define REALLOC_CHUNK_MATCHSTR 8
+
+/* reallocation step for AC_NODE_t.outgoing array */
+#define REALLOC_CHUNK_OUTGOING 8
+
 /* AC_ALPHABET_t:
  * defines the alphabet type.
  * Actually defining AC_ALPHABET_t as a char will work, but sometimes we deal
@@ -31,7 +39,7 @@
  * AC_ALPHABET_t and leave it optional for other developers to define their
  * own alphabets.
  **/
-typedef char AC_ALPHABET_t;
+typedef unsigned char AC_ALPHABET_t;
 
 /* AC_REP_t:
  * Provides a more readable representative for a pattern.
@@ -59,13 +67,20 @@ typedef struct {
  * it is the responsibility of your program to maintain a permanent allocation
  * for astring field of the added pattern to automata.
  **/
+
 typedef struct
 {
   AC_ALPHABET_t * astring; /* String of alphabets */
   unsigned int length; /* Length of pattern */
-  u_int8_t is_existing; /* 1 if the node is already part of another AC_PATTERN_t */
   AC_REP_t rep; /* Representative string (optional) */
 } AC_PATTERN_t;
+
+typedef struct {
+  unsigned short num; /* Number of matched patterns at this node */
+  unsigned short max; /* Max capacity of allocated memory for matched_patterns */
+  AC_PATTERN_t	patterns[0];
+} AC_PATTERNS_t;
+
 
 /* AC_TEXT_t:
  * The input text type that is fed to ac_automata_search() to be searched.
@@ -92,8 +107,11 @@ typedef struct
  * respectively. finally the field 'match_num' maintains the number of
  * matched patterns.
  **/
+struct ac_node;
+
 typedef struct
 {
+  struct ac_node *start_node; /* for continue search */
   AC_PATTERN_t * patterns; /* Array of matched pattern */
   long position; /* The end position of matching pattern(s) in the text */
   unsigned int match_num; /* Number of matched patterns */
@@ -132,6 +150,101 @@ typedef int (*MATCH_CALLBACK_f)(AC_MATCH_t *, AC_TEXT_t *, AC_REP_t *);
 /* AC_PATTRN_MAX_LENGTH:
  * Maximum acceptable pattern length in AC_PATTERN_t.length
  **/
-#define AC_PATTRN_MAX_LENGTH 256
 
+/* Forward Declaration */
+struct edge;
+
+/*
+ * automata node
+ * 3 pointers + 8 bytes : 32/20 bytes for 64/32 bit
+ */
+typedef struct ac_node
+{
+  int id;                              /* Node ID : set after finalize(), only for ac_automata_dump */
+  AC_ALPHABET_t  one_alpha,
+	  	 final:1,	       /* 0: no ; 1: yes, it is a final node */
+		 one:1,use:1,	       /* use: yes/no, one_char: yes/no */
+		 ff:1;		       /* finalized node */
+  unsigned short depth;                /* depth: distance between this node and the root */
+
+  AC_PATTERNS_t  * matched_patterns;   /* Array of matched patterns */
+  struct edge   * outgoing;           /* Array of outgoing edges */
+
+  struct ac_node * failure_node;       /* The failure node of this node */
+} AC_NODE_t;
+
+#ifndef __SIZEOF_POINTER__
+#error SIZEOF_POINTER not defined!
 #endif
+
+
+struct edge {
+  unsigned short degree;      /* Number of outgoing edges */
+  unsigned short max;         /* Max capacity of allocated memory for outgoing */
+  unsigned long  cmap[8];      /* 256 bit */
+  AC_NODE_t	 *next[0];
+ /*
+  * first N elements used for 'next' pointers +
+  * M elements used for symbols storage
+  * M = (max + sizeof(void*)-1) & ( ~(sizeof(void*)-1))
+  *
+  * if sizeof(void*)==8
+  * for max = 8  we must alloc next[9];
+  * for max = 16 we must alloc next[18];
+  *
+  */
+};
+static inline AC_ALPHABET_t *edge_get_alpha(struct edge *e) {
+	return (AC_ALPHABET_t *)(&e->next[e->max]);
+}
+static inline size_t edge_data_size(int num) {
+	return sizeof(void *)*num + ((num + sizeof(void *) - 1) & ~(sizeof(void *)-1));
+}
+
+struct ac_path {
+  AC_NODE_t * n;
+  unsigned short int idx,l;
+};
+
+typedef struct
+{
+  /* The root of the Aho-Corasick trie */
+  AC_NODE_t * root;
+  unsigned int all_nodes_num; /* Number of all nodes in the automata */
+
+  /* this flag indicates that if automata is finalized by
+   * ac_automata_finalize() or not. 1 means finalized and 0
+   * means not finalized (is open). after finalizing automata you can not
+   * add pattern to automata anymore. */
+  unsigned short automata_open;
+
+  /* Statistic Variables */
+  unsigned long total_patterns; /* Total patterns in the automata */
+
+  unsigned long max_str_len; /* largest pattern length. Update by ac_automata_finalize() */
+
+  struct ac_path ac_path[AC_PATTRN_MAX_LENGTH+4];
+  int id;
+
+} AC_AUTOMATA_t;
+
+struct acho_ret_id {
+        int     id;
+        int     position;
+	char	*name;
+};
+typedef struct acho_ret_id acho_ret_id_t;
+
+AC_AUTOMATA_t * ac_automata_init     (void);
+AC_ERROR_t      ac_automata_add      (AC_AUTOMATA_t * thiz, AC_PATTERN_t * str);
+AC_ERROR_t      ac_automata_finalize (AC_AUTOMATA_t * thiz);
+int             ac_automata_search   (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
+						AC_TEXT_t * str, 
+						MATCH_CALLBACK_f mc,
+						AC_REP_t * param);
+void            ac_automata_clean    (AC_AUTOMATA_t * thiz);
+void            ac_automata_release  (AC_AUTOMATA_t * thiz);
+void            ac_automata_dump     (AC_AUTOMATA_t * thiz, 
+					char *buf, size_t bufsize, char repcast);
+
+#endif  

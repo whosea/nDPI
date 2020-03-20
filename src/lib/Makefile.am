@@ -187,16 +187,11 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/whatsapp.c \
 		     protocols/wireguard.c \
 		     protocols/zabbix.c \
-		     third_party/include/actypes.h \
-		     third_party/include/ahocorasick.h \
+		     third_party/include/libahocorasick.h \
 		     third_party/include/ndpi_patricia.h \
-		     third_party/include/node.h \
-		     third_party/include/sort.h \
 		     third_party/include/libcache.h \
-		     third_party/src/ahocorasick.c \
+		     third_party/src/libahocorasick.c \
 		     third_party/src/ht_hash.c \
-		     third_party/src/node.c \
-		     third_party/src/sort.c \
 		     third_party/src/ndpi_md5.c \
 		     third_party/src/ndpi_sha1.c \
 		     third_party/src/libinjection_html5.c \

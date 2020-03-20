@@ -199,7 +199,8 @@ struct nf_ct_ext_ndpi {
 
 extern unsigned long ndpi_log_debug;
 
-#include "../lib/third_party/include/ahocorasick.h"
+#include "../lib/third_party/include/libahocorasick.h"
+
 const char *acerr2txt(AC_ERROR_t r);
 
 void set_debug_trace( struct ndpi_net *n);

@@ -45,7 +45,7 @@
 #include "ndpi_config.h"
 #include "ndpi_api.h"
 
-#include "ahocorasick.h"
+#include "libahocorasick.h"
 #include "libcache.h"
 
 
