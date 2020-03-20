@@ -1123,9 +1123,8 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       if(workflow->__flow_detected_callback != NULL)
 	workflow->__flow_detected_callback(workflow, flow, workflow->__flow_detected_udata);
     }
-    if(flow->ndpi_flow && !flow->ndpi_flow->no_cache_protocol) {
-	ndpi_free_flow_info_half(flow);
-    }
+
+    ndpi_free_flow_info_half(flow);
   }
 }
 
@@ -1363,7 +1362,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     return(nproto);
   }
 
-  if(!flow->detection_completed || flow-ndpi_flow->no_cache_protocol) {
+  if(!flow->detection_completed) {
     u_int enough_packets =
       (((proto == IPPROTO_UDP) && ((flow->src2dst_packets + flow->dst2src_packets) > max_num_udp_dissected_pkts))
        || ((proto == IPPROTO_TCP) && ((flow->src2dst_packets + flow->dst2src_packets) > max_num_tcp_dissected_pkts))) ? 1 : 0;
