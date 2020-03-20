@@ -24,6 +24,12 @@
 #ifndef __NDPI_TYPEDEFS_H__
 #define __NDPI_TYPEDEFS_H__
 
+#define BT_ANNOUNCE
+#define SNAP_EXT
+
+#ifdef __KERNEL__
+#undef HAVE_HYPERSCAN
+#endif
 #include "ndpi_define.h"
 #include "ndpi_protocol_ids.h"
 
@@ -64,6 +70,8 @@ typedef enum {
 	      ndpi_endorder,
 	      ndpi_leaf
 } ndpi_VISIT;
+
+#include "../lib/third_party/include/libcache.h"
 
 /* NDPI_NODE */
 typedef struct node_t {
@@ -397,7 +405,8 @@ struct ndpi_vxlanhdr {
 /* ******************* ********************* ****************** */
 /* ************************************************************ */
 
-/* NDPI_PROTOCOL_BITTORRENT */
+#ifndef __KERNEL__
+
 typedef struct spinlock {
   volatile int    val;
 } spinlock_t;
@@ -405,6 +414,18 @@ typedef struct spinlock {
 typedef struct atomic {
   volatile int counter;
 } atomic_t;
+
+#define atomic_inc(a) ((atomic_t *)(a))->counter++
+#define atomic_dec(a) ((atomic_t *)(a))->counter--
+#define spin_lock_init(a) (a)->val = 0
+
+static inline void spin_lock(spinlock_t *a) { a->val++; };
+static inline void spin_unlock(spinlock_t *a) { a->val--; };
+
+#define spin_lock_bh(a) spin_lock(a)
+#define spin_unlock_bh(a) spin_unlock(a)
+
+#endif
 
 struct hash_ip4p_node {
   struct hash_ip4p_node   *next,*prev;
@@ -423,9 +444,9 @@ struct hash_ip4p {
 struct hash_ip4p_table {
   size_t                  size;
   int			  ipv6;
-  spinlock_t              lock;
+//  spinlock_t              lock;
   atomic_t                count;
-  struct hash_ip4p        tbl;
+  struct hash_ip4p        tbl[0];
 };
 
 struct bt_announce {              // 192 bytes
@@ -805,26 +826,48 @@ struct ndpi_packet_struct {
 #endif
   u_int16_t protocol_stack_info;
 
+/* Don't change order! */
+
+#define host_line_idx (1)
+#define forwarded_line_idx (2)
+#define referer_line_idx (3)
+#define content_line_idx (4)
+#define accept_line_idx (5)
+#define user_agent_line_idx (6)
+#define http_url_name_idx (7)
+#define http_encoding_idx (8)
+#define http_transfer_encoding_idx (9)
+#define http_contentlen_idx (10)
+#define http_cookie_idx (11)
+#define http_origin_idx (12)
+#define http_x_session_type_idx (13)
+#define server_line_idx (14)
+#define http_method_idx (15)
+#define http_response_idx (16)
+#define last_hdr_idx (17)
+
   struct ndpi_int_one_line_struct line[NDPI_MAX_PARSE_LINES_PER_PACKET];
-  /* HTTP headers */
-  struct ndpi_int_one_line_struct host_line;
-  struct ndpi_int_one_line_struct forwarded_line;
-  struct ndpi_int_one_line_struct referer_line;
-  struct ndpi_int_one_line_struct content_line;
-  struct ndpi_int_one_line_struct accept_line;
-  struct ndpi_int_one_line_struct user_agent_line;
-  struct ndpi_int_one_line_struct http_url_name;
-  struct ndpi_int_one_line_struct http_encoding;
-  struct ndpi_int_one_line_struct http_transfer_encoding;
-  struct ndpi_int_one_line_struct http_contentlen;
-  struct ndpi_int_one_line_struct http_cookie;
-  struct ndpi_int_one_line_struct http_origin;
-  struct ndpi_int_one_line_struct http_x_session_type;
-  struct ndpi_int_one_line_struct server_line;
-  struct ndpi_int_one_line_struct http_method;
-  struct ndpi_int_one_line_struct http_response; /* the first "word" in this pointer is the
-						    response code in the packet (200, etc) */
-  u_int8_t http_num_headers; /* number of found (valid) header lines in HTTP request or response */
+  struct ndpi_int_one_line_struct null_line,
+				  host_line,
+				  forwarded_line,
+				  referer_line,
+				  content_line,
+				  accept_line,
+				  user_agent_line,
+				  http_url_name,
+				  http_encoding,
+				  http_transfer_encoding,
+				  http_contentlen,
+				  http_cookie,
+				  http_origin,
+				  http_x_session_type,
+				  server_line,
+				  http_method,
+				  http_response;
+  struct ndpi_int_one_line_struct *hdr_line;
+/* !!!! */
+
+  u_int16_t http_num_headers; /* number of found (valid) header lines in HTTP request or response */
 
   u_int16_t l3_packet_len;
   u_int16_t l4_packet_len;
@@ -1019,9 +1062,8 @@ struct ndpi_detection_module_struct {
   u_int32_t current_ts;
   u_int32_t ticks_per_second;
 
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
   void *user_data;
-#endif
+
   char custom_category_labels[NUM_CUSTOM_CATEGORIES][CUSTOM_CATEGORY_LABEL_LEN];
   /* callback function buffer */
   struct ndpi_call_function_struct callback_buffer[NDPI_MAX_SUPPORTED_PROTOCOLS + 1];
@@ -1043,14 +1085,16 @@ struct ndpi_detection_module_struct {
 
   ndpi_log_level_t ndpi_log_level; /* default error */
 
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
   /* debug callback, only set when debug is used */
   ndpi_debug_function_ptr ndpi_debug_printf;
   const char *ndpi_debug_print_file;
   const char *ndpi_debug_print_function;
   u_int32_t ndpi_debug_print_line;
   NDPI_PROTOCOL_BITMASK debug_bitmask;
-#endif
+
+  //fixme
+  #define NDPI_IP_STRING_SIZE 48
+  char ip_string[NDPI_IP_STRING_SIZE];
 
   /* misc parameters */
   u_int32_t tcp_max_retransmission_window_size;
@@ -1069,7 +1113,9 @@ struct ndpi_detection_module_struct {
     subprotocol_automa,                        /* Used for HTTP subprotocol_detection */
     bigrams_automa, impossible_bigrams_automa; /* TOR */
   /* IMPORTANT: please update ndpi_finalize_initalization() whenever you add a new automa */
-  
+ 
+  spinlock_t host_automa_lock;
+
   struct {
 #ifdef HAVE_HYPERSCAN
     struct hs *hostnames;
@@ -1153,7 +1199,8 @@ struct ndpi_flow_struct {
   /* init parameter, internal used to set up timestamp,... */
   u_int16_t guessed_protocol_id, guessed_host_protocol_id, guessed_category, guessed_header_category;
   u_int8_t l4_proto, protocol_id_already_guessed:1, host_already_guessed:1,
-    init_finished:1, setup_packet_direction:1, packet_direction:1, check_extra_packets:1;
+    init_finished:1, setup_packet_direction:1, packet_direction:1, check_extra_packets:1,
+    no_cache_protocol:1,tcp_data:1;
 
   /*
     if ndpi_struct->direction_detect_disable == 1
@@ -1309,6 +1356,7 @@ struct ndpi_flow_struct {
   u_int16_t packet_direction_counter[2];
   u_int16_t byte_counter[2];
   /* NDPI_PROTOCOL_BITTORRENT */
+  u_int32_t bittorrent_seq;
   u_int8_t bittorrent_stage;		      // can be 0 - 255
 
   /* NDPI_PROTOCOL_DIRECTCONNECT */

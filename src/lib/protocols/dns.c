@@ -234,7 +234,7 @@ static int search_dns_again(struct ndpi_detection_module_struct *ndpi_struct, st
 /* *********************************************** */
 
 static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow) {
-  int payload_offset;
+  int x, payload_offset = 0;
   u_int8_t is_query;
   u_int16_t s_port = 0, d_port = 0;
 
@@ -247,7 +247,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
   } else if(flow->packet.tcp != NULL) /* pkt size > 512 bytes */ {
     s_port = ntohs(flow->packet.tcp->source);
     d_port = ntohs(flow->packet.tcp->dest);
-    payload_offset = 2;
+    payload_offset = x = 2;
   } else {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
@@ -328,8 +328,8 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
       return; /* The response will set the verdict */
     }
 
-    flow->protos.dns.num_queries = (u_int8_t)dns_header.num_queries,
-      flow->protos.dns.num_answers = (u_int8_t) (dns_header.num_answers + dns_header.authority_rrs + dns_header.additional_rrs);
+    flow->protos.dns.num_queries = (u_int8_t)dns_header.num_queries;
+    flow->protos.dns.num_answers = (u_int8_t) (dns_header.num_answers + dns_header.authority_rrs + dns_header.additional_rrs);
 
 #ifdef DNS_DEBUG
     NDPI_LOG_DBG2(ndpi_struct, "[num_queries=%d][num_answers=%d][reply_code=%u][rsp_type=%u][host_server_name=%s]\n",

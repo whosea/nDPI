@@ -37,11 +37,16 @@ extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_st
 // #define DEBUG_TLS_MEMORY 1
 // #define DEBUG_TLS 1
 
-
 // #define DEBUG_CERTIFICATE_HASH
 
 /* #define DEBUG_FINGERPRINT 1 */
 
+#ifdef __KERNEL__
+#undef DEBUG_TLS
+#undef DEBUG_TLS_MEMORY
+#undef DEBUG_CERTIFICATE_HASH
+#undef DEBUG_FINGERPRINT
+#endif
 /*
   NOTE
 
@@ -107,6 +112,7 @@ static u_int32_t ndpi_tls_refine_master_protocol(struct ndpi_detection_module_st
 void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct,
 				struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = &flow->packet;
+  u_int avail_bytes;
 
   /* TCP */
 #ifdef DEBUG_TLS_MEMORY
@@ -129,19 +135,21 @@ void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct
 #endif
   }
 
-  u_int avail_bytes = flow->l4.tcp.tls.message.buffer_len - flow->l4.tcp.tls.message.buffer_used;
+  avail_bytes = flow->l4.tcp.tls.message.buffer_len - flow->l4.tcp.tls.message.buffer_used;
   if(avail_bytes < packet->payload_packet_len) {
     u_int new_len = flow->l4.tcp.tls.message.buffer_len + packet->payload_packet_len;
+#ifdef __KERNEL__
+    if(new_len >= 32*1024) return;
+#endif
     void *newbuf  = ndpi_realloc(flow->l4.tcp.tls.message.buffer,
 				 flow->l4.tcp.tls.message.buffer_len, new_len);
     if(!newbuf) return;
 
+#ifdef DEBUG_TLS_MEMORY
+    printf("[TLS Mem] Enlarging %5u -> %5u buffer\n", flow->l4.tcp.tls.message.buffer_len, new_len);
+#endif
     flow->l4.tcp.tls.message.buffer = (u_int8_t*)newbuf, flow->l4.tcp.tls.message.buffer_len = new_len;
     avail_bytes = flow->l4.tcp.tls.message.buffer_len - flow->l4.tcp.tls.message.buffer_used;
-
-#ifdef DEBUG_TLS_MEMORY
-    printf("[TLS Mem] Enlarging %u -> %u buffer\n", flow->l4.tcp.tls.message.buffer_len, new_len);
-#endif
   }
 
   if(avail_bytes >= packet->payload_packet_len) {
@@ -197,7 +205,9 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
   for(i = p_offset; i < certificate_len; i++) {
     /* Organization OID: 2.5.4.10 */
     if((packet->payload[i] == 0x55) && (packet->payload[i+1] == 0x04) && (packet->payload[i+2] == 0x0a)) {
-      u_int8_t server_len = packet->payload[i+4];
+      u_int8_t server_len = packet->payload[i+4], is_printable = 1;
+      char *server_org;
+      u_int len;
 
       num_found++;
       /* what we want is subject certificate, so we bypass the issuer certificate */
@@ -208,14 +218,14 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 	break;
       }
 
-      char *server_org = (char*)&packet->payload[i+5];
+      server_org = (char*)&packet->payload[i+5];
 
-      u_int len = (u_int)ndpi_min(server_len, sizeof(buffer)-1);
+      len = (u_int)ndpi_min(server_len, sizeof(buffer)-1);
       strncpy(buffer, server_org, len);
       buffer[len] = '\0';
 
       // check if organization string are all printable
-      u_int8_t is_printable = 1;
+      is_printable = 1;
       for(j = 0; j < len; j++) {
 	if(!ndpi_isprint(buffer[j])) {
 	  is_printable = 0;
@@ -236,6 +246,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
       u_int offset = i+4;
 
       if((offset+len) < packet->payload_packet_len) {
+#ifndef __KERNEL__
 	char utcDate[32];
 
 #ifdef DEBUG_TLS
@@ -260,7 +271,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 #endif
 	  }
 	}
-
+#endif
 	offset += len;
 
 	if((offset+1) < packet->payload_packet_len) {
@@ -269,12 +280,12 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 	  offset += 2;
 
 	  if((offset+len) < packet->payload_packet_len) {
+#ifndef __KERNEL__
 #ifdef DEBUG_TLS
 	    printf("[CERTIFICATE] notAfter [len: %u][", len);
 	    for(j=0; j<len; j++) printf("%c", packet->payload[offset+j]);
 	    printf("]\n");
 #endif
-
 	    if(len < (sizeof(utcDate)-1)) {
 	      struct tm utc;
 	      utc.tm_isdst = -1; /* Not set by strptime */
@@ -291,6 +302,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 #endif
 	      }
 	    }
+#endif // __KERNEL__
 	  }
 	}
       }
@@ -324,7 +336,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
 	    cleanupServerName(dNSName, len);
 
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
 	    printf("[TLS] dNSName %s\n", dNSName);
 #endif
 
@@ -353,7 +365,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
 	    i += len;
 	  } else {
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
 	    printf("[TLS] Leftover %u bytes", packet->payload_packet_len - i);
 #endif
 	    break;
@@ -516,6 +528,7 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_search_tls_tcp_memory(ndpi_struct, flow);
 
   while(!something_went_wrong) {
+    u_int16_t processed;
     u_int16_t len, p_len;
     const u_int8_t *p;
 
@@ -550,7 +563,7 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
     p = packet->payload, p_len = packet->payload_packet_len; /* Backup */
 
     /* Split the element in blocks */
-    u_int16_t processed = 5;
+    processed = 5;
 
     while((processed+4) < len) {
       const u_int8_t *block = (const u_int8_t *)&flow->l4.tcp.tls.message.buffer[processed];
@@ -665,7 +678,7 @@ static void tlsInitExtraPacketProcessing(struct ndpi_flow_struct *flow) {
 
 static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow, u_int32_t protocol) {
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
   printf("[TLS] %s()\n", __FUNCTION__);
 #endif
 

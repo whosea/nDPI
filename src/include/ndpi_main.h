@@ -23,13 +23,17 @@
 
 #ifndef __NDPI_MAIN_H__
 #define __NDPI_MAIN_H__
-
+#ifdef HAVE_CONFIG_H
+#include "ndpi_config.h"
+#endif
 #include "ndpi_includes.h"
 #include "ndpi_define.h"
 #include "ndpi_protocol_ids.h"
 #include "ndpi_typedefs.h"
 #include "ndpi_api.h"
 #include "ndpi_protocols.h"
+
+#include "ndpi_kernel_compat.h"
 
 #ifdef __cplusplus
 extern "C" {

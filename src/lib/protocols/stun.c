@@ -143,6 +143,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 					   const u_int16_t payload_length) {
   u_int16_t msg_type, msg_len;
   struct stun_packet_header *h = (struct stun_packet_header*)payload;
+  struct ndpi_packet_struct *packet;
   int rc;
   
   /* STUN over TCP does not look good */
@@ -468,7 +469,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 udp_stun_found:
   flow->protos.stun_ssl.stun.num_processed_pkts++;
 
-  struct ndpi_packet_struct *packet = &flow->packet;
+  packet = &flow->packet;
 
 #ifdef DEBUG_STUN
   printf("==>> NDPI_PROTOCOL_WHATSAPP_CALL\n");

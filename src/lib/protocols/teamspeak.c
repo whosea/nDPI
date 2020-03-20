@@ -53,7 +53,7 @@ void ndpi_search_teamspeak(struct ndpi_detection_module_struct *ndpi_struct, str
 #endif
     
     if(packet->tcp != NULL) {
-#if WEAK_DETECTION_CODE_DISABLED
+#ifdef WEAK_DETECTION_CODE_DISABLED
       u_int16_t tdport, tsport;
       tsport = ntohs(packet->tcp->source), tdport = ntohs(packet->tcp->dest);
 #endif
@@ -66,7 +66,7 @@ void ndpi_search_teamspeak(struct ndpi_detection_module_struct *ndpi_struct, str
 	  ndpi_int_teamspeak_add_connection(ndpi_struct, flow);
 	}  /* http://www.imfirewall.com/en/protocols/teamSpeak.htm  */
       }
-#if WEAK_DETECTION_CODE_DISABLED
+#ifdef WEAK_DETECTION_CODE_DISABLED
       else if((tsport == 14534 || tdport == 14534) || (tsport == 51234 || tdport == 51234)) {
 	NDPI_LOG_INFO(ndpi_struct, "found TEAMSPEAK\n");
 	ndpi_int_teamspeak_add_connection(ndpi_struct, flow);

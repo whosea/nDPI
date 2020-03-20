@@ -25,12 +25,10 @@
 #include "ndpi_config.h"
 #endif
 
+#ifndef __KERNEL__
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/types.h>
-
-#include "ndpi_api.h"
-#include "ndpi_config.h"
 
 #include <time.h>
 #ifndef WIN32
@@ -40,6 +38,15 @@
 #if defined __FreeBSD__ || defined __NetBSD__ || defined __OpenBSD__
 #include <sys/endian.h>
 #endif
+#else
+#include <asm/byteorder.h>
+#include <linux/types.h>
+#endif
+
+#include "ndpi_api.h"
+// FIXME #include "ndpi_config.h"
+
+#ifndef __KERNEL__
 
 /* ********************************** */
 
@@ -2033,5 +2040,27 @@ int ndpi_deserialize_clone_all(ndpi_deserializer *deserializer, ndpi_serializer 
 
   return(0);
 }
+#else
+int ndpi_serialize_string_string(ndpi_serializer *_serializer,
+				 const char *key, const char *_value) {
+  return 0;
+}
 
+int ndpi_serialize_string_uint32(ndpi_serializer *_serializer,
+				 const char *key, u_int32_t value) {
+  return 0;
+}
+
+int ndpi_init_serializer(ndpi_serializer *_serializer,
+			 ndpi_serialization_format fmt) {
+  return 0;
+}
+int ndpi_serialize_end_of_block(ndpi_serializer *_serializer) {
+  return 0;
+}
+int ndpi_serialize_start_of_block(ndpi_serializer *_serializer,
+				  const char *key) {
+  return 0;
+}
+#endif
 /* ********************************** */

@@ -26,41 +26,59 @@
 /* Forward Declaration */
 struct edge;
 
-/* automata node */
+/*
+ * automata node
+ * 3 pointers + 16 bytes : 40/28 bytes for 64/32 bit
+ */
 typedef struct ac_node
 {
-  int id; /* Node ID : for debugging purpose */
-  short int final; /* 0: no ; 1: yes, it is a final node */
-  struct ac_node * failure_node; /* The failure node of this node */
-  unsigned short depth; /* depth: distance between this node and the root */
+  AC_PATTERN_t   * matched_patterns;   /* Array of matched patterns */
+  struct edge    * outgoing;           /* Array of outgoing edges */
 
-  /* Matched patterns */
-  AC_PATTERN_t * matched_patterns; /* Array of matched patterns */
+  struct ac_node * failure_node;       /* The failure node of this node */
+
+  int id;                              /* Node ID : set after finalize() */
+  unsigned short final;                /* 0: no ; 1: yes, it is a final node */
+  unsigned short depth;                /* depth: distance between this node and the root */
+
   unsigned short matched_patterns_num; /* Number of matched patterns at this node */
   unsigned short matched_patterns_max; /* Max capacity of allocated memory for matched_patterns */
 
-  /* Outgoing Edges */
-  struct edge * outgoing; /* Array of outgoing edges */
-  unsigned short outgoing_degree; /* Number of outgoing edges */
-  unsigned short outgoing_max; /* Max capacity of allocated memory for outgoing */
+  unsigned short outgoing_degree;      /* Number of outgoing edges */
+  unsigned short outgoing_max;         /* Max capacity of allocated memory for outgoing */
 } AC_NODE_t;
 
-/* The Edge of the Node */
+#ifndef __SIZEOF_POINTER__
+#error SIZEOF_POINTER not defined!
+#endif
+
+/* The Edge of the Node
+ * After changes this structure 
+ * needed review node_edge_swap()
+ * if __SIZEOF_POINTER__ == 8 then sizeof(struct edge) == 16
+ * if __SIZEOF_POINTER__ == 4 then sizeof(struct edge) == 8
+ */
+
 struct edge
 {
-  AC_ALPHABET_t alpha; /* Edge alpha */
   struct ac_node * next; /* Target of the edge */
-};
+  AC_ALPHABET_t alpha; /* Edge alpha */
+}
+#if __SIZEOF_POINTER__ == 8
+__attribute__((aligned(8)));
+#else
+__attribute__((aligned(4)));
+#endif
+
 
 
 AC_NODE_t * node_create            (void);
 AC_NODE_t * node_create_next       (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
-void        node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str, u_int8_t is_existing);
+void        node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str);
 void        node_register_outgoing (AC_NODE_t * thiz, AC_NODE_t * next, AC_ALPHABET_t alpha);
 AC_NODE_t * node_find_next         (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
 AC_NODE_t * node_findbs_next       (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
-void        node_release           (AC_NODE_t * thiz, u_int8_t free_pattern);
-void        node_assign_id         (AC_NODE_t * thiz);
+void        node_release           (AC_NODE_t * thiz);
 void        node_sort_edges        (AC_NODE_t * thiz);
 
 #endif

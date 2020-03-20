@@ -47,7 +47,7 @@ extern "C" {
 #define SAVE_DETECTION_BITMASK_AS_UNKNOWN     1
 #define NO_SAVE_DETECTION_BITMASK_AS_UNKNOWN  0
 
-
+  extern int ndpi_debug_print_level;
   /**
    * Check if a string is encoded with punycode
    * ( https://tools.ietf.org/html/rfc3492 )
@@ -132,8 +132,10 @@ extern "C" {
    * @par ndpi_mod  = the struct created for the protocol detection
    * @par match     = the struct passed to match the protocol
    *
+   * @return  0 - success, -1 - error
+   *
    */
-  void ndpi_init_protocol_match(struct ndpi_detection_module_struct *ndpi_mod,
+  int ndpi_init_protocol_match(struct ndpi_detection_module_struct *ndpi_mod,
 				ndpi_protocol_match *match);
 
   /**
@@ -532,6 +534,9 @@ extern "C" {
   const char* ndpi_category_get_name(struct ndpi_detection_module_struct *ndpi_mod,
 				     ndpi_protocol_category_t category);
 
+  u_int16_t ndpi_get_proto_by_name(struct ndpi_detection_module_struct *ndpi_mod,
+		  		   const char *name);
+
   /**
    * Set protocol category string
    *
@@ -763,6 +768,16 @@ extern "C" {
   void ndpi_finalize_automa(void *_automa);
 
   /**
+   * Open the automa for change
+   *
+   * @par     The automata initialized with ndpi_init_automa();
+   *
+   */
+  void ndpi_open_automa(void *_automa);
+  int  ndpi_is_open_automa(void *_automa);
+  void *ndpi_automa_host(struct ndpi_detection_module_struct *ndpi_struct);
+
+  /**
    * Add a string to match to an automata
    *
    * @par     The automata initialized with ndpi_init_automa();
@@ -776,9 +791,11 @@ extern "C" {
 				 const char *ip_address_and_mask, ndpi_protocol_category_t category);
   int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 const char *name_to_add, ndpi_protocol_category_t category);
+#ifndef __KERNEL__
   int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 const char *ip_or_name, ndpi_protocol_category_t category);
   int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_struct);
+#endif
   int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 u_int32_t saddr,
 				 u_int32_t daddr,
@@ -823,7 +840,10 @@ extern "C" {
    */
   int ndpi_match_string_id(void *_automa, char *string_to_match, u_int match_len, unsigned long *id);
 
+  int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, u_int8_t do_add);
+
   /* Utility functions to set ndpi malloc/free/print wrappers */
+  void set_ndpi_ticks_per_second(u_int32_t ticks_per_second);
   void set_ndpi_malloc(void* (*__ndpi_malloc)(size_t size));
   void set_ndpi_free(void  (*__ndpi_free)(void *ptr));
   void set_ndpi_flow_malloc(void* (*__ndpi_flow_malloc)(size_t size));
@@ -844,14 +864,8 @@ extern "C" {
   u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndpi_struct,
 					  struct ndpi_flow_struct *flow);    
   u_int8_t ndpi_is_safe_ssl_cipher(u_int32_t cipher);
-  const char* ndpi_cipher2str(u_int32_t cipher);
-  const char* ndpi_tunnel2str(ndpi_packet_tunnel tt);
   u_int16_t ndpi_guess_host_protocol_id(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow);
-  int ndpi_has_human_readeable_string(struct ndpi_detection_module_struct *ndpi_struct,
-				      char *buffer, u_int buffer_size,
-				      u_int8_t min_string_match_len, /* Will return 0 if no string > min_string_match_len have been found */
-				      char *outbuf, u_int outbuf_len);
   char* ndpi_ssl_version2str(u_int16_t version, u_int8_t *unknown_tls_version);
   void ndpi_patchIPv6Address(char *str);
   void ndpi_user_pwd_payload_copy(u_int8_t *dest, u_int dest_len, u_int offset,
@@ -860,7 +874,13 @@ extern "C" {
   char* ndpi_base64_encode(unsigned char const* bytes_to_encode, ssize_t in_len);
   int ndpi_load_ipv4_ptree(struct ndpi_detection_module_struct *ndpi_str,
 			   const char *path, u_int16_t protocol_id);
-    
+#ifndef __KERNEL__    
+  const char* ndpi_cipher2str(u_int32_t cipher);
+  const char* ndpi_tunnel2str(ndpi_packet_tunnel tt);
+  int ndpi_has_human_readeable_string(struct ndpi_detection_module_struct *ndpi_struct,
+				      char *buffer, u_int buffer_size,
+				      u_int8_t min_string_match_len, /* Will return 0 if no string > min_string_match_len have been found */
+				      char *outbuf, u_int outbuf_len);
   int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
 		     struct ndpi_flow_struct *flow,
 		     u_int8_t ip_version,
@@ -870,7 +890,7 @@ extern "C" {
 		     u_int16_t src_port, u_int16_t dst_port,
 		     ndpi_protocol l7_protocol,
 		     ndpi_serializer *serializer);
-
+#endif
   void ndpi_md5(const u_char *data, size_t data_len, u_char hash[16]);
 
   /* ptree (trie) API */
@@ -879,6 +899,7 @@ extern "C" {
   int ndpi_ptree_match_addr(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, uint *user_data);
   void ndpi_ptree_destroy(ndpi_ptree_t *tree);
 
+#ifndef __KERNEL__    
   /* Serializer */
   int ndpi_init_serializer_ll(ndpi_serializer *serializer, ndpi_serialization_format fmt,
 			      u_int32_t buffer_size);
@@ -963,7 +984,6 @@ extern "C" {
 
   int ndpi_deserialize_clone_item(ndpi_deserializer *deserializer, ndpi_serializer *serializer);
   int ndpi_deserialize_clone_all(ndpi_deserializer *deserializer, ndpi_serializer *serializer);
-
   /* Data analysis */
   struct ndpi_analyze_struct* ndpi_alloc_data_analysis(u_int16_t _max_series_len);
   void ndpi_init_data_analysis(struct ndpi_analyze_struct *s, u_int16_t _max_series_len);
@@ -988,6 +1008,7 @@ extern "C" {
 
   u_int8_t ndpi_is_protocol_detected(struct ndpi_detection_module_struct *ndpi_str,
 				     ndpi_protocol proto);
+#endif
 #ifdef __cplusplus
 }
 #endif

@@ -26,7 +26,6 @@
 #define NDPI_CURRENT_PROTO NDPI_PROTOCOL_HTTP
 
 #include "ndpi_api.h"
-#include <stdlib.h>
 
 static void ndpi_search_http_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 				 struct ndpi_flow_struct *flow);
@@ -466,6 +465,12 @@ static struct l_string {
 		    STATIC_STRING_L("REPORT ") };
 static const char *http_fs = "CDGHOPR";
 
+#ifdef NDPI_ENABLE_DEBUG_MESSAGES
+static uint8_t non_ctrl(uint8_t c) {
+  return c < 32 ? '.':c;
+}
+#endif
+
 static u_int16_t http_request_url_offset(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = &flow->packet;
@@ -667,7 +672,6 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
 
 #if defined(NDPI_PROTOCOL_1KXUN) || defined(NDPI_PROTOCOL_IQIYI)
       /* Check for 1kxun packet */
-      int a;
       for (a = 0; a < packet->parsed_lines; a++) {
 	if(packet->line[a].len >= 14 && (memcmp(packet->line[a].ptr, "Client-Source:", 14)) == 0) {
 	  if((memcmp(packet->line[a].ptr+15, "1kxun", 5)) == 0) {

@@ -18,9 +18,12 @@
  along with multifast.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef __KERNEL__
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
+#endif
 #include "ndpi_api.h"
 #include "../include/node.h"
 #include "sort.h"
@@ -35,7 +38,7 @@
    different depths */
 
 /* Private function prototype */
-void node_init         (AC_NODE_t * thiz);
+AC_NODE_t *  node_init (AC_NODE_t * thiz);
 int  node_edge_compare (const void * l, const void * r);
 int  node_has_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * newstr);
 
@@ -47,8 +50,10 @@ int  node_has_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * newstr);
 AC_NODE_t * node_create(void)
 {
   AC_NODE_t * thiz =  (AC_NODE_t *) ndpi_malloc (sizeof(AC_NODE_t));
-  node_init(thiz);
-  node_assign_id(thiz);
+  if(!node_init(thiz)) {
+	  ndpi_free(thiz);
+	  return NULL;
+  }
   return thiz;
 }
 
@@ -56,34 +61,43 @@ AC_NODE_t * node_create(void)
  * FUNCTION: node_init
  * Initialize node
  ******************************************************************************/
-void node_init(AC_NODE_t * thiz)
+AC_NODE_t * node_init(AC_NODE_t * thiz)
 {
+  if(!thiz) return thiz;
   memset(thiz, 0, sizeof(AC_NODE_t));
 
   thiz->outgoing_max = REALLOC_CHUNK_OUTGOING;
   thiz->outgoing = (struct edge *) ndpi_malloc
     (thiz->outgoing_max*sizeof(struct edge));
+  if(!thiz->outgoing) {
+	return NULL;
+  }
 
   thiz->matched_patterns_max = REALLOC_CHUNK_MATCHSTR;
   thiz->matched_patterns = (AC_PATTERN_t *) ndpi_malloc
     (thiz->matched_patterns_max*sizeof(AC_PATTERN_t));
+  if(!thiz->matched_patterns) {
+	ndpi_free(thiz->outgoing);
+	return NULL;
+  }
+  return thiz;
 }
 
 /******************************************************************************
  * FUNCTION: node_release
  * Release node
  ******************************************************************************/
-void node_release(AC_NODE_t * thiz, u_int8_t free_pattern)
+void node_release(AC_NODE_t * thiz)
 {
-  if(free_pattern) {
-    for(int i=0; i<thiz->matched_patterns_num; i++) {
-      if(!thiz->matched_patterns[i].is_existing)
-        ndpi_free(thiz->matched_patterns[i].astring);
-    }
+  if(thiz->matched_patterns) {
+	ndpi_free(thiz->matched_patterns);
+	thiz->matched_patterns = NULL;
   }
-
-  ndpi_free(thiz->matched_patterns);
-  ndpi_free(thiz->outgoing);
+  if(thiz->outgoing) {
+	ndpi_free(thiz->outgoing);
+	thiz->outgoing = NULL;
+  }
+  memset(thiz, 0, sizeof(AC_NODE_t));
   ndpi_free(thiz);
 }
 
@@ -99,8 +113,9 @@ AC_NODE_t * node_find_next(AC_NODE_t * thiz, AC_ALPHABET_t alpha)
 
   for (i=0; i < thiz->outgoing_degree; i++)
     {
-      if(thiz->outgoing[i].alpha == alpha)
+      if(thiz->outgoing[i].alpha == alpha) {
 	return (thiz->outgoing[i].next);
+      }
     }
   return NULL;
 }
@@ -139,10 +154,7 @@ AC_NODE_t * node_findbs_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
  ******************************************************************************/
 int node_has_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * newstr)
 {
-  int i;
-#if 0
-  int j;
-#endif
+  int i, j;
   AC_PATTERN_t * str;
 
   for (i=0; i < thiz->matched_patterns_num; i++)
@@ -152,19 +164,12 @@ int node_has_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * newstr)
       if (str->length != newstr->length)
 	continue;
 
-#if 0
-      /* Original code */
       for (j=0; j<(int)str->length; j++)
 	if(str->astring[j] != newstr->astring[j])
 	  continue;
 
       if (j == str->length)
 	return 1;
-#else
-      /* https://github.com/ntop/nDPI/issues/837 */
-      if (strncmp(str->astring, newstr->astring, str->length) == 0)
-	return 1;
-#endif
     }
   return 0;
 }
@@ -182,7 +187,10 @@ AC_NODE_t * node_create_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
     return NULL;
   /* Otherwise register new edge */
   next = node_create ();
-  node_register_outgoing(thiz, next, alpha);
+  if(next) {
+	node_register_outgoing(thiz, next, alpha);
+	next->depth = thiz->depth+1;
+  }
 
   return next;
 }
@@ -191,7 +199,7 @@ AC_NODE_t * node_create_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
  * FUNCTION: node_register_matchstr
  * Adds the pattern to the list of accepted pattern.
  ******************************************************************************/
-void node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str, u_int8_t is_existing)
+void node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str)
 {
   /* Check if the new pattern already exists in the node list */
   if (node_has_matchstr(thiz, str))
@@ -209,7 +217,6 @@ void node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str, u_int8_t is_e
 
   thiz->matched_patterns[thiz->matched_patterns_num].astring = str->astring;
   thiz->matched_patterns[thiz->matched_patterns_num].length = str->length;
-  thiz->matched_patterns[thiz->matched_patterns_num].is_existing = is_existing;
   memcpy(&thiz->matched_patterns[thiz->matched_patterns_num].rep, &str->rep, sizeof(AC_REP_t));
   thiz->matched_patterns_num++;
 }
@@ -234,16 +241,6 @@ void node_register_outgoing
 }
 
 /******************************************************************************
- * FUNCTION: node_assign_id
- * assign a unique ID to the node (used for debugging purpose).
- ******************************************************************************/
-void node_assign_id (AC_NODE_t * thiz)
-{
-  static int unique_id = 1;
-  thiz->id = unique_id ++;
-}
-
-/******************************************************************************
  * FUNCTION: node_edge_compare
  * Comparison function for qsort. see man qsort.
  ******************************************************************************/
@@ -264,11 +261,43 @@ int node_edge_compare (const void * l, const void * r)
     return -1;
 }
 
+static void node_edge_swap (void * l, void * r, int s)
+{
+/* We hope for an optimizer that will leave only 1 option. */
+switch(sizeof(struct edge)) {
+case 16: // for 64bit
+	{
+	uint64_t t1,t2,*p1 = l,*p2 = r;
+
+	t1  = *p1; t2    = p1[1];
+	*p1 = *p2; p1[1] = p2[1];
+	*p2 = t1;  p2[1] = t2;
+	}
+	break;
+case 8: // for 32bit
+	{
+	uint32_t t1,t2,*p1 = l,*p2 = r;
+
+	t1  = *p1; t2    = p1[1];
+	*p1 = *p2; p1[1] = p2[1];
+	*p2 = t1;  p2[1] = t2;
+	}
+	break;
+default: { // What is ???
+	  uint8_t a;
+	  struct edge *le = l, *re = r;
+	  void *p = le->next;  le->next  = re->next;  re->next  = p;
+		a = le->alpha; le->alpha = re->alpha; re->alpha = a;
+	 }
+}
+}
+
 /******************************************************************************
  * FUNCTION: node_sort_edges
  * sorts edges alphabets.
  ******************************************************************************/
 void node_sort_edges (AC_NODE_t * thiz)
 {
-  sort ((void *)thiz->outgoing, thiz->outgoing_degree, sizeof(struct edge), node_edge_compare, NULL);
+  sort ((void *)thiz->outgoing, thiz->outgoing_degree, 
+		sizeof(struct edge), node_edge_compare, node_edge_swap);
 }

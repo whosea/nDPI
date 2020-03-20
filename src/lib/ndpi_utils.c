@@ -21,19 +21,10 @@
  *
  */
 
-
+#ifndef __KERNEL__
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/types.h>
-
-
-#define NDPI_CURRENT_PROTO NDPI_PROTOCOL_UNKNOWN
-
-#include "ndpi_config.h"
-#include "ndpi_api.h"
-
-#include "ahocorasick.h"
-#include "libcache.h"
 
 #include <time.h>
 #ifndef WIN32
@@ -43,14 +34,30 @@
 #if defined __FreeBSD__ || defined __NetBSD__ || defined __OpenBSD__
 #include <sys/endian.h>
 #endif
+#else
+#include <asm/byteorder.h>
+#include <linux/types.h>
+#include <ndpi_kernel_compat.h>
+#endif
+
+#define NDPI_CURRENT_PROTO NDPI_PROTOCOL_UNKNOWN
+
+#include "ndpi_config.h"
+#include "ndpi_api.h"
+
+#include "ahocorasick.h"
+#include "libcache.h"
+
 
 #include "third_party/include/ndpi_patricia.h"
 #include "third_party/include/ht_hash.h"
 
+#ifndef __KERNEL__
 #include "third_party/include/libinjection.h"
 #include "third_party/include/libinjection_sqli.h"
 #include "third_party/include/libinjection_xss.h"
 #include "third_party/include/rce_injection.h"
+#endif
 
 #define NDPI_CONST_GENERIC_PROTOCOL_NAME  "GenericProtocol"
 
@@ -881,7 +888,8 @@ char* ndpi_base64_encode(unsigned char const* bytes_to_encode, ssize_t in_len) {
   }
 
   if(i) {
-    for(int j = i; j < 3; j++)
+    int j;
+    for(j = i; j < 3; j++)
       char_array_3[j] = '\0';
 
     char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
@@ -889,7 +897,7 @@ char* ndpi_base64_encode(unsigned char const* bytes_to_encode, ssize_t in_len) {
     char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
     char_array_4[3] = char_array_3[2] & 0x3f;
 
-    for(int j = 0; (j < i + 1); j++)
+    for(j = 0; (j < i + 1); j++)
       ret[len++] = base64_table[char_array_4[j]];
 
     while((i++ < 3))
@@ -902,8 +910,37 @@ char* ndpi_base64_encode(unsigned char const* bytes_to_encode, ssize_t in_len) {
 }
 
 /* ********************************** */
-/* ********************************** */
 
+const char* ndpi_tunnel2str(ndpi_packet_tunnel tt) {
+  switch(tt) {
+  case ndpi_no_tunnel:
+    return("No-Tunnel");
+    break;
+    
+  case ndpi_gtp_tunnel:
+    return("GTP");
+    break;
+    
+  case ndpi_capwap_tunnel:
+    return("CAPWAP");
+    break;
+    
+  case ndpi_tzsp_tunnel:
+    return("TZSP");
+    break;
+
+  case ndpi_l2tp_tunnel:
+    return("L2TP");
+    break;
+  }
+
+  return("");
+}
+
+
+/* ********************************** */
+/* ********************************** */
+#ifndef __KERNEL__
 int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
 		   struct ndpi_flow_struct *flow,
 		   u_int8_t ip_version,
@@ -1089,7 +1126,6 @@ int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
         before = gmtime_r((const time_t *)&flow->protos.stun_ssl.ssl.notBefore, &a);
       if(flow->protos.stun_ssl.ssl.notAfter)
         after  = gmtime_r((const time_t *)&flow->protos.stun_ssl.ssl.notAfter, &b);
-
       if(!unknown_tls_version) {
 	ndpi_serialize_start_of_block(serializer, "tls");
 	ndpi_serialize_string_string(serializer, "version", version);
@@ -1134,35 +1170,6 @@ int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
 }
 
 /* ********************************** */
-
-const char* ndpi_tunnel2str(ndpi_packet_tunnel tt) {
-  switch(tt) {
-  case ndpi_no_tunnel:
-    return("No-Tunnel");
-    break;
-    
-  case ndpi_gtp_tunnel:
-    return("GTP");
-    break;
-    
-  case ndpi_capwap_tunnel:
-    return("CAPWAP");
-    break;
-    
-  case ndpi_tzsp_tunnel:
-    return("TZSP");
-    break;
-
-  case ndpi_l2tp_tunnel:
-    return("L2TP");
-    break;
-  }
-
-  return("");
-}
-
-/* ********************************** */
-
 /*
   /dv/vulnerabilities/xss_r/?name=%3Cscript%3Econsole.log%28%27JUL2D3WXHEGWRAFJE2PI7OS71Z4Z8RFUHXGNFLUFYVP6M3OL55%27%29%3Bconsole.log%28document.cookie%29%3B%3C%2Fscript%3E
   /dv/vulnerabilities/sqli/?id=1%27+and+1%3D1+union+select+null%2C+table_name+from+information_schema.tables%23&Submit=Submit
@@ -1211,6 +1218,7 @@ static int ndpi_is_xss_injection(char* query) {
   size_t qlen = strlen(query);
   return libinjection_xss(query, qlen);
 }
+
 
 /* ********************************** */
 
@@ -1378,7 +1386,7 @@ ndpi_url_risk ndpi_validate_url(char *url) {
   if(orig_str) ndpi_free(orig_str);
   return(rc);
 }
-
+#endif
 /* ******************************************************************** */
 
 u_int8_t ndpi_is_protocol_detected(struct ndpi_detection_module_struct *ndpi_str,

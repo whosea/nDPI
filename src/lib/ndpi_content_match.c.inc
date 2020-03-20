@@ -20,6 +20,7 @@
 
 /* ****************************************************** */
 
+#if 0
 static ndpi_network host_protocol_list[] = {
   /*
     SoundCloud
@@ -8594,7 +8595,7 @@ static ndpi_network host_protocol_list[] = {
   /* End */
   { 0x0, 0, 0 }
 };
-
+#endif
 
 /* ****************************************************** */
 
@@ -8668,7 +8669,7 @@ https://www.regular-expressions.info/email.html
 
 /* ****************************************************** */
 
-static ndpi_protocol_match host_match[] = {
+ndpi_protocol_match host_match[] = {
   { "s3.ll.dash.row.aiv-cdn.net", NULL, "s3\\.ll\\.dash\\.row\\.aiv-cdn\\.net",          "AmazonVideo",      NDPI_PROTOCOL_AMAZON_VIDEO, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_FUN },
   { "s3-dub.cf.dash.row.aiv-cdn.net", NULL, "s3-dub\\.cf\\.dash\\.row\\.aiv-cdn\\.net",  "AmazonVideo",      NDPI_PROTOCOL_AMAZON_VIDEO, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_FUN },
   { "dmqdd6hw24ucf.cloudfront.net", NULL, "dmqdd6hw24ucf\\.cloudfront\\.net",            "AmazonVideo",      NDPI_PROTOCOL_AMAZON_VIDEO, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_FUN },
@@ -9144,6 +9145,7 @@ static ndpi_protocol_match host_match[] = {
    Do NOT pur here strings that overlap with string in host_match[]
    specified above
 */
+#ifndef __KERNEL__
 static ndpi_category_match category_match[] = {
    { ".edgecastcdn.net", "egdecastcdn" TLD,                       NDPI_PROTOCOL_CATEGORY_MEDIA },
    { ".hwcdn.net", "hwcdn" TLD,                                   NDPI_PROTOCOL_CATEGORY_MEDIA },
@@ -9201,7 +9203,7 @@ static ndpi_category_match category_match[] = {
 
    { NULL, NULL, 0 }
 };
-
+#endif
 /* ******************************************************************** */
 
 /*

@@ -362,7 +362,7 @@ static uint16_t ndpi_get_proto_id(struct ndpi_detection_module_struct *ndpi_mod,
 }
 
 /* ***************************************************** */
-
+extern int bt_parse_debug;
 static NDPI_PROTOCOL_BITMASK debug_bitmask;
 static char _proto_delim[] = " \t,:;";
 static int parse_debug_proto(struct ndpi_detection_module_struct *ndpi_mod, char *str) {
@@ -388,6 +388,9 @@ static int parse_debug_proto(struct ndpi_detection_module_struct *ndpi_mod, char
     if(proto == NDPI_PROTOCOL_UNKNOWN && strcmp(n,"unknown") && strcmp(n,"0")) {
       fprintf(stderr,"Invalid protocol %s\n",n);
       return 1;
+    }
+    if(proto == NDPI_PROTOCOL_BITTORRENT) {
+	bt_parse_debug = 1;
     }
     if(op)
       NDPI_BITMASK_ADD(debug_bitmask,proto);
@@ -1120,8 +1123,9 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       if(workflow->__flow_detected_callback != NULL)
 	workflow->__flow_detected_callback(workflow, flow, workflow->__flow_detected_udata);
     }
-
-    ndpi_free_flow_info_half(flow);
+    if(flow->ndpi_flow && !flow->ndpi_flow->no_cache_protocol) {
+	ndpi_free_flow_info_half(flow);
+    }
   }
 }
 
@@ -1359,7 +1363,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     return(nproto);
   }
 
-  if(!flow->detection_completed) {
+  if(!flow->detection_completed || flow-ndpi_flow->no_cache_protocol) {
     u_int enough_packets =
       (((proto == IPPROTO_UDP) && ((flow->src2dst_packets + flow->dst2src_packets) > max_num_udp_dissected_pkts))
        || ((proto == IPPROTO_TCP) && ((flow->src2dst_packets + flow->dst2src_packets) > max_num_tcp_dissected_pkts))) ? 1 : 0;

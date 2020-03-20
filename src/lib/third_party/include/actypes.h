@@ -111,6 +111,7 @@ typedef enum
     ACERR_ZERO_PATTERN, /* Empty pattern (zero length) */
     ACERR_AUTOMATA_CLOSED, /* Automata is closed. after calling
 			      ac_automata_finalize() you can not add new patterns to the automata. */
+    ACERR_ERROR, /* common error */
   } AC_ERROR_t;
 
 /* MATCH_CALLBACK_t:
@@ -131,6 +132,6 @@ typedef int (*MATCH_CALLBACK_f)(AC_MATCH_t *, AC_TEXT_t *, AC_REP_t *);
 /* AC_PATTRN_MAX_LENGTH:
  * Maximum acceptable pattern length in AC_PATTERN_t.length
  **/
-#define AC_PATTRN_MAX_LENGTH 1024
+#define AC_PATTRN_MAX_LENGTH 256
 
 #endif

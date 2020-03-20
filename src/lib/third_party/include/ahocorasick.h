@@ -23,17 +23,17 @@
 
 #include "node.h"
 
+struct ac_path {
+  AC_NODE_t * n;
+  unsigned short int idx,l;
+};
+
 typedef struct
 {
   /* The root of the Aho-Corasick trie */
   AC_NODE_t * root;
 
-  /* maintain all nodes pointers. it will be used to access or release
-   * all nodes. */
-  AC_NODE_t ** all_nodes;
-
   unsigned int all_nodes_num; /* Number of all nodes in the automata */
-  unsigned int all_nodes_max; /* Current max allocated memory for *all_nodes */
 
   AC_MATCH_t match; /* Any match is reported with this */
   MATCH_CALLBACK_f match_callback; /* Match call-back function */
@@ -44,12 +44,6 @@ typedef struct
    * add pattern to automata anymore. */
   unsigned short automata_open;
 
-  /* Statistic Variables */
-  unsigned long total_patterns; /* Total patterns in the automata */
-
-} AC_AUTOMATA_t;
-
-typedef struct {
   /* It is possible to feed a large input to the automata chunk by chunk to
    * be searched using ac_automata_search(). in fact by default automata
    * thinks that all chunks are related unless you do ac_automata_reset().
@@ -57,14 +51,24 @@ typedef struct {
   AC_NODE_t * current_node; /* Pointer to current node while searching */
   unsigned long base_position; /* Represents the position of current chunk
 				  related to whole input text */
-} AC_SEARCH_t;
+  /* Statistic Variables */
+  unsigned long total_patterns; /* Total patterns in the automata */
+
+  unsigned long max_str_len; /* largest pattern length. Update by ac_automata_finalize() */
+
+  struct ac_path ac_path[AC_PATTRN_MAX_LENGTH+4];
+
+} AC_AUTOMATA_t;
 
 
 AC_AUTOMATA_t * ac_automata_init     (MATCH_CALLBACK_f mc);
 AC_ERROR_t      ac_automata_add      (AC_AUTOMATA_t * thiz, AC_PATTERN_t * str);
 void            ac_automata_finalize (AC_AUTOMATA_t * thiz);
 int             ac_automata_search   (AC_AUTOMATA_t * thiz, AC_TEXT_t * str, AC_REP_t * param);
-void            ac_automata_release  (AC_AUTOMATA_t * thiz, u_int8_t free_pattern);
+void            ac_automata_reset    (AC_AUTOMATA_t * thiz);
+void            ac_automata_clean    (AC_AUTOMATA_t * thiz);
+void            ac_automata_release  (AC_AUTOMATA_t * thiz);
 void            ac_automata_display  (AC_AUTOMATA_t * thiz, char repcast);
+void            ac_automata_dump     (AC_AUTOMATA_t * thiz, char *buf, size_t bufsize, char repcast);
 
 #endif

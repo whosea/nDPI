@@ -56,7 +56,7 @@
 
 #include "reader_util.h"
 #include "intrusion_detection.h"
-
+extern int bt_parse_debug;
 
 /** Client parameters **/
 
@@ -1116,7 +1116,7 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
       flowGetBDMeanandVariance(flow);
     }
 
-    fprintf(csv_fp, "\n");
+    if(csv_fp) fprintf(csv_fp, "\n");
     return;
   }
 
@@ -1772,12 +1772,13 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
 
 /* *********************************************** */
 
-#if 0
+#if 1
 /**
  * @brief Print debug
  */
-static void debug_printf(u_int32_t protocol, void *id_struct,
+void debug_printf(u_int32_t protocol, void *id_struct,
 			 ndpi_log_level_t log_level,
+			 const char *file, const char *func, unsigned line,
 			 const char *format, ...) {
   va_list va_ap;
   struct tm result;
@@ -1836,6 +1837,9 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
   // enable all protocols
   NDPI_BITMASK_SET_ALL(all);
   ndpi_set_protocol_detection_bitmask2(ndpi_thread_info[thread_id].workflow->ndpi_struct, &all);
+#ifdef NDPI_PROTOCOL_BITTORRENT
+     ndpi_bittorrent_init(ndpi_thread_info[thread_id].workflow->ndpi_struct,9*1024,2100,0);
+#endif
 
   // clear memory for results
   memset(ndpi_thread_info[thread_id].workflow->stats.protocol_counter, 0,
@@ -1852,6 +1856,7 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
     ndpi_load_categories_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _customCategoryFilePath);
 
   ndpi_finalize_initalization(ndpi_thread_info[thread_id].workflow->ndpi_struct);
+  set_ndpi_debug_function(ndpi_thread_info[thread_id].workflow->ndpi_struct, debug_printf);
 }
 
 /* *********************************************** */

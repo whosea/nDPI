@@ -21,12 +21,31 @@ A million repetitions of "a"
 
 #define SHA1HANDSOFF
 
+#ifndef __KERNEL__
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>	/* for u_int*_t */
 #if defined(__sun)
 #include "solarisfixes.h"
 #endif
+#else
+#include <asm/byteorder.h>
+#include <linux/types.h>
+
+#ifdef __LITTLE_ENDIAN
+#define BYTE_ORDER __LITTLE_ENDIAN
+#endif
+#ifdef __BIG_ENDIAN
+#define BYTE_ORDER __BIG_ENDIAN
+#endif
+#define __BYTE_ORDER BYTE_ORDER
+
+#define	LITTLE_ENDIAN	1234	/* least-significant byte first (vax, pc) */
+#define	BIG_ENDIAN	4321	/* most-significant byte first (IBM, net) */
+#define	PDP_ENDIAN	3412	/* LSB first in word, MSW first in long (pdp)*/
+
+#endif
+
 #include "ndpi_main.h"
 #include "ndpi_sha1.h"
 
@@ -41,6 +60,7 @@ A million repetitions of "a"
 #if defined(linux) || defined(__linux__)
 # include <endian.h>
 #else
+
 #define	LITTLE_ENDIAN	1234	/* least-significant byte first (vax, pc) */
 #define	BIG_ENDIAN	4321	/* most-significant byte first (IBM, net) */
 #define	PDP_ENDIAN	3412	/* LSB first in word, MSW first in long (pdp)*/

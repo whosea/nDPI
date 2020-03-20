@@ -1,12 +1,12 @@
 /* Based on https://gist.github.com/tonious/1377667 */
-
+#ifndef __KERNEL__
 #include <stdint.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
 #include <string.h>
-
+#endif
 #include "ht_hash.h"
 
 /* #define HASH_DEBUG 1 */
@@ -24,7 +24,7 @@ hashtable_t *ht_create(int size) {
 
   /* Allocate pointers to the head nodes. */
   if((hashtable->table = ndpi_malloc(sizeof(entry_t *) * size)) == NULL) {
-    free(hashtable);
+    ndpi_free(hashtable);
     return NULL;
   } else {    
     for(i = 0; i < size; i++)
@@ -63,7 +63,7 @@ entry_t *ht_newpair(char *key, u_int16_t value) {
     return NULL;  
   
   if((newpair->key = ndpi_strdup(key)) == NULL) {
-    free(newpair);
+    ndpi_free(newpair);
     return NULL;  
   }
 
