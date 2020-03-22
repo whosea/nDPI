@@ -1124,14 +1124,10 @@ static void ndpi_host_ssl(struct nf_ct_ext_ndpi *ct_ndpi) {
     	const char *name_c = ct_ndpi->flow->protos.stun_ssl.ssl.client_requested_server_name;
 	const size_t s_len = ct_ndpi->flow->protos.stun_ssl.ssl.server_names_len;
 	const size_t c_len = sizeof(ct_ndpi->flow->protos.stun_ssl.ssl.client_requested_server_name);
-	if(name_s && *name_c) {
-		ct_ndpi->ssl = name_s && strchr(name_s,'*') ?
-			kstrndup(name_c, c_len, GFP_ATOMIC):
-			kstrndup(name_s, s_len, GFP_ATOMIC);
+	if(*name_c) {
+	 	ct_ndpi->ssl = kstrndup(name_c, c_len, GFP_ATOMIC);
 	} else if(name_s) {
 		ct_ndpi->ssl = kstrndup(name_s, s_len, GFP_ATOMIC);
-	} else if(*name_c) {
-	 	ct_ndpi->ssl = kstrndup(name_c, c_len, GFP_ATOMIC);
 	}
     }
 }

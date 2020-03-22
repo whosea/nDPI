@@ -2890,6 +2890,10 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str,
       value = &attr[5];
       if(value[0] == '"') value++; /* remove leading " */
       if(value[strlen(value)-1] == '"') value[strlen(value)-1] = '\0'; /* remove trailing " */
+    } else {
+	if(attr)
+		NDPI_LOG_ERR(ndpi_str, "Skip invalid attr [%s]\n",attr);
+	continue;
     }
 
     if(is_tcp || is_udp) {
@@ -2908,7 +2912,7 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str,
     } else if(is_ip) {
       /* NDPI_PROTOCOL_TOR */
       ndpi_add_host_ip_subprotocol(ndpi_str, value, subprotocol_id);
-    } else {
+    } else if(value) {
       if(do_add)
 	ndpi_add_host_url_subprotocol(ndpi_str, value, subprotocol_id,
 				      NDPI_PROTOCOL_CATEGORY_UNSPECIFIED,
