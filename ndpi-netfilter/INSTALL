@@ -261,7 +261,7 @@ ndpi_flow_limit:  Limit netflow records. Default 10000000 (~4.3Gb RAM). See FLOW
   echo http_proxy 1 >/proc/net/xt_ndpi/proto
   echo 83 1 >/proc/net/xt_ndpi/proto
   echo "add_custom bad_host" >/proc/net/xt_ndpi/proto && \
-    echo "+bad_host:bad.org" >/proc/net/xt_ndpi/host_proto
+    echo "bad_host:bad.org" >/proc/net/xt_ndpi/host_proto
 
 /proc/net/xt_ndpi/ip_proto - show and change IP and port based protocols settings
 

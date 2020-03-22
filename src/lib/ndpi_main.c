@@ -2891,9 +2891,11 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str,
       if(value[0] == '"') value++; /* remove leading " */
       if(value[strlen(value)-1] == '"') value[strlen(value)-1] = '\0'; /* remove trailing " */
     } else {
-	if(attr)
+	if(*attr) {
 		NDPI_LOG_ERR(ndpi_str, "Skip invalid attr [%s]\n",attr);
-	continue;
+		return -3;
+	}
+	break;
     }
 
     if(is_tcp || is_udp) {
