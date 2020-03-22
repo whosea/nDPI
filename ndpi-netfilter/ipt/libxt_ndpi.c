@@ -111,7 +111,7 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 	}
 	if(!c) return;
 	if( c == 1) {
-		printf(" --%s%s ",l > NDPI_LAST_IMPLEMENTED_PROTOCOL ? "proto ":"",
+		printf(" --%s%s ",l != NDPI_PROTOCOL_UNKNOWN ? "proto ":"",
 				prot_short_str[l]);
 		return;
 	}
