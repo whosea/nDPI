@@ -134,6 +134,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/rtp.c \
 		     protocols/rtsp.c \
 		     protocols/rx.c \
+		     protocols/s7comm.c \
 		     protocols/sflow.c \
 		     protocols/shoutcast.c \
 		     protocols/sip.c \

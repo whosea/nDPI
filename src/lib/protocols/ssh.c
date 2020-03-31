@@ -96,7 +96,10 @@ static void ndpi_int_ssh_add_connection(struct ndpi_detection_module_struct
 static u_int16_t concat_hash_string(struct ndpi_packet_struct *packet,
 				   char *buf, u_int8_t client_hash) {
   u_int16_t offset = 22, buf_out_len = 0;
-  u_int32_t len = ntohl(*(u_int32_t*)&packet->payload[offset]);
+  u_int32_t len;
+  if(offset+sizeof(u_int32_t) >= packet->payload_packet_len)
+    goto invalid_payload;
+  len = ntohl(*(u_int32_t*)&packet->payload[offset]);
   offset += 4;
 
   /* -1 for ';' */
@@ -177,6 +180,8 @@ static u_int16_t concat_hash_string(struct ndpi_packet_struct *packet,
     offset += 4 + len;
 
   /* ssh.compression_algorithms_client_to_server [C] */
+  if(offset+sizeof(u_int32_t) >= packet->payload_packet_len)
+    goto invalid_payload;
   len = ntohl(*(u_int32_t*)&packet->payload[offset]);
 
   if(client_hash) {
@@ -292,7 +297,7 @@ static void ndpi_search_ssh_tcp(struct ndpi_detection_module_struct *ndpi_struct
   } else if(packet->payload_packet_len > 5) {
     u_int8_t msgcode = *(packet->payload + 5);
     ndpi_MD5_CTX ctx;
-
+    
     if(msgcode == 20 /* key exchange init */) {
       char *hassh_buf = ndpi_calloc(packet->payload_packet_len, sizeof(char));
       u_int i, len;

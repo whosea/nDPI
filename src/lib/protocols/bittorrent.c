@@ -844,13 +844,13 @@ static void bt_save_hash(
 		int bt_offset) {
 
     const char *bt_hash = NULL; /* 20 bytes long */
-
+    
     if(bt_offset == -1) {
       const char *bt_magic = ndpi_strnstr((const char *)flow->packet.payload, 
 					  "BitTorrent protocol", flow->packet.payload_packet_len);
-
-      if(bt_magic)
-	bt_hash = &bt_magic[19+8];
+      if(bt_magic &&
+	 flow->packet.payload_packet_len >= (20+19+8 + (bt_magic-(const char*)flow->packet.payload)))
+	   bt_hash = &bt_magic[19+8];
     } else {
       if(bt_offset + 20 <= flow->packet.payload_packet_len)
 	      bt_hash = (const char*)&flow->packet.payload[bt_offset];
@@ -931,6 +931,7 @@ static void ndpi_add_connection_as_bittorrent(
   inet_ntop(AF_INET,(void *)&packet->iph->daddr,ip2,sizeof(ip2));
   NDPI_LOG_DBG2(ndpi_struct, "BT: add connection %s %s:%d<->%s:%d!\n",
 		   packet->tcp ? "tcp":"udp", ip1,htons(p1),ip2,htons(p2));
+
   }
 
 }

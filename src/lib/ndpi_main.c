@@ -191,6 +191,14 @@ u_int32_t ndpi_detection_get_sizeof_ndpi_id_struct(void) { return(sizeof(struct 
 
 /* *********************************************************************************** */
 
+u_int32_t ndpi_detection_get_sizeof_ndpi_flow_tcp_struct(void) { return(sizeof(struct ndpi_flow_tcp_struct)); }
+
+/* *********************************************************************************** */
+
+u_int32_t ndpi_detection_get_sizeof_ndpi_flow_udp_struct(void) { return(sizeof(struct ndpi_flow_udp_struct)); }
+
+/* *********************************************************************************** */
+
 char * ndpi_get_proto_by_id(struct ndpi_detection_module_struct *ndpi_str, u_int id) {
   return((id >= ndpi_str->ndpi_num_supported_protocols) ? NULL : ndpi_str->proto_defaults[id].protoName);
 }
@@ -1836,6 +1844,12 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			    ndpi_build_default_ports(ports_a, 10050, 0, 0, 0, 0) /* TCP */,
 			    ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */
 			    );
+     ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_S7COMM,
+          1 /* no subprotocol */, no_master,
+          no_master, "s7comm", NDPI_PROTOCOL_CATEGORY_NETWORK,
+          ndpi_build_default_ports(ports_a, 102, 0, 0, 0, 0) /* TCP */,
+          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */
+          );
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -3612,6 +3626,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* Targus Getdata */
   init_targus_getdata_dissector(ndpi_str, &a, detection_bitmask);
+  
+  /* S7 comm */
+  init_s7comm_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
@@ -6655,7 +6672,7 @@ void NDPI_DUMP_BITMASK(NDPI_PROTOCOL_BITMASK a) {
 }
 #endif
 
-u_int8_t ndpi_get_api_version(void) {
+u_int16_t ndpi_get_api_version(void) {
   return(NDPI_API_VERSION);
 }
 

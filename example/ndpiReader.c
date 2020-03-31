@@ -497,8 +497,9 @@ int cmpFlows(const void *_a, const void *_b) {
   struct ndpi_flow_info *fb = ((struct flow_info*)_b)->flow;
   uint64_t a_size = fa->src2dst_bytes + fa->dst2src_bytes;
   uint64_t b_size = fb->src2dst_bytes + fb->dst2src_bytes;
-//  if(a_size != b_size)
-//    return a_size < b_size ? 1 : -1;
+  if(!rep_mini)
+    if(a_size != b_size)
+      return a_size < b_size ? 1 : -1;
 
 // copy from ndpi_workflow_node_cmp();
 
@@ -508,8 +509,10 @@ int cmpFlows(const void *_a, const void *_b) {
   if(htons(fa->src_port) < htons(fb->src_port)) return(-1); else { if(htons(fa->src_port) > htons(fb->src_port)) return(1); }
   if(htonl(fa->dst_ip)   < htonl(fb->dst_ip)  ) return(-1); else { if(htonl(fa->dst_ip)   > htonl(fb->dst_ip)  ) return(1); }
   if(htons(fa->dst_port) < htons(fb->dst_port)) return(-1); else { if(htons(fa->dst_port) > htons(fb->dst_port)) return(1); }
-  if(fa->src2dst_packets < fb->src2dst_packets) return -1; else if(fa->src2dst_packets > fb->src2dst_packets) return 1;
-  if(fa->dst2src_packets < fb->dst2src_packets) return -1; else if(fa->dst2src_packets > fb->dst2src_packets) return 1;
+  if(rep_mini) {
+    if(fa->src2dst_packets < fb->src2dst_packets) return -1; else if(fa->src2dst_packets > fb->src2dst_packets) return 1;
+    if(fa->dst2src_packets < fb->dst2src_packets) return -1; else if(fa->dst2src_packets > fb->dst2src_packets) return 1;
+  }
   return(0);
 }
 
@@ -1125,8 +1128,10 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
   if(csv_fp || (verbose > 1)) {
 #if 1
-  //fprintf(out, "\t%u", id);
-  fprintf(out, "\t");
+  if(!rep_mini)
+	fprintf(out, "\t%u", id);
+     else
+	fprintf(out, "\t");
 #else
   fprintf(out, "\t%u(%u)", id, flow->flow_id);
 #endif
