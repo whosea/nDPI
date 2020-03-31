@@ -1642,6 +1642,21 @@ static u_int32_t ndpi_proto_markmask(struct ndpi_net *n, u_int32_t var,
 		var |=  n->mark[proto->master_protocol].mark;
 	  }
 	break;
+     case 4:
+	if(proto->app_protocol != NDPI_PROTOCOL_UNKNOWN) {
+	    var &= ~n->mark[proto->app_protocol].mask;
+	    var |=  n->mark[proto->app_protocol].mark;
+	    if(proto->master_protocol != NDPI_PROTOCOL_UNKNOWN &&
+		proto->master_protocol != proto->app_protocol) {
+		var <<= 16;
+		var |=  n->mark[proto->master_protocol].mark & n->mark[proto->master_protocol].mask;
+	    }
+	} else
+	  if(proto->master_protocol != NDPI_PROTOCOL_UNKNOWN) {
+		var &= ~n->mark[proto->master_protocol].mask;
+		var |=  n->mark[proto->master_protocol].mark;
+	  }
+	break;
     }
     return var;
 }
@@ -1717,8 +1732,10 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 		if(info->p_proto_id) mode |= 2;
 		if(info->any_proto_id) mode |= 3;
 	}
-	if(info->t_mark)
-		skb->mark = ndpi_proto_markmask(n,skb->mark,&proto,mode,info);
+	if(info->t_mark2)
+		skb->mark = ndpi_proto_markmask(n,0,&proto,4,info);
+	  else if(info->t_mark)
+			skb->mark = ndpi_proto_markmask(n,skb->mark,&proto,mode,info);
 
 	if(info->t_clsf)
 		skb->priority =	ndpi_proto_markmask(n,skb->priority,&proto,mode,info);

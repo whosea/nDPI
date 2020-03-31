@@ -474,6 +474,7 @@ enum {
         O_SET_NDPI_M,
         O_SET_NDPI_P,
         O_SET_MARK,
+        O_SET_MARK2,
         O_SET_CLSF,
         O_SET_FLOW,
         O_ACCEPT,
@@ -481,7 +482,8 @@ enum {
         F_SET_NDPI   = 1 << O_SET_NDPI,
         F_SET_NDPI_M = 1 << O_SET_NDPI_M,
         F_SET_NDPI_P = 1 << O_SET_NDPI_P,
-        F_SET_MARK = 1 << O_SET_MARK,
+        F_SET_MARK  = 1 << O_SET_MARK,
+        F_SET_MARK2 = 1 << O_SET_MARK2,
         F_SET_CLSF = 1 << O_SET_CLSF,
         F_SET_FLOW = 1 << O_SET_FLOW,
         F_ACCEPT   = 1 << O_ACCEPT,
@@ -511,6 +513,7 @@ static const struct xt_option_entry NDPI_opts[] = {
         {.name = "ndpi-id-m", .id = O_SET_NDPI_M, .type = XTTYPE_NONE},
         {.name = "ndpi-id-p", .id = O_SET_NDPI_P, .type = XTTYPE_NONE},
         {.name = "set-mark",  .id = O_SET_MARK,   .type = XTTYPE_NONE},
+        {.name = "set-mark2", .id = O_SET_MARK2,  .type = XTTYPE_NONE},
         {.name = "set-clsf",  .id = O_SET_CLSF,   .type = XTTYPE_NONE},
         {.name = "flow-info", .id = O_SET_FLOW,   .type = XTTYPE_NONE},
         {.name = "accept",    .id = O_ACCEPT,     .type = XTTYPE_NONE},
@@ -550,6 +553,9 @@ static void NDPI_parse_v0(struct xt_option_call *cb)
 	case O_SET_MARK:
 		markinfo->t_mark = 1;
 		break;
+	case O_SET_MARK2:
+		markinfo->t_mark2 = 1;
+		break;
 	case O_SET_CLSF:
 		markinfo->t_clsf = 1;
 		break;
@@ -576,8 +582,11 @@ int l;
         l = snprintf(buf,sizeof(buf)-1," NDPI");
 	if(info->flow_yes)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1, " NETFLOW");
-	if(info->t_mark)
-	     l += snprintf(&buf[l],sizeof(buf)-l-1, " set MARK ");
+	if(info->t_mark2)
+	     l += snprintf(&buf[l],sizeof(buf)-l-1, " set MARK2 ");
+	  else
+	    if(info->t_mark)
+		l += snprintf(&buf[l],sizeof(buf)-l-1, " set MARK ");
 	if(info->t_clsf)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1, " set CLSF ");
 	if(info->mask || info->mark) {
@@ -622,8 +631,11 @@ static void NDPI_save_v0(const void *ip, const struct xt_entry_target *target)
 		if(info->p_proto_id)
 		     l += snprintf(&buf[l],sizeof(buf)-l-1, " --ndpi-id-p");
 	}
-	if(info->t_mark)
-	     l += snprintf(&buf[l],sizeof(buf)-l-1, " --set-mark");
+	if(info->t_mark2)
+	     l += snprintf(&buf[l],sizeof(buf)-l-1, " --set-mark2");
+	  else
+	    if(info->t_mark)
+		l += snprintf(&buf[l],sizeof(buf)-l-1, " --set-mark");
 	if(info->t_clsf)
 	     l += snprintf(&buf[l],sizeof(buf)-l-1, " --set-clsf");
 	if(info->flow_yes)
