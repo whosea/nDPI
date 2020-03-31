@@ -204,6 +204,7 @@ void test_lib(); /* Forward */
 
 extern void ndpi_report_payload_stats();
 
+static int rep_mini = 0; 
 /* ********************************** */
 
 #ifdef DEBUG_TRACE
@@ -496,8 +497,8 @@ int cmpFlows(const void *_a, const void *_b) {
   struct ndpi_flow_info *fb = ((struct flow_info*)_b)->flow;
   uint64_t a_size = fa->src2dst_bytes + fa->dst2src_bytes;
   uint64_t b_size = fb->src2dst_bytes + fb->dst2src_bytes;
-  if(a_size != b_size)
-    return a_size < b_size ? 1 : -1;
+//  if(a_size != b_size)
+//    return a_size < b_size ? 1 : -1;
 
 // copy from ndpi_workflow_node_cmp();
 
@@ -507,6 +508,8 @@ int cmpFlows(const void *_a, const void *_b) {
   if(htons(fa->src_port) < htons(fb->src_port)) return(-1); else { if(htons(fa->src_port) > htons(fb->src_port)) return(1); }
   if(htonl(fa->dst_ip)   < htonl(fb->dst_ip)  ) return(-1); else { if(htonl(fa->dst_ip)   > htonl(fb->dst_ip)  ) return(1); }
   if(htons(fa->dst_port) < htons(fb->dst_port)) return(-1); else { if(htons(fa->dst_port) > htons(fb->dst_port)) return(1); }
+  if(fa->src2dst_packets < fb->src2dst_packets) return -1; else if(fa->src2dst_packets > fb->src2dst_packets) return 1;
+  if(fa->dst2src_packets < fb->dst2src_packets) return -1; else if(fa->dst2src_packets > fb->dst2src_packets) return 1;
   return(0);
 }
 
@@ -1122,7 +1125,8 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
   if(csv_fp || (verbose > 1)) {
 #if 1
-  fprintf(out, "\t%u", id);
+  //fprintf(out, "\t%u", id);
+  fprintf(out, "\t");
 #else
   fprintf(out, "\t%u(%u)", id, flow->flow_id);
 #endif
@@ -1141,7 +1145,7 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
   if(enable_payload_analyzer) fprintf(out, "[flowId: %u]", flow->flow_id);
   }
   
-  if(enable_joy_stats) {
+  if(!rep_mini && enable_joy_stats) {
     /* Print entropy values for monitored flows. */
     flowGetBDMeanandVariance(flow);
     if(csv_fp) fprintf(csv_fp, "\n");
@@ -1159,17 +1163,24 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 	  ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct,
 			     flow->detected_protocol, buf1, sizeof(buf1)));
 
-  if(flow->detected_protocol.category != 0)
+  if(!rep_mini && flow->detected_protocol.category != 0)
     fprintf(out, "[cat: %s/%u]",
 	    ndpi_category_get_name(ndpi_thread_info[thread_id].workflow->ndpi_struct,
 				   flow->detected_protocol.category),
 	    (unsigned int)flow->detected_protocol.category);
 
+if(!rep_mini) {
   fprintf(out, "[%u pkts/%llu bytes ", flow->src2dst_packets, (long long unsigned int) flow->src2dst_bytes);
   fprintf(out, "%s %u pkts/%llu bytes]",
 	  (flow->dst2src_packets > 0) ? "<->" : "->",
 	  flow->dst2src_packets, (long long unsigned int) flow->dst2src_bytes);
-
+} else {
+  fprintf(out, "[%u pkts/%llu bytes ", flow->src2dst_packets, (long long unsigned int) flow->src2dst_goodput_bytes);
+  fprintf(out, "%s %u pkts/%llu bytes]",
+	  (flow->dst2src_packets > 0) ? "<->" : "->",
+	  flow->dst2src_packets, (long long unsigned int) flow->dst2src_goodput_bytes);
+}
+if(!rep_mini) {
   fprintf(out, "[Goodput ratio: %.0f/%.0f]",
 	  100.0*((float)flow->src2dst_goodput_bytes / (float)(flow->src2dst_bytes+1)),
 	  100.0*((float)flow->dst2src_goodput_bytes / (float)(flow->dst2src_bytes+1)));
@@ -1181,12 +1192,13 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
   if(flow->telnet.username[0] != '\0')  fprintf(out, "[Username: %s]", flow->telnet.username);
   if(flow->telnet.password[0] != '\0')  fprintf(out, "[Password: %s]", flow->telnet.password);
+}
   if(flow->host_server_name[0] != '\0') fprintf(out, "[Host: %s]", flow->host_server_name);
 
   if(flow->info[0] != '\0') fprintf(out, "[%s]", flow->info);
   if(flow->flow_extra_info[0] != '\0') fprintf(out, "[%s]", flow->flow_extra_info);
 
-  if((flow->src2dst_packets+flow->dst2src_packets) > 5) {
+  if(!rep_mini && (flow->src2dst_packets+flow->dst2src_packets) > 5) {
     if(flow->iat_c_to_s && flow->iat_s_to_c) {
       float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
 
@@ -1208,7 +1220,7 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
     }
   }
 
-  if(flow->http.url[0] != '\0')
+  if(!rep_mini && flow->http.url[0] != '\0')
     fprintf(out, "[URL: %s%s][StatusCode: %u][ContentType: %s][UserAgent: %s]",
 	    flow->http.url,
 	    printUrlRisk(ndpi_validate_url(flow->http.url)),
@@ -1217,6 +1229,7 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
   if(flow->ssh_tls.ssl_version != 0) fprintf(out, "[%s]", ndpi_ssl_version2str(flow->ssh_tls.ssl_version, &known_tls));
   if(flow->ssh_tls.client_requested_server_name[0] != '\0') fprintf(out, "[Client: %s]", flow->ssh_tls.client_requested_server_name);
+if(!rep_mini) {
   if(flow->ssh_tls.client_hassh[0] != '\0') fprintf(out, "[HASSH-C: %s]", flow->ssh_tls.client_hassh);
 
   if(flow->ssh_tls.ja3_client[0] != '\0') fprintf(out, "[JA3C: %s%s]", flow->ssh_tls.ja3_client,
@@ -1259,6 +1272,8 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
   if(flow->dhcp_fingerprint[0] != '\0') fprintf(out, "[DHCP Fingerprint: %s]", flow->dhcp_fingerprint);
 
   if(flow->has_human_readeable_strings) fprintf(out, "[PLAIN TEXT (%s)]", flow->human_readeable_string_buffer);
+  if(flow->nf_mark) fprintf(out, "[NFMARK 0x%X]", flow->nf_mark);
+}
 
   fprintf(out, "\n");
 }
@@ -3254,7 +3269,8 @@ int orginal_main(int argc, char **argv) {
     if(ndpi_info_mod == NULL) return -1;
 
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
-
+    if(getenv("REP_MINI"))
+	    rep_mini = 1;
     parseOptions(argc, argv);
 
     if(!quiet_mode) {

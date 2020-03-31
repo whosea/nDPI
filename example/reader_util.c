@@ -37,6 +37,9 @@
 #include <math.h>
 #include <float.h>
 #endif
+#ifdef linux
+#include <pcap/nflog.h>
+#endif
 
 #ifndef ETH_P_IP
 #define ETH_P_IP               0x0800 	/* IPv4 */
@@ -1184,9 +1187,11 @@ void update_tcp_flags_count(struct ndpi_flow_info* flow, struct ndpi_tcphdr* tcp
 
    @Note: ipsize = header->len - ip_offset ; rawsize = header->len
 */
+static int nfmark_info=0;
 static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 					   const u_int64_t time,
 					   u_int16_t vlan_id,
+					   u_int32_t nf_mark,
 					   ndpi_packet_tunnel tunnel_type,
 					   const struct ndpi_iphdr *iph,
 					   struct ndpi_ipv6hdr *iph6,
@@ -1361,7 +1366,6 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     workflow->stats.total_discarded_bytes++;
     return(nproto);
   }
-
   if(!flow->detection_completed) {
     u_int enough_packets =
       (((proto == IPPROTO_UDP) && ((flow->src2dst_packets + flow->dst2src_packets) > max_num_udp_dissected_pkts))
@@ -1400,15 +1404,126 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       }
     }
   }
+  if(iph){
+	 char ip1[20],ip2[20];
+	 u_int32_t xnf_mark = flow->detected_protocol.app_protocol;
+	 if(flow->detected_protocol.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
+	    flow->detected_protocol.master_protocol != xnf_mark) {
+		xnf_mark <<= 16;
+		xnf_mark |= flow->detected_protocol.master_protocol;
+	 }
+	if(!nfmark_info) {
+		nfmark_info = getenv("NFMARK") ? 2:1;
+	}
+	if(nfmark_info > 1) {
+	 inet_ntop(AF_INET,&iph->saddr,ip1,sizeof(ip1)-1);
+	 inet_ntop(AF_INET,&iph->daddr,ip2,sizeof(ip2)-1);
+	 if(tcph) {
+		 fprintf(stdout,"TCP %s:%u -> %s:%u LEN %u",
+			ip1,ntohs(sport),ip2,ntohs(dport),htons(iph->tot_len));
+	 } else if(udph) {
+		 fprintf(stdout,"UDP %s:%u -> %s:%u LEN %u",
+			ip1,ntohs(sport),ip2,ntohs(dport),htons(iph->tot_len));
+	 } else {
+		 fprintf(stdout,"%03d %s:%u -> %s:%u LEN %u",iph->protocol,
+			ip1,ntohs(sport),ip2,ntohs(dport),htons(iph->tot_len));
+	 }
+	 if(nf_mark != xnf_mark)
+		 fprintf(stdout," NFMARK ipt %08x -> ndpi %08x\n",nf_mark,xnf_mark);
+	   else
+		 fprintf(stdout," NFMARK OK %08x\n",xnf_mark);
+	 if(flow->nf_mark && flow->nf_mark != nf_mark)
+		 fprintf(stdout,"NFMARK CHANGE %08x -> %08x\n",flow->nf_mark,nf_mark);
+	 flow->nf_mark = nf_mark;
+	}
+  }
 
   return(flow->detected_protocol);
 }
 
+#ifdef linux
+
+/* copy from tcpdump/print-nflog.c  */
+static const u_char *parse_nflog_packet(const struct pcap_pkthdr *h, const u_char *p,
+		u_int *r_length,  uint32_t *mark)
+{
+	const nflog_hdr_t *hdr = (const nflog_hdr_t *)p;
+	const nflog_tlv_t *tlv;
+	uint16_t size;
+	uint16_t h_size = sizeof(nflog_hdr_t);
+
+	u_int caplen = h->caplen;
+
+	u_int length = h->len;
+
+	if (caplen < (int) sizeof(nflog_hdr_t) || length < (int) sizeof(nflog_hdr_t)) {
+		return NULL;
+	}
+
+	if (hdr->nflog_version != 0) {
+		return NULL;
+	}
+
+	p += sizeof(nflog_hdr_t);
+	length -= sizeof(nflog_hdr_t);
+	caplen -= sizeof(nflog_hdr_t);
+
+	while (length > 0) {
+		/* We have some data.  Do we have enough for the TLV header? */
+		if (caplen < sizeof(nflog_tlv_t) || length < sizeof(nflog_tlv_t)) {
+			/* No. */
+			return NULL;
+		}
+
+		tlv = (const nflog_tlv_t *) p;
+		size = tlv->tlv_length;
+		if (size % 4 != 0)
+			size += 4 - size % 4;
+
+		/* Is the TLV's length less than the minimum? */
+		if (size < sizeof(nflog_tlv_t)) {
+			/* Yes. Give up now. */
+			return NULL;
+		}
+
+		/* Do we have enough data for the full TLV? */
+		if (caplen < size || length < size) {
+			/* No. */
+			return NULL;
+		}
+
+		if (tlv->tlv_type == NFULA_PAYLOAD) {
+			/*
+			 * This TLV's data is the packet payload.
+			 * Skip past the TLV header, and break out
+			 * of the loop so we print the packet data.
+			 */
+			p += sizeof(nflog_tlv_t);
+			h_size += sizeof(nflog_tlv_t);
+			length -= sizeof(nflog_tlv_t);
+			caplen -= sizeof(nflog_tlv_t);
+			break;
+		}
+		if(tlv->tlv_type == NFULA_MARK && mark != NULL) {
+			const u_char *adata = p+sizeof(nflog_tlv_t);
+			*mark = htonl(*(u_int32_t *)adata);
+		}
+		p += size;
+		h_size += size;
+		length -= size;
+		caplen -= size;
+	}
+	*r_length = length;
+	return p;
+}
+#endif
+
 /* ****************************************************** */
 
 struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
-					       const struct pcap_pkthdr *header,
+					       const struct pcap_pkthdr *header_o,
 					       const u_char *packet) {
+  struct pcap_pkthdr *header,header_c;
   /*
    * Declare pointers to packet headers
    */
@@ -1439,6 +1554,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   struct ndpi_proto nproto = { NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_UNKNOWN };
   ndpi_packet_tunnel tunnel_type = ndpi_no_tunnel;
 
+  header_c = *header_o;
+  header = &header_c;
   /* lengths and offsets */
   u_int16_t eth_offset = 0;
   u_int16_t radio_len;
@@ -1452,6 +1569,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   u_int16_t frag_off = 0, vlan_id = 0;
   u_int8_t proto = 0, recheck_type;
   /*u_int32_t label;*/
+  u_int32_t h_caplen,h_len;
+  uint32_t nf_mark = 0;
 
   /* counters */
   u_int8_t vlan_packet = 0;
@@ -1478,10 +1597,11 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 #else
   datalink_type = (int)pcap_datalink(workflow->pcap_handle);
 #endif
-
+  h_caplen = header->caplen;
+  h_len = header->len;
 
  datalink_check:
-  if(header->caplen < eth_offset + 40)
+  if(h_caplen < eth_offset + 40)
     return(nproto); /* Too short */
 
   switch(datalink_type) {
@@ -1547,11 +1667,11 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 
     /* Check Bad FCS presence */
     if((radiotap->flags & BAD_FCS) == BAD_FCS) {
-      workflow->stats.total_discarded_bytes +=  header->len;
+      workflow->stats.total_discarded_bytes +=  h_len;
       return(nproto);
     }
 
-    if(header->caplen < (eth_offset + radio_len + sizeof(struct ndpi_wifi_header)))
+    if(h_caplen < (eth_offset + radio_len + sizeof(struct ndpi_wifi_header)))
       return(nproto);
 
 
@@ -1579,6 +1699,16 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   case DLT_RAW:
     ip_offset = eth_offset = 0;
     break;
+#ifdef linux
+  case DLT_NFLOG:
+    packet = parse_nflog_packet(header,packet,&h_caplen,&nf_mark);
+    if(!packet) return(nproto);
+    ip_offset = 0;
+    h_len = h_caplen;
+    header->caplen = h_caplen;
+    header->len = h_caplen;
+    break;
+#endif
 
   default:
     /* printf("Unknown datalink %d\n", datalink_type); */
@@ -1597,7 +1727,7 @@ ether_type_check:
     vlan_packet = 1;
 
     // double tagging for 802.1Q
-    while((type == 0x8100) && (((bpf_u_int32)ip_offset) < header->caplen)) {
+    while((type == 0x8100) && (((bpf_u_int32)ip_offset) < h_caplen)) {
       vlan_id = ((packet[ip_offset] << 8) + packet[ip_offset+1]) & 0xFFF;
       type = (packet[ip_offset+2] << 8) + packet[ip_offset+3];
       ip_offset += 4;
@@ -1638,17 +1768,17 @@ ether_type_check:
 
  iph_check:
   /* Check and set IP header size and total packet length */
-  if (header->caplen < ip_offset + sizeof(struct ndpi_iphdr))
+  if (h_caplen < ip_offset + sizeof(struct ndpi_iphdr))
     return(nproto); /* Too short for next IP header*/
 
   iph = (struct ndpi_iphdr *) &packet[ip_offset];
 
   /* just work on Ethernet packets that contain IP */
-  if(type == ETH_P_IP && header->caplen >= ip_offset) {
+  if(type == ETH_P_IP && h_caplen >= ip_offset) {
     frag_off = ntohs(iph->frag_off);
 
     proto = iph->protocol;
-    if(header->caplen < header->len) {
+    if(h_caplen < h_len) {
       static u_int8_t cap_warning_used = 0;
 
       if(cap_warning_used == 0) {
@@ -1680,11 +1810,11 @@ ether_type_check:
 	ipv4_frags_warning_used = 1;
       }
 
-      workflow->stats.total_discarded_bytes +=  header->len;
+      workflow->stats.total_discarded_bytes +=  h_len;
       return(nproto);
     }
   } else if(iph->version == 6) {
-    if (header->caplen < ip_offset + sizeof(struct ndpi_ipv6hdr))
+    if (h_caplen < ip_offset + sizeof(struct ndpi_ipv6hdr))
       return(nproto); /* Too short for IPv6 header*/
     iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
     proto = iph6->ip6_hdr.ip6_un1_nxt;
@@ -1707,7 +1837,7 @@ ether_type_check:
 		 "\n\nWARNING: only IPv4/IPv6 packets are supported in this demo (nDPI supports both IPv4 and IPv6), all other packets will be discarded\n\n");
       ipv4_warning_used = 1;
     }
-    workflow->stats.total_discarded_bytes +=  header->len;
+    workflow->stats.total_discarded_bytes +=  h_len;
     return(nproto);
   }
 
@@ -1752,7 +1882,7 @@ ether_type_check:
 
 	offset += 4;
 
-	while((!stop) && (offset < header->caplen)) {
+	while((!stop) && (offset < h_caplen)) {
 	  u_int8_t tag_type = packet[offset];
 	  u_int8_t tag_len;
 
@@ -1770,7 +1900,7 @@ ether_type_check:
 
 	  offset += tag_len;
 
-	  if(offset >= header->caplen)
+	  if(offset >= h_caplen)
 	    return(nproto); /* Invalid packet */
 	  else {
 	    eth_offset = offset;
@@ -1782,7 +1912,7 @@ ether_type_check:
       /* We dissect ONLY CAPWAP traffic */
       u_int offset           = ip_offset+ip_len+sizeof(struct ndpi_udphdr);
 
-      if((offset+40) < header->caplen) {
+      if((offset+40) < h_caplen) {
 	u_int16_t msg_len = packet[offset+1] >> 1;
 
 	offset += msg_len;
@@ -1804,9 +1934,9 @@ ether_type_check:
   }
 
   /* process the packet */
-  return(packet_processing(workflow, time, vlan_id, tunnel_type, iph, iph6,
-			   ip_offset, header->caplen - ip_offset,
-			   header->caplen, header, packet, header->ts));
+  return(packet_processing(workflow, time, vlan_id, nf_mark, tunnel_type, iph, iph6,
+			   ip_offset, h_caplen - ip_offset,
+			   h_caplen, header, packet, header->ts));
 }
 
 /* ********************************************************** */
