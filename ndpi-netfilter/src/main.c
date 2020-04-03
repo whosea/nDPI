@@ -2372,7 +2372,8 @@ static void __net_exit ndpi_net_exit(struct net *net)
 	struct ndpi_net *n;
 
 	n = ndpi_pernet(net);
-	pr_info("%s:%s\n",__func__,n->ns_name);
+	if(ndpi_log_debug)
+		pr_info("%s:%s\n",__func__,n->ns_name);
 
 	atomic_set(&n->ndpi_ready,0);
 
@@ -2695,8 +2696,9 @@ static int __net_init ndpi_net_init(struct net *net)
 	                                   ARRAY_SIZE(nf_nat_ipv4_ops))) break;
 		/* All success! */
 		atomic_set(&n->ndpi_ready,1);
-		pr_info("%s:%s OK\n",__func__,n->ns_name);
 		net_ns_id++;
+		if(ndpi_log_debug)
+			pr_info("%s:%s OK\n",__func__,n->ns_name);
 		return 0;
 	} while(0);
 
@@ -2905,11 +2907,11 @@ static int __init ndpi_mt_init(void)
 		" debug_message=no"
 #endif
 		"\n BT: hash_size %luk, hash_expiation %ld sec, log_size %ldkb\n"
-		" sizeof hash_ip4p_node=%lu id_struct=%lu PATRICIA_MAXBITS=%zu\n"
+		" sizeof hash_ip4p_node=%lu id_struct=%lu\n"
 		" flow_struct=%lu packet_struct=%zu\n"
 		"   flow_tcp_struct=%zu flow_udp_struct=%zu int_one_line_struct=%zu\n"
 		" ndpi_ip_addr_t=%zu ndpi_protocol=%zu nf_ct_ext_ndpi=%zu\n"
-		" flow_info=%zu spinlock_t=%zu\n"
+		" flow_info=%zu spinlock_t=%zu "
 #ifndef NF_CT_CUSTOM
 		" NF_LABEL_ID %d\n",
 #else
@@ -2917,18 +2919,16 @@ static int __init ndpi_mt_init(void)
 #endif
 		NDPI_GIT_RELEASE,
 		bt_hash_size, bt_hash_size ? bt_hash_tmo : 0, bt_log_size, 
-		ndpi_size_hash_ip4p_node, ndpi_size_id_struct, (size_t)PATRICIA_MAXBITS,
+		ndpi_size_hash_ip4p_node, ndpi_size_id_struct,
 		ndpi_size_flow_struct,
 		sizeof(struct ndpi_packet_struct),
 		sizeof(struct ndpi_flow_tcp_struct),
 		sizeof(struct ndpi_flow_udp_struct),
 		sizeof(struct ndpi_int_one_line_struct),
-		sizeof(ndpi_ip_addr_t),
-		sizeof(ndpi_protocol),
+		sizeof(ndpi_ip_addr_t), sizeof(ndpi_protocol),
 		ALIGN(sizeof(struct nf_ct_ext_ndpi),__SIZEOF_LONG__),
 		sizeof(struct flow_info),
-		sizeof(spinlock_t),
-		nf_ct_ext_id_ndpi);
+		sizeof(spinlock_t), nf_ct_ext_id_ndpi);
 	pr_info("xt_ndpi: MAX_PROTOCOLS %d LAST_PROTOCOL %d\n",
 		NDPI_NUM_BITS,
 		NDPI_LAST_IMPLEMENTED_PROTOCOL);
