@@ -46,11 +46,16 @@
 #include <linux/vmalloc.h>
 #endif
 
+#ifndef CONFIG_NF_CONNTRACK_CUSTOM
+#define CONFIG_NF_CONNTRACK_CUSTOM 0
+#endif
+
 
 #include <linux/netfilter/x_tables.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_extend.h>
 #include <net/netfilter/nf_nat.h>
+#include <linux/ktime.h>
 
 #define BT_ANNOUNCE 
 
@@ -1184,7 +1189,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	uint32_t r_proto;
 	ndpi_protocol_nf proto = NDPI_PROTOCOL_NULL;
 	uint64_t time;
-	struct timespec tm;
+	struct timespec64 tm;
 	const struct xt_ndpi_mtinfo *info = par->matchinfo;
 
 	enum ip_conntrack_info ctinfo;
@@ -1237,7 +1242,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	COUNTER(ndpi_pk);
 
-	getnstimeofday(&tm);
+	getnstimeofday64(&tm);
 
 	ct = nf_ct_get (skb, &ctinfo);
 	if (ct == NULL) {
@@ -1815,7 +1820,8 @@ static void bt_port_gc(unsigned long data) {
         struct ndpi_net *n = (struct ndpi_net *)data;
 #endif
         struct ndpi_detection_module_struct *ndpi_struct = n->ndpi_struct;
-	struct timespec tm;
+	struct timespec64 tm;
+	uint32_t now32;
 	int i;
 	uint32_t st_j;
 	uint32_t en_j;
@@ -1824,7 +1830,8 @@ static void bt_port_gc(unsigned long data) {
 	if(!read_trylock(&n->ndpi_busy)) return; // ndpi_net_exit() started!
 
 	st_j = READ_ONCE(jiffies);
-	getnstimeofday(&tm);
+	getnstimeofday64(&tm);
+	now32 = (uint32_t)tm.tv_sec; // BUG AFTER YAER 2105
 	{
 	    struct hash_ip4p_table *ht = READ_ONCE(ndpi_struct->bt_ht);
 	    if(ht) {
@@ -1834,7 +1841,7 @@ static void bt_port_gc(unsigned long data) {
 		    if(n->gc_index >= ht->size-1) n->gc_index = 0;
 
 		    if(ht->tbl[n->gc_index].len)
-			n->gc_count += ndpi_bittorrent_gc(ht,n->gc_index,tm.tv_sec);
+			n->gc_count += ndpi_bittorrent_gc(ht,n->gc_index,now32);
 		    n->gc_index++;
 		}
 	    }
@@ -1848,7 +1855,7 @@ static void bt_port_gc(unsigned long data) {
 		    if(n->gc_index6 >= ht6->size-1) n->gc_index6 = 0;
 
 		    if(ht6->tbl[n->gc_index6].len)
-			n->gc_count += ndpi_bittorrent_gc(ht6,n->gc_index6,tm.tv_sec);
+			n->gc_count += ndpi_bittorrent_gc(ht6,n->gc_index6,now32);
 		    n->gc_index6++;
 		}
 	    }
@@ -1895,6 +1902,11 @@ return  family == AF_INET6 ?
 }
 
 static int ninfo_proc_open(struct inode *inode, struct file *file)
+{
+        return 0;
+}
+
+static int ninfo_proc_close(struct inode *inode, struct file *file)
 {
         return 0;
 }
@@ -2079,7 +2091,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 			__func__, n->ns_name, atomic_read(&n->acc_work),atomic_read(&n->acc_rem));
 		sl = n->acc_read_mode > 3 ?
 			ndpi_dump_start_rec(n->str_buf,NF_STR_LBUF,n->acc_open_time):
-			snprintf(n->str_buf,NF_STR_LBUF-1,"TIME %lu\n",n->acc_open_time);
+			snprintf(n->str_buf,NF_STR_LBUF-1,"TIME %llu\n",n->acc_open_time);
 
 		n->str_buf_len = sl; n->str_buf_offs = 0;
 		r = nflow_put_str(n,buf,&p,&count,ppos);
@@ -2230,62 +2242,36 @@ const char *acerr2txt(AC_ERROR_t r) {
 	return r >= ACERR_SUCCESS && r <= ACERR_ERROR ? __acerr2txt[r]:"UNKNOWN";
 }
 
-
-static const struct file_operations nproto_proc_fops = {
-        .open    = ninfo_proc_open,
-        .read    = nproto_proc_read,
-        .write   = nproto_proc_write,
-	.llseek  = noop_llseek,
-	.release = nproto_proc_close
-};
-
-static const struct file_operations ninfo_proc_fops = {
-        .open    = ninfo_proc_open,
-        .read    = ninfo_proc_read,
-        .write   = ninfo_proc_write,
-	.llseek  = noop_llseek,
-};
-
-static const struct file_operations nflow_proc_fops = {
-        .open    = nflow_proc_open,
-        .read    = nflow_proc_read,
-        .write   = nflow_proc_write,
-	.llseek  = nflow_proc_llseek,
-	.release = nflow_proc_close
-};
+#if  LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
+#define PROC_OPS(s,o,r,w,l,d) static const struct file_operations s = { \
+        .open    = o , \
+        .read    = r , \
+        .write   = w , \
+	.llseek  = l , \
+	.release = d \
+}
+#else
+#define PROC_OPS(s,o,r,w,l,d) static const struct proc_ops s = { \
+        .proc_open    = o , \
+        .proc_read    = r , \
+        .proc_write   = w , \
+	.proc_release = d \
+}
+#endif
+PROC_OPS(nproto_proc_fops, ninfo_proc_open,nproto_proc_read,nproto_proc_write,noop_llseek,nproto_proc_close);
+PROC_OPS(ninfo_proc_fops, ninfo_proc_open,ninfo_proc_read,ninfo_proc_write,noop_llseek,ninfo_proc_close);
+PROC_OPS(nflow_proc_fops, nflow_proc_open,nflow_proc_read,nflow_proc_write,nflow_proc_llseek,nflow_proc_close);
 
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
-static const struct file_operations ninfo6_proc_fops = {
-        .open    = ninfo_proc_open,
-        .read    = ninfo6_proc_read,
-        .write   = ninfo_proc_write,
-	.llseek  = noop_llseek,
-};
+PROC_OPS(ninfo6_proc_fops, ninfo_proc_open,ninfo6_proc_read,ninfo_proc_write,noop_llseek,ninfo_proc_close);
 #endif
 
 #ifdef BT_ANNOUNCE
-static const struct file_operations nann_proc_fops = {
-        .open    = ninfo_proc_open,
-        .read    = nann_proc_read,
-	.llseek  = noop_llseek,
-};
+PROC_OPS(nann_proc_fops, ninfo_proc_open,nann_proc_read,NULL,noop_llseek,ninfo_proc_close);
 #endif
 
-static const struct file_operations n_ipdef_proc_fops = {
-        .open    = n_ipdef_proc_open,
-        .read    = n_ipdef_proc_read,
-        .write   = n_ipdef_proc_write,
-	.llseek  = noop_llseek,
-        .release = n_ipdef_proc_close,
-};
-
-static const struct file_operations n_hostdef_proc_fops = {
-        .open    = n_hostdef_proc_open,
-        .read    = n_hostdef_proc_read,
-        .write   = n_hostdef_proc_write,
-        .llseek  = noop_llseek,
-        .release = n_hostdef_proc_close,
-};
+PROC_OPS(n_ipdef_proc_fops, n_ipdef_proc_open, n_ipdef_proc_read, n_ipdef_proc_write,noop_llseek,n_ipdef_proc_close);
+PROC_OPS(n_hostdef_proc_fops,n_hostdef_proc_open,n_hostdef_proc_read,n_hostdef_proc_write,noop_llseek,n_hostdef_proc_close);
 #if  LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
 static unsigned int ndpi_nat_do_chain(const struct nf_hook_ops *ops,
                                          struct sk_buff *skb,

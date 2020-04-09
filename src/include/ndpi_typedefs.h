@@ -424,7 +424,10 @@ static inline void spin_unlock(spinlock_t *a) { a->val--; };
 
 #define spin_lock_bh(a) spin_lock(a)
 #define spin_unlock_bh(a) spin_unlock(a)
-
+#else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+typedef ktime_t time_t;
+#endif
 #endif
 
 struct hash_ip4p_node {

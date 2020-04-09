@@ -29,11 +29,13 @@
 #include "ndpi_includes.h"
 #include "ndpi_define.h"
 #include "ndpi_protocol_ids.h"
+
+#include "ndpi_kernel_compat.h"
+
 #include "ndpi_typedefs.h"
 #include "ndpi_api.h"
 #include "ndpi_protocols.h"
 
-#include "ndpi_kernel_compat.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -150,6 +152,7 @@ extern "C" {
   int ndpi_match_prefix(const u_int8_t *payload, size_t payload_len,
 			const char *str, size_t str_len);
 
+  extern void gettimeofday64(struct timespec64 *, void * );
   /* version of ndpi_match_prefix with string literal */
 #define ndpi_match_strprefix(payload, payload_len, str)			\
   ndpi_match_prefix((payload), (payload_len), (str), (sizeof(str)-1))

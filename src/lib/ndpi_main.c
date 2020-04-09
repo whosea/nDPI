@@ -6641,6 +6641,15 @@ int gettimeofday(struct timeval * tp, struct timezone * tzp) {
 }
 #endif
 
+#ifndef __KERNEL__
+void gettimeofday64(struct timespec64* tp, void * tzp) {
+	struct timeval tv;
+	gettimeofday(&tv,NULL);
+	tp->tv_sec = tv.tv_sec;
+	tp->tv_nsec = tv.tv_usec*1000;
+}
+#endif
+
 int NDPI_BITMASK_COMPARE(NDPI_PROTOCOL_BITMASK a, NDPI_PROTOCOL_BITMASK b) {
   int i;
 

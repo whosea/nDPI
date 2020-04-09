@@ -367,13 +367,14 @@ int atoi(const char *buf) {
 	return atol(buf);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+static inline void getnstimeofday64(struct timespec64 *ts) {
+	        ktime_get_real_ts64(ts);
+}
+#endif
 
-void gettimeofday(struct timeval *tv, void *tz) {
-	struct timespec tm;
-	getnstimeofday(&tm);
-	tv->tv_sec = tm.tv_sec;
-	tv->tv_usec = tm.tv_nsec/1000;
-//	do_gettimeofday(tv);
+void gettimeofday64(struct timespec64 *tv, void *tz) {
+	getnstimeofday64(tv);
 }
 
 char *strtok_r (char *s, const char *delim, char **save_ptr)

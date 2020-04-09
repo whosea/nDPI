@@ -1,6 +1,6 @@
 all:
 	$(MAKE) -C ipt
-	$(MAKE) -C src
+	+$(MAKE) -C src
 
 modules_install:
 	$(MAKE) -C src modules_install

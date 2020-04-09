@@ -85,7 +85,7 @@ struct ndpi_net {
 	atomic_t		acc_work;	// number of active flow info
 	atomic_t		acc_rem;	// number of inactive flow info
 	unsigned long int	acc_gc;		// next run ndpi_delete_acct (jiffies + X)
-	unsigned long int	acc_open_time;	// time of reading from pos 0
+	time64_t		acc_open_time;	// time of reading from pos 0
 	int			acc_end;	// EOF for read process
 	int			acc_limit;	// if acc_work > acc_limit then drop flow info
 	int			acc_read_mode;	// 0 - read all connections info,

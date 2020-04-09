@@ -21,3 +21,9 @@ extern struct kmem_cache *ct_info_cache;
 #else
 #define ACCESS_OK(a,b,c) access_ok(a,b,c)
 #endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+static inline void getnstimeofday64(struct timespec64 *ts) {
+	ktime_get_real_ts64(ts);
+}
+#endif

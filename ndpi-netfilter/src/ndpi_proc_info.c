@@ -107,9 +107,9 @@ ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
 	spin_lock_bh(&t->lock);
 	do {
 		struct hash_ip4p_node *x = t->top;
-	 	struct timespec tm;
+	 	struct timespec64 tm;
 
-	        getnstimeofday(&tm);
+	        getnstimeofday64(&tm);
 		while(x && p < count - 128) {
 		        l =  inet_ntop_port(family,&x->ip,x->port,lbuf,sizeof(lbuf)-2);
 			l += snprintf(&lbuf[l],sizeof(lbuf)-l-1, " %d %x %u\n",

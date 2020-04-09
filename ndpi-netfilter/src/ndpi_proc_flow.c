@@ -20,9 +20,9 @@
 #include "ndpi_proc_generic.h"
 
 void nflow_proc_read_start(struct ndpi_net *n) {
-	struct timespec tm;
+	struct timespec64 tm;
 
-	getnstimeofday(&tm);
+	getnstimeofday64(&tm);
 	n->acc_end  = 0;
 	n->acc_open_time = tm.tv_sec;
 	n->flow_l   = NULL;
@@ -50,7 +50,7 @@ size_t ndpi_dump_lost_rec(char *buf,size_t bufsize,
 	return sizeof(struct flow_data_common);
 }
 
-size_t ndpi_dump_start_rec(char *buf, size_t bufsize, uint32_t tm)
+size_t ndpi_dump_start_rec(char *buf, size_t bufsize, time64_t tm)
 {
 	struct flow_data_common *c;
 
@@ -58,7 +58,7 @@ size_t ndpi_dump_start_rec(char *buf, size_t bufsize, uint32_t tm)
 	memset(buf,0,8);
 	c = (struct flow_data_common *)buf;
 	c->rec_type = 1;
-	c->time_start = tm;
+	c->time_start = (uint32_t)tm; // BUG AFTER YEAR 2105
 	return 8;
 }
 

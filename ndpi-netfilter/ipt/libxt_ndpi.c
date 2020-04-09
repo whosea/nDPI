@@ -692,8 +692,18 @@ void _init(void)
 		c = fgets(buf,sizeof(buf)-1,f_proto);
 		if(!c) break;
 		if(buf[0] == '#') {
-			if(!strstr(buf,"#version") || !strstr(buf,NDPI_GIT_RELEASE)) break;
-			pname[0] = ' ';
+			if(!pname[0] && !strncmp(buf,"#id",3)) {
+			   char *vs;
+			   vs = strchr(buf,'\n');
+			   if(vs) *vs = '\0';
+			   vs = strstr(buf,"#version");
+			   if(!vs)
+	    			xtables_error(PARAMETER_PROBLEM, "xt_ndpi: #version missing");
+			   if(!strstr(vs+8,NDPI_GIT_RELEASE))
+	    			xtables_error(PARAMETER_PROBLEM, "xt_ndpi: module version %s != %s",
+						vs+8,NDPI_GIT_RELEASE);
+			    pname[0] = ' ';
+			}
 			continue;
 		}
 		if(!pname[0]) continue;
