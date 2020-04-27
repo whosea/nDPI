@@ -9,6 +9,7 @@
 
 #include <asm/byteorder.h>
 #include <linux/time.h>
+#define UINT32_MAX	U32_MAX
 
 typedef size_t socklen_t;
 const char *

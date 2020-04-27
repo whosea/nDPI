@@ -80,6 +80,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/iax.c \
 		     protocols/icecast.c \
 		     protocols/imo.c \
+		     protocols/iec60870-5-104.c \
 		     protocols/ipp.c \
 		     protocols/irc.c \
 		     protocols/jabber.c \

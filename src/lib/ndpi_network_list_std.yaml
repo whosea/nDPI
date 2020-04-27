@@ -298,7 +298,7 @@ OCS:
 	  - OCS GO (Orange Cinéma Séries)
 	ip:
 	  - 178.248.208.0/21
-OFFICE_365:
+MICROSOFT_365:
 	source:
 	  - OFFICE 365
 	  - https://docs.microsoft.com/en-us/office365/enterprise/urls-and-ip-address-ranges

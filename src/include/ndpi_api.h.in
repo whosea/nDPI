@@ -814,18 +814,18 @@ extern "C" {
   int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 const char *ip_or_name, ndpi_protocol_category_t category);
   int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_struct);
-#endif
   int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 u_int32_t saddr,
 				 u_int32_t daddr,
 				 ndpi_protocol *ret);
   int ndpi_match_custom_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 char *name, u_int name_len, unsigned long *id);
+  int ndpi_get_custom_category_match(struct ndpi_detection_module_struct *ndpi_struct,
+				     char *name_or_ip, u_int name_len, unsigned long *id);
+#endif
   void ndpi_fill_protocol_category(struct ndpi_detection_module_struct *ndpi_struct,
 				   struct ndpi_flow_struct *flow,
 				   ndpi_protocol *ret);
-  int ndpi_get_custom_category_match(struct ndpi_detection_module_struct *ndpi_struct,
-				     char *name_or_ip, u_int name_len, unsigned long *id);
   int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_mod,
 				     ndpi_detection_preference pref,
 				     int value);
@@ -966,7 +966,8 @@ extern "C" {
 				  const char *format /* e.f. "%.2f" */);
   int ndpi_serialize_string_boolean(ndpi_serializer *serializer,
 				    const char *key, u_int8_t value);
-
+  int ndpi_serialize_raw_record(ndpi_serializer *_serializer,
+				u_char *record, u_int32_t record_len);
   int ndpi_serialize_end_of_record(ndpi_serializer *serializer);
   int ndpi_serialize_start_of_block(ndpi_serializer *serializer,
 				    const char *key);

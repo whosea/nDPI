@@ -1009,10 +1009,16 @@ typedef struct ndpi_proto {
     custom protocols and thus the typedef could be too short in size.
   */
   u_int16_t master_protocol /* e.g. HTTP */, app_protocol /* e.g. FaceBook */;
+#ifndef __KERNEL__
   ndpi_protocol_category_t category;
+#endif
 } ndpi_protocol;
 
-#define NDPI_PROTOCOL_NULL { NDPI_PROTOCOL_UNKNOWN , NDPI_PROTOCOL_UNKNOWN }
+#ifndef __KERNEL__
+  #define NDPI_PROTOCOL_NULL { NDPI_PROTOCOL_UNKNOWN , NDPI_PROTOCOL_UNKNOWN , NDPI_PROTOCOL_CATEGORY_UNSPECIFIED }
+#else
+  #define NDPI_PROTOCOL_NULL { NDPI_PROTOCOL_UNKNOWN , NDPI_PROTOCOL_UNKNOWN }
+#endif
 
 #define NUM_CUSTOM_CATEGORIES      5
 #define CUSTOM_CATEGORY_LABEL_LEN 32
@@ -1483,10 +1489,11 @@ typedef enum {
 #define NDPI_SERIALIZER_DEFAULT_BUFFER_SIZE 8192
 #define NDPI_SERIALIZER_DEFAULT_BUFFER_INCR 1024
 
-#define NDPI_SERIALIZER_STATUS_COMMA (1 << 0)
-#define NDPI_SERIALIZER_STATUS_ARRAY (1 << 1)
-#define NDPI_SERIALIZER_STATUS_EOR   (1 << 2)
-#define NDPI_SERIALIZER_STATUS_SOB   (1 << 3)
+#define NDPI_SERIALIZER_STATUS_COMMA     (1 << 0)
+#define NDPI_SERIALIZER_STATUS_ARRAY     (1 << 1)
+#define NDPI_SERIALIZER_STATUS_EOR       (1 << 2)
+#define NDPI_SERIALIZER_STATUS_SOB       (1 << 3)
+#define NDPI_SERIALIZER_STATUS_NOT_EMPTY (1 << 4)
 
 typedef struct {
   u_int32_t flags;

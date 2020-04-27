@@ -95,7 +95,8 @@ static struct ndpi_detection_module_struct *ndpi_info_mod = NULL;
 
 extern u_int32_t max_num_packets_per_flow, max_packet_payload_dissection, max_num_reported_top_payloads;
 extern u_int16_t min_pattern_len, max_pattern_len;
-
+extern void ndpi_self_check_host_match(); /* Self check function */
+  
 struct flow_info {
   struct ndpi_flow_info *flow;
   u_int16_t thread_id;
@@ -218,6 +219,7 @@ FILE *trace = NULL;
  */
 static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle);
 
+#if 0
 static void reduceBDbits(uint32_t *bd, unsigned int len) {
   int mask = 0;
   int shift = 0;
@@ -238,6 +240,7 @@ static void reduceBDbits(uint32_t *bd, unsigned int len) {
   for(i = 0; i < len; i++)
     bd[i] = bd[i] >> shift;
 }
+#endif
 
 /**
  * @brief Get flow byte distribution mean and variance
@@ -1122,7 +1125,8 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
       flowGetBDMeanandVariance(flow);
     }
 
-    if(csv_fp) fprintf(csv_fp, "\n");
+    if(csv_fp)
+      fprintf(csv_fp, "\n");
     return;
   }
 
@@ -1153,10 +1157,11 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
   if(!rep_mini && enable_joy_stats) {
     /* Print entropy values for monitored flows. */
     flowGetBDMeanandVariance(flow);
-    if(csv_fp) fprintf(csv_fp, "\n");
     fflush(out);
     fprintf(out, "[score: %.4f]", flow->entropy.score);
   }
+	
+  if(csv_fp) fprintf(csv_fp, "\n");
     
   fprintf(out, "[proto: ");
   if(flow->tunnel_type != ndpi_no_tunnel)
@@ -1547,12 +1552,14 @@ static int acceptable(u_int32_t num_pkts){
 
 /* *********************************************** */
 
+#if 0
 static int receivers_sort(void *_a, void *_b) {
   struct receiver *a = (struct receiver *)_a;
   struct receiver *b = (struct receiver *)_b;
 
   return(b->num_pkts - a->num_pkts);
 }
+#endif
 
 /* *********************************************** */
 
@@ -1771,6 +1778,7 @@ static void node_idle_scan_walker(const void *node, ndpi_VISIT which, int depth,
 
       ndpi_free_flow_info_half(flow);
       ndpi_free_flow_data_analysis(flow);
+      ndpi_free_flow_tls_data(flow);
       ndpi_thread_info[thread_id].workflow->stats.ndpi_flow_count--;
 
       /* adding to a queue (we can't delete it from the tree inline ) */
@@ -3267,6 +3275,7 @@ int orginal_main(int argc, char **argv) {
     automataUnitTest();
     serializerUnitTest();
     analyzeUnitTest();
+    ndpi_self_check_host_match();
 
     gettimeofday(&startup_time, NULL);
     ndpi_info_mod = ndpi_init_detection_module(ndpi_no_prefs);

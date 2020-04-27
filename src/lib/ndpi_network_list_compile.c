@@ -43,6 +43,7 @@ int i;
 if(!name || !*name) return NDPI_PROTOCOL_UNKNOWN;
 for(i=0; i < sizeof(proto_def)/sizeof(proto_def[0]); i++) {
 	s = proto_def[i];
+	if(!s) continue;
 	/* Skip NDPI_PROTOCOL_ or NDPI_CONTENT_ */
 	s += 12;
 	if(*s != '_') s++;

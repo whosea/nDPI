@@ -248,7 +248,7 @@ typedef enum {
   NDPI_PROTOCOL_IMO                   = 216,
   NDPI_PROTOCOL_GOOGLE_DRIVE          = 217,
   NDPI_PROTOCOL_OCS                   = 218,
-  NDPI_PROTOCOL_OFFICE_365            = 219,
+  NDPI_PROTOCOL_MICROSOFT_365         = 219,
   NDPI_PROTOCOL_CLOUDFLARE            = 220,
   NDPI_PROTOCOL_MS_ONE_DRIVE          = 221,
   NDPI_PROTOCOL_MQTT                  = 222,
@@ -279,6 +279,7 @@ typedef enum {
   NDPI_PROTOCOL_CAPWAP                = 247,
   NDPI_PROTOCOL_ZABBIX                = 248,
   NDPI_PROTOCOL_S7COMM                = 249,
+  NDPI_PROTOCOL_MSTEAMS               = 250,
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_protocol_ids.h"
