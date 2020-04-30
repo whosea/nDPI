@@ -734,6 +734,7 @@ while(s != NULL && l != 0 && r >= 0 && *s != '\0') {
 	x.level=0;
 	x.buf[0] = 0;
 	s = bt_decode(s,&l,&r,&x);
+	if(s < b || s >= b+l) r = -1;
 }
 #ifndef __KERNEL__
 if(0 && bt_parse_debug)

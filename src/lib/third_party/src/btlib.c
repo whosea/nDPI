@@ -429,10 +429,12 @@ void cb_data(bt_parse_data_cb_t *cbd,int *ret) {
   // DEBUG_TRACE(print_safe_str("UNKNOWN",cbd));
 }
 
-
 const u_int8_t *bt_decode(const u_int8_t *b, size_t *l, int *ret, bt_parse_data_cb_t *cbd) {
 
   unsigned int n=0,neg=0;
+  const u_int8_t *sb = b;
+  const u_int8_t *eb = b+l;
+#define in_buf_range(x) ((x) >= sb && (x) < eb)
   int64_t d = 0;
   u_int8_t c;
 
@@ -490,6 +492,7 @@ const u_int8_t *bt_decode(const u_int8_t *b, size_t *l, int *ret, bt_parse_data_
     do {
       b = bt_decode(b,l,ret,cbd);
       if(*ret < 0 || *l == 0) goto bad_data;
+      if(!in_buf_range(b)) goto bad_data;
       cb_data(cbd,ret);
       if(*ret < 0) goto bad_data;
       cbd->t = 0;
@@ -506,6 +509,7 @@ const u_int8_t *bt_decode(const u_int8_t *b, size_t *l, int *ret, bt_parse_data_
       if(!(*b >= '1' && *b <= '9')) goto bad_data;
       b = bt_decode(b,l,ret,cbd);
       if(*ret < 0 || *l == 0) goto bad_data;
+      if(!in_buf_range(b)) goto bad_data;
       if(ls+cbd->v.s.l+l1 < &cbd->buf[sizeof(cbd->buf)-1]) {
 	if(l1)	ls[0]='.';
 	strncpy(ls+l1,(char *)cbd->v.s.s,cbd->v.s.l);
@@ -513,6 +517,7 @@ const u_int8_t *bt_decode(const u_int8_t *b, size_t *l, int *ret, bt_parse_data_
       }
       b = bt_decode(b,l,ret,cbd);
       if(*ret < 0 || *l == 0) goto bad_data;
+      if(!in_buf_range(b)) goto bad_data;
       cb_data(cbd,ret);
       if(*ret < 0) goto bad_data;
       cbd->t = 0;
