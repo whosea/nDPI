@@ -1808,7 +1808,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     ip_len = ((u_int16_t)iph->ihl * 4);
     iph6 = NULL;
 
-    if(iph->protocol == IPPROTO_IPV6) {
+    if(iph->protocol == IPPROTO_IPV6 || iph->protocol == IPPROTO_IPIP) {
       ip_offset += ip_len;
       if(ip_len > 0)
         goto iph_check;
@@ -1833,12 +1833,18 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
     proto = iph6->ip6_hdr.ip6_un1_nxt;
     ip_len = ntohs(iph6->ip6_hdr.ip6_un1_plen);
-    if(header->caplen < (ip_offset + sizeof(struct ndpi_ipv6hdr) + ntohs(iph6->ip6_hdr.ip6_un1_plen)))
+    if(h_caplen < (ip_offset + sizeof(struct ndpi_ipv6hdr) + ntohs(iph6->ip6_hdr.ip6_un1_plen)))
       return(nproto); /* Too short for IPv6 payload*/
 
     const u_int8_t *l4ptr = (((const u_int8_t *) iph6) + sizeof(struct ndpi_ipv6hdr));
     if(ndpi_handle_ipv6_extension_headers(NULL, &l4ptr, &ip_len, &proto) != 0) {
       return(nproto);
+    }
+    if(proto == IPPROTO_IPV6 || proto == IPPROTO_IPIP) {
+      if(l4ptr > packet) { /* Better safe than sorry */
+        ip_offset = (l4ptr - packet);
+        goto iph_check;
+      }
     }
 
     iph = NULL;
@@ -1857,7 +1863,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   }
 
   if(workflow->prefs.decode_tunnels && (proto == IPPROTO_UDP)) {
-    if(header->caplen < ip_offset + ip_len + sizeof(struct ndpi_udphdr))
+    if(h_caplen < ip_offset + ip_len + sizeof(struct ndpi_udphdr))
       return(nproto); /* Too short for UDP header*/
     else {
       struct ndpi_udphdr *udp = (struct ndpi_udphdr *)&packet[ip_offset+ip_len];
@@ -1879,11 +1885,15 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 	  if(flags & 0x02) ip_offset += 4; /* sequence_number is present (it also includes next_ext_header and pdu_number) */
 	  if(flags & 0x01) ip_offset += 1; /* pdu_number is present */
 
-	  iph = (struct ndpi_iphdr *) &packet[ip_offset];
-
-	  if(iph->version != IPVERSION) {
-	    // printf("WARNING: not good (packet_id=%u)!\n", (unsigned int)workflow->stats.raw_packet_count);
-	    goto v4_warning;
+	  if(ip_offset < h_caplen) {
+	    iph = (struct ndpi_iphdr *)&packet[ip_offset];
+	    if(iph->version == 6) {
+	      iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
+	      iph = NULL;
+	    } else if(iph->version != IPVERSION) {
+	      // printf("WARNING: not good (packet_id=%u)!\n", (unsigned int)workflow->stats.raw_packet_count);
+	      goto v4_warning;
+	    }
 	  }
 	}
       } else if((sport == TZSP_PORT) || (dport == TZSP_PORT)) {
@@ -1933,22 +1943,26 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 	/* We dissect ONLY CAPWAP traffic */
 	u_int offset           = ip_offset+ip_len+sizeof(struct ndpi_udphdr);
 
-      if((offset+40) < h_caplen) {
-	u_int16_t msg_len = packet[offset+1] >> 1;
+	if((offset+1) < h_caplen) {
+	  uint8_t preamble = packet[offset];
 
-	  offset += msg_len;
+	  if((preamble & 0x0F) == 0) { /* CAPWAP header */
+	    u_int16_t msg_len = (packet[offset+1] & 0xF8) >> 1;
 
-	  if(packet[offset] == 0x02) {
-	    /* IEEE 802.11 Data */
+	    offset += msg_len;
 
-	    offset += 24;
-	    /* LLC header is 8 bytes */
-	    type = ntohs((u_int16_t)*((u_int16_t*)&packet[offset+6]));
+	    if((offset + 32 < h_caplen) && (packet[offset] == 0x02)) {
+	      /* IEEE 802.11 Data */
 
-	    ip_offset = offset + 8;
+	      offset += 24;
+	      /* LLC header is 8 bytes */
+	      type = ntohs((u_int16_t)*((u_int16_t*)&packet[offset+6]));
 
-	    tunnel_type = ndpi_capwap_tunnel;
-	    goto iph_check;
+	      ip_offset = offset + 8;
+
+	      tunnel_type = ndpi_capwap_tunnel;
+	      goto iph_check;
+	    }
 	  }
 	}
       }
