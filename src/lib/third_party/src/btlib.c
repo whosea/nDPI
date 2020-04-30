@@ -433,7 +433,7 @@ const u_int8_t *bt_decode(const u_int8_t *b, size_t *l, int *ret, bt_parse_data_
 
   unsigned int n=0,neg=0;
   const u_int8_t *sb = b;
-  const u_int8_t *eb = b+l;
+  const u_int8_t *eb = b+(*l);
 #define in_buf_range(x) ((x) >= sb && (x) < eb)
   int64_t d = 0;
   u_int8_t c;

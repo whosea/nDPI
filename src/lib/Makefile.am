@@ -175,6 +175,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/vmware.c \
 		     protocols/vnc.c \
 		     protocols/warcraft3.c \
+		     protocols/websocket.c \
 		     protocols/whoisdas.c \
 		     protocols/world_of_kung_fu.c \
 		     protocols/world_of_warcraft.c \
