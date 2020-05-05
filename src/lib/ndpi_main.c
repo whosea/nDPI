@@ -2802,7 +2802,7 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
         } else if (is_ip) {
             /* NDPI_PROTOCOL_TOR */
             ndpi_add_host_ip_subprotocol(ndpi_str, value, subprotocol_id);
-        } else {
+        } else if(value) {
             if (do_add)
                 ndpi_add_host_url_subprotocol(ndpi_str, value, subprotocol_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED,
                                               NDPI_PROTOCOL_ACCEPTABLE);
