@@ -291,7 +291,7 @@ if(!proto) { // udp
 	if(count) 
 		memcpy( &pd1->p[0],np,count*sizeof(ndpi_port_range_t));
 	if(pd->count[1])
-		memcpy( &pd1->p[pd->count[0]], &pd->p[pd->count[0]],
+		memcpy( &pd1->p[count], &pd->p[pd->count[0]],
 			pd->count[1]*sizeof(ndpi_port_range_t));
 	pd1->count[0] = count;
 } else { // tcp
