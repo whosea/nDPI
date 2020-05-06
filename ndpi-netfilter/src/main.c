@@ -2492,7 +2492,7 @@ static int __net_init ndpi_net_init(struct net *net)
 	for (i = 0; i < NDPI_NUM_BITS; i++) {
                 atomic_set (&n->protocols_cnt[i], 0);
         	n->debug_level[i] = 0;
-		if(i <= NDPI_LAST_IMPLEMENTED_PROTOCOL) continue;
+		if(i < NDPI_LAST_IMPLEMENTED_PROTOCOL) continue;
 		n->mark[i].mark = n->mark[i].mask = 0;
         }
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES

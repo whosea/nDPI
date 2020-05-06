@@ -213,7 +213,8 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 	}
 	t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.app_protocol);
 	l += snprintf(&buf[l],buflen-l," P=%s",t_proto);
-	if(ct->proto.master_protocol != NDPI_PROTOCOL_UNKNOWN) {
+	if(ct->proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
+	   ct->proto.master_protocol != ct->proto.app_protocol) {
 	    t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.master_protocol);
 	    l += snprintf(&buf[l],buflen-l,",%s",t_proto);
 	}
