@@ -338,7 +338,7 @@ uint16_t id;
 			if(!ndpi_last_proto)
 				ndpi_get_proto_names();
 			if(c->proto_app) {
-				if(c->proto_master) {
+				if(c->proto_master && c->proto_master != c->proto_app) {
 					snprintf(pn,sizeof(pn)-1,"%s,%s",
 						ndpi_proto_name(c->proto_app),
 						ndpi_proto_name(c->proto_master));
