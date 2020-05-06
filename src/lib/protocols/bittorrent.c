@@ -87,6 +87,8 @@ d[i >= n ? n-1:i]++;
 
 #endif
 
+int ndpi_search_dht_again(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow);
+
 #define NDPI_STATICSTRING_LEN( s ) ( sizeof( s ) - 1 )
 #define NDPI_STATICSTRING( s )  s , ( sizeof( s ) - 1 )
 
@@ -905,7 +907,10 @@ static void ndpi_add_connection_as_bittorrent(
   } /* tcp */
 
   if (packet->udp != NULL) {
-    flow->no_cache_protocol = 1; // for DHT parse
+    flow->check_extra_packets = 1;
+    flow->max_extra_packets_to_check = 255;
+    flow->extra_packets_func = ndpi_search_dht_again;
+
     p1 = packet->udp->source;
     p2 = packet->udp->dest;
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
@@ -1450,6 +1455,14 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 				      utp_type);
     return;
 }
+
+int ndpi_search_dht_again(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
+{
+  ndpi_search_bittorrent(ndpi_struct,flow);
+  flow->num_extra_packets_checked = 0;
+  return 1;
+}
+
 
 void ndpi_bittorrent_init(struct ndpi_detection_module_struct *ndpi_struct,
 		u_int32_t size,u_int32_t size6,u_int32_t tmo,int logsize) {

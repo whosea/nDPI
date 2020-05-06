@@ -4092,10 +4092,6 @@ void check_ndpi_udp_flow_func(struct ndpi_detection_module_struct *ndpi_str, str
             } else if (_ndpi_debug_callbacks)
                 NDPI_LOG_DBG2(ndpi_str, "[UDP,SKIP] dissector of protocol as callback_buffer idx =  %d\n", a);
         }
-    } else {
-        proto_id = flow->detected_protocol_stack[0];
-	func = ndpi_str->proto_defaults[proto_id].func;
-	if(flow->no_cache_protocol && func) (*func)(ndpi_str, flow);
     }
 }
 
@@ -4138,11 +4134,7 @@ void check_ndpi_tcp_flow_func(struct ndpi_detection_module_struct *ndpi_str, str
                         break; /* Stop after detecting the first protocol */
                 }
             }
-        } else {
-	    proto_id = flow->detected_protocol_stack[0];
-	    func = ndpi_str->proto_defaults[proto_id].func;
-	    if(flow->no_cache_protocol && func) (*func)(ndpi_str, flow);
-	}
+       }
     } else {
         /* no payload */
         if ((proto_id != NDPI_PROTOCOL_UNKNOWN) &&
@@ -4731,8 +4723,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     if (flow->server_id == NULL)
         flow->server_id = dst; /* Default */
 
-    if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_UNKNOWN &&
-        !flow->no_cache_protocol) {
+    if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_UNKNOWN) {
         if (flow->check_extra_packets) {
             ndpi_process_extra_packet(ndpi_str, flow, packet, packetlen, current_tick_l, src, dst);
             /* Update in case of new match */

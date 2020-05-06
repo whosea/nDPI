@@ -1428,51 +1428,51 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			(test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START));
 
 		COUNTER(ndpi_pd);
-
-		if(r_proto == NDPI_PROCESS_ERROR) {
-			// special case for errors
+		do {
+		    // special case for errors
+		    if(r_proto == NDPI_PROCESS_ERROR) {
 			COUNTER(ndpi_pe);
 			c_proto->proto = r_proto;
 			proto.app_protocol = r_proto;
 			proto.master_protocol = NDPI_PROTOCOL_UNKNOWN;
 			if(ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_UNKNOWN)
 				ct_ndpi->proto.app_protocol = r_proto;
+		        break;
+		    }
 
-		} else { // ndpi_process_packet return app_protocol 
-			if(r_proto != NDPI_PROTOCOL_UNKNOWN) {
-				proto = ct_ndpi->proto;
-				c_proto->proto = pack_proto(proto);
-				if(test_flow_yes(ct_ndpi))
-					ndpi_host_ssl(ct_ndpi);
-				atomic_inc(&n->protocols_cnt[proto.app_protocol]);
-				if(proto.master_protocol != NDPI_PROTOCOL_UNKNOWN)
-					atomic_inc(&n->protocols_cnt[proto.master_protocol]);
-			} else { // unknown
-				if(ct_ndpi->proto.app_protocol != NDPI_PROTOCOL_UNKNOWN &&
-				   ct_ndpi->flow->no_cache_protocol) { // restore proto
-					proto = ct_ndpi->proto;
-					c_proto->proto = pack_proto(proto);
-				} else {
-					switch(ct_ndpi->l4_proto) {
-					  case IPPROTO_TCP:
-						  if(ct_ndpi->flow->packet_counter > max_packet_unk_tcp)
-							  set_detect_done(ct_ndpi);
-						  break;
-					  case IPPROTO_UDP:
-						  if(ct_ndpi->flow->packet_counter > max_packet_unk_udp)
-							  set_detect_done(ct_ndpi);
-						  break;
-					  default:
-						  if(ct_ndpi->flow->packet_counter > max_packet_unk_other)
-							  set_detect_done(ct_ndpi);
-					}
-					if(test_detect_done(ct_ndpi) && ct_ndpi->flow)
-						__ndpi_free_ct_flow(ct_ndpi);
-				}
+		    // ndpi_process_packet return app_protocol 
+		    if(r_proto != NDPI_PROTOCOL_UNKNOWN) {
+			proto = ct_ndpi->proto;
+			c_proto->proto = pack_proto(proto);
+			if(test_flow_yes(ct_ndpi))
+				ndpi_host_ssl(ct_ndpi);
+			atomic_inc(&n->protocols_cnt[proto.app_protocol]);
+			if(proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
+			   proto.master_protocol != proto.app_protocol)
+				atomic_inc(&n->protocols_cnt[proto.master_protocol]);
+			break;
+		    }
+		    // ndpi_process_packet return unknown
+		    if(ct_ndpi->proto.app_protocol != NDPI_PROTOCOL_UNKNOWN &&
+			    ct_ndpi->flow->check_extra_packets) { // restore proto
+			proto = ct_ndpi->proto;
+			c_proto->proto = pack_proto(proto);
+			break;
+		    }
+		    {
+			int max_packet_unk = 
+			     (ct_ndpi->l4_proto == IPPROTO_TCP) ? max_packet_unk_tcp:
+			     (ct_ndpi->l4_proto == IPPROTO_UDP) ? max_packet_unk_udp : max_packet_unk_other;
+			if(ct_ndpi->flow->packet_counter > max_packet_unk) {
+				set_detect_done(ct_ndpi);
+				if(ct_ndpi->flow)
+					__ndpi_free_ct_flow(ct_ndpi);
 			}
-			if(info->hostname[0])
-				host_match = ndpi_host_match(info,ct_ndpi);
-		}
+		    }
+		} while(0);
+
+		if(info->hostname[0])
+			host_match = ndpi_host_match(info,ct_ndpi);
 		spin_unlock_bh (&ct_ndpi->lock);
 
 		if(linearized_skb != NULL)
