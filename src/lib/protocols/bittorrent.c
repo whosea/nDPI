@@ -719,6 +719,7 @@ static int bdecode(const u_int8_t *b,size_t l,
 {
 bt_parse_data_cb_t x;
 const u_int8_t *s = b;
+const u_int8_t *se = b+l;
 int r = 0;
 int i;
 
@@ -736,7 +737,7 @@ while(s != NULL && l != 0 && r >= 0 && *s != '\0') {
 	x.level=0;
 	x.buf[0] = 0;
 	s = bt_decode(s,&l,&r,&x);
-	if(s < b || s >= b+l) r = -1;
+	if(s < b || s > se) r = -1;
 }
 #ifndef __KERNEL__
 if(0 && bt_parse_debug)
