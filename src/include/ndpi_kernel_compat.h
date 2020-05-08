@@ -17,6 +17,13 @@ inet_ntop (int af, const void *src, char *dst, socklen_t size);
 int inet_pton(int af, const char *src, void *dst);
 int atoi(const char *);
 long int atol(const char *);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,3,0)
+static inline void getnstimeofday64(struct timespec64 *ts) {
+	            ktime_get_real_ts64(ts);
+}
+#endif
+
 void gettimeofday64(struct timespec64 *tv, void *tz);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 

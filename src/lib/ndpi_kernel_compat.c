@@ -367,12 +367,6 @@ int atoi(const char *buf) {
 	return atol(buf);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
-static inline void getnstimeofday64(struct timespec64 *ts) {
-	        ktime_get_real_ts64(ts);
-}
-#endif
-
 void gettimeofday64(struct timespec64 *tv, void *tz) {
 	getnstimeofday64(tv);
 }
