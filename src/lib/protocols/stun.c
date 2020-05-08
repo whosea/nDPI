@@ -52,6 +52,7 @@ u_int32_t get_stun_lru_key(struct ndpi_flow_struct *flow, u_int8_t rev) {
 void ndpi_int_stun_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 				  struct ndpi_flow_struct *flow,
 				  u_int proto, u_int app_proto) {
+#if 0
   if(ndpi_struct->stun_cache == NULL)
     ndpi_struct->stun_cache = ndpi_lru_cache_init(1024);
 
@@ -93,6 +94,7 @@ void ndpi_int_stun_add_connection(struct ndpi_detection_module_struct *ndpi_stru
       }
     }
   }
+#endif
 
   ndpi_set_detected_protocol(ndpi_struct, flow, app_proto, proto);
 }
