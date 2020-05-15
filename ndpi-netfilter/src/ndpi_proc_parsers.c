@@ -157,7 +157,7 @@ if(pd->count[l4]) {
 	}
 }
 /* FIXME */
-//return node->value.user_value;
+//return node->value.uv.user_value;
 return NDPI_PROTOCOL_UNKNOWN;
 }
 
@@ -549,11 +549,11 @@ if(f_op || f_op2) { // delete
 	}
 	if(!np.start && !np.end) {
 	    // -xxxx proto
-	    if(node->value.user_value == np.proto) {
+	    if(node->value.uv.user_value == np.proto) {
 		if(!node->data) {
 		    ndpi_patricia_remove(pt,node);
 		} else {
-		  node->value.user_value = 0;
+		  node->value.uv.user_value = 0;
 		}
 		break;
 	    }
@@ -577,7 +577,7 @@ if(np.proto == NDPI_PROTOCOL_UNKNOWN ||
 if(!np.start && !np.end) {
 	if(np.l4_proto == 2) {
 	    // any:proto
-	    node->value.user_value = np.proto;
+	    node->value.uv.user_value = np.proto;
 	    break;
 	}
 	// (tcp|udp):any:proto

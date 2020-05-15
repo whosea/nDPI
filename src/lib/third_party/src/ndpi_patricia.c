@@ -89,7 +89,6 @@ static int ndpi_comp_with_mask (void *addr, void *dest, u_int mask) {
   return (*pa & m) == (*pd &m);
 }
 
-#if 0
 /* this allows incomplete prefix */
 #ifndef __KERNEL__
 static int ndpi_my_inet_pton (int af, const char *src, void *dst)
@@ -136,6 +135,7 @@ static int ndpi_my_inet_pton (int af, const char *src, void *dst)
 #define ndpi_my_inet_pton(A,S,D) inet_pton(A,S,D)
 #endif
 
+#if 0
 #define PATRICIA_MAX_THREADS		16
 
 /* 
@@ -914,10 +914,9 @@ ndpi_patricia_remove (patricia_tree_t *patricia, patricia_node_t *node)
 }
 
 /* { from demo.c */
-#if 0
 
 /* ndpi_ascii2prefix */
-static prefix_t * ndpi_ascii2prefix (int family, char *string)
+prefix_t * ndpi_ascii2prefix (int family, char *string)
 {
   long bitlen;
   long maxbitlen = 0;
@@ -965,7 +964,7 @@ static prefix_t * ndpi_ascii2prefix (int family, char *string)
   if(family == AF_INET) {
     if(ndpi_my_inet_pton (AF_INET, string, &sin) <= 0)
       return (NULL);
-    return (ndpi_New_Prefix (AF_INET, &sin, bitlen));
+    return (ndpi_New_Prefix2 (AF_INET, &sin, bitlen, NULL));
   }
 
 #if defined(PATRICIA_IPV6)
@@ -973,17 +972,19 @@ static prefix_t * ndpi_ascii2prefix (int family, char *string)
     // Get rid of this with next IPv6 upgrade
 #if defined(NT) && !defined(HAVE_INET_NTOP)
     inet6_addr(string, &sin6);
-    return (ndpi_New_Prefix (AF_INET6, &sin6, bitlen));
+    return (ndpi_New_Prefix2 (AF_INET6, &sin6, bitlen, NULL));
 #else
     if(inet_pton (AF_INET6, string, &sin6) <= 0)
       return (NULL);
 #endif /* NT */
-    return (ndpi_New_Prefix (AF_INET6, &sin6, bitlen));
+    return (ndpi_New_Prefix2 (AF_INET6, &sin6, bitlen, NULL));
   }
 #endif /* PATRICIA_IPV6 */
   else
     return (NULL);
 }
+
+#if 0
 
 patricia_node_t *
 ndpi_make_and_lookup (patricia_tree_t *tree, char *string)

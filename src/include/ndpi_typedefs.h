@@ -852,7 +852,7 @@ struct ndpi_packet_struct {
 				  forwarded_line,
 				  referer_line,
 				  content_line,
-				  content_disposition_line
+				  content_disposition_line,
 				  accept_line,
 				  user_agent_line,
 				  http_url_name,

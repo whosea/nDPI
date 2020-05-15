@@ -8653,7 +8653,7 @@ static ndpi_network host_protocol_list[] = {
 
 /* ****************************************************** */
 
-static ndpi_protocol_match host_match[] =
+ndpi_protocol_match host_match[] =
   {
    { "s3.ll.dash.row.aiv-cdn.net",          "AmazonVideo",      NDPI_PROTOCOL_AMAZON_VIDEO, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_FUN },
    { "s3-dub.cf.dash.row.aiv-cdn.net",  "AmazonVideo",      NDPI_PROTOCOL_AMAZON_VIDEO, NDPI_PROTOCOL_CATEGORY_VIDEO, NDPI_PROTOCOL_FUN },

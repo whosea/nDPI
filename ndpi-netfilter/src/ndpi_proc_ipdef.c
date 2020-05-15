@@ -67,10 +67,10 @@ ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
 		   (px->family == AF_INET6 && px->bitlen < 128 ))
 			snprintf(&ibuf[k],sizeof(ibuf)-k,"/%d",px->bitlen);
 		}
-		if(node->value.user_value != NDPI_PROTOCOL_UNKNOWN)
+		if(node->value.uv.user_value != NDPI_PROTOCOL_UNKNOWN)
 		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%-16s %s\n",ibuf,
-			node->value.user_value >= NDPI_NUM_BITS ?
-				"unknown":ndpi_get_proto_by_id(n->ndpi_struct,node->value.user_value));
+			node->value.uv.user_value >= NDPI_NUM_BITS ?
+				"unknown":ndpi_get_proto_by_id(n->ndpi_struct,node->value.uv.user_value));
 		if(node->data) {
 			struct ndpi_port_def *pd = node->data;
 			ndpi_port_range_t *pt = pd->p;

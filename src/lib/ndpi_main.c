@@ -2081,11 +2081,11 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
     snprintf(ndpi_str->custom_category_labels[i], CUSTOM_CATEGORY_LABEL_LEN, "User custom category %u",
 	     (unsigned int) (i + 1));
 
-    if(ndpi_validate_protocol_initialization(ndpi_str)) {
+  if(ndpi_validate_protocol_initialization(ndpi_str)) {
 	ndpi_exit_detection_module(ndpi_str);
 	return NULL;
-    }
-    return(ndpi_str);
+  }
+  return(ndpi_str);
 }
 
 /* *********************************************** */
@@ -4060,8 +4060,9 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
 
   /* Init defaults */
   ret.master_protocol = flow->detected_protocol_stack[1], ret.app_protocol = flow->detected_protocol_stack[0];
+#ifndef __KERNEL__
   ret.category = flow->category;
-
+#endif
   /* Ensure that we don't change our mind if detection is already complete */
   if((ret.master_protocol != NDPI_PROTOCOL_UNKNOWN) && (ret.app_protocol != NDPI_PROTOCOL_UNKNOWN))
     return(ret);

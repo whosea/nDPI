@@ -95,6 +95,7 @@ static int ndpi_search_http_tcp_again(struct ndpi_detection_module_struct *ndpi_
 static ndpi_protocol_category_t ndpi_http_check_content(struct ndpi_detection_module_struct *ndpi_struct,
 							struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = &flow->packet;
+  int i;
 
   if(packet->content_line.len > 0) {
     u_int app_len = sizeof("application");
@@ -107,14 +108,14 @@ static ndpi_protocol_category_t ndpi_http_check_content(struct ndpi_detection_mo
 	flow->guessed_category = flow->category = NDPI_PROTOCOL_CATEGORY_STREAMING;
 	return(flow->category);
       } else {
-  for (int i = 0; binary_file_mimes[i] != NULL; i++) {
-    if (ndpi_strncasestr(app, binary_file_mimes[i], app_len_avail) != NULL) {
-      flow->guessed_category = flow->category = NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT;
-      NDPI_SET_BIT_16(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER);
-      NDPI_LOG_INFO(ndpi_struct, "found executable HTTP transfer");
-      return(flow->category);
-    }
-  }
+        for (i = 0; binary_file_mimes[i] != NULL; i++) {
+          if (ndpi_strncasestr(app, binary_file_mimes[i], app_len_avail) != NULL) {
+            flow->guessed_category = flow->category = NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT;
+            NDPI_SET_BIT_16(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER);
+            NDPI_LOG_INFO(ndpi_struct, "found executable HTTP transfer");
+            return(flow->category);
+          }
+        }
       }
     }
 
@@ -123,7 +124,7 @@ static ndpi_protocol_category_t ndpi_http_check_content(struct ndpi_detection_mo
     uint8_t attachment_len = sizeof("attachment; filename");
     if (packet->content_disposition_line.len > attachment_len) {
       uint8_t filename_len = packet->content_disposition_line.len - attachment_len;
-      for (int i = 0; binary_file_ext[i] != NULL; i++) {
+      for (i = 0; binary_file_ext[i] != NULL; i++) {
         if (ndpi_strncasestr((const char*)&packet->content_disposition_line.ptr[attachment_len],
             binary_file_ext[i], filename_len)) {
           printf("got %s\n", binary_file_ext[i]);
