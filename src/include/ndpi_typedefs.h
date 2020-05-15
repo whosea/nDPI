@@ -831,19 +831,20 @@ struct ndpi_packet_struct {
 #define forwarded_line_idx (2)
 #define referer_line_idx (3)
 #define content_line_idx (4)
-#define accept_line_idx (5)
-#define user_agent_line_idx (6)
-#define http_url_name_idx (7)
-#define http_encoding_idx (8)
-#define http_transfer_encoding_idx (9)
-#define http_contentlen_idx (10)
-#define http_cookie_idx (11)
-#define http_origin_idx (12)
-#define http_x_session_type_idx (13)
-#define server_line_idx (14)
-#define http_method_idx (15)
-#define http_response_idx (16)
-#define last_hdr_idx (17)
+#define content_disposition_line_idx (5)
+#define accept_line_idx (6)
+#define user_agent_line_idx (7)
+#define http_url_name_idx (8)
+#define http_encoding_idx (9)
+#define http_transfer_encoding_idx (10)
+#define http_contentlen_idx (11)
+#define http_cookie_idx (12)
+#define http_origin_idx (13)
+#define http_x_session_type_idx (14)
+#define server_line_idx (15)
+#define http_method_idx (16)
+#define http_response_idx (17)
+#define last_hdr_idx (18)
 
   struct ndpi_int_one_line_struct line[NDPI_MAX_PARSE_LINES_PER_PACKET];
   struct ndpi_int_one_line_struct null_line,
@@ -851,6 +852,7 @@ struct ndpi_packet_struct {
 				  forwarded_line,
 				  referer_line,
 				  content_line,
+				  content_disposition_line
 				  accept_line,
 				  user_agent_line,
 				  http_url_name,
