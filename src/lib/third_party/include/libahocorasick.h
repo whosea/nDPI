@@ -51,8 +51,8 @@ typedef unsigned char AC_ALPHABET_t;
  * union for this purpose. you can add your desired type in it.
  **/
 typedef struct {
-  int number;
-  unsigned int category, breed;
+  u_int32_t number;
+  u_int16_t category, breed;
 } AC_REP_t;
 
 /* AC_PATTERN_t:

@@ -128,7 +128,7 @@ static void list_ptree(patricia_tree_t *pt)
 	node = pt->head;
 	while (node) {
 	    if (node->prefix)
-		add_net_cidr_proto(&node->prefix->add.sin,node->prefix->bitlen,node->value.user_value);
+		add_net_cidr_proto(&node->prefix->add.sin,node->prefix->bitlen,node->value.uv.user_value);
 
 	    if (node->l) {
 		if (node->r) {
@@ -350,17 +350,17 @@ int main(int argc,char **argv) {
 
 			node = ndpi_patricia_search_best(ptree, &prefix);
 			if(verbose) {
-			  if(node && node->prefix && protocol != node->value.user_value) {
+			  if(node && node->prefix && protocol != node->value.uv.user_value) {
 
 			    fprintf(stderr,"%-32s subnet %s\n",
 				prefix_str(&prefix,protocol,lbuf2,sizeof lbuf2),
-				prefix_str(node->prefix,node->value.user_value,lbuf,sizeof lbuf)
+				prefix_str(node->prefix,node->value.uv.user_value,lbuf,sizeof lbuf)
 				);
 			  }
 			}
 			node = ndpi_patricia_lookup(ptree, &prefix);
 			if(node) 
-			  node->value.user_value = protocol;
+			  node->value.uv.user_value = protocol;
 
 			continue;
 		}
