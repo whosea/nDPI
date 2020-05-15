@@ -102,9 +102,9 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/modbus.c \
 		     protocols/mpegts.c \
 		     protocols/mqtt.c \
-		     protocols/msn.c \
 		     protocols/mssql_tds.c \
 		     protocols/mysql.c \
+		     protocols/nats.c \
 		     protocols/nest_log_sink.c \
 		     protocols/netbios.c \
 		     protocols/netflow.c \
