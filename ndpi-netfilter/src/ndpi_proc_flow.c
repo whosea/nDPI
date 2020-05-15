@@ -20,11 +20,11 @@
 #include "ndpi_proc_generic.h"
 
 void nflow_proc_read_start(struct ndpi_net *n) {
-	struct timespec64 tm;
+	time64_t tm;
 
-	getnstimeofday64(&tm);
+	tm=ktime_get_real_seconds();
 	n->acc_end  = 0;
-	n->acc_open_time = tm.tv_sec;
+	n->acc_open_time = tm;
 	n->flow_l   = NULL;
 	memset(n->str_buf,0,NF_STR_LBUF);
 	n->str_buf_len = 0;

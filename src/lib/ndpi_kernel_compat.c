@@ -368,7 +368,8 @@ int atoi(const char *buf) {
 }
 
 void gettimeofday64(struct timespec64 *tv, void *tz) {
-	getnstimeofday64(tv);
+	tv->tv_sec = ktime_get_real_seconds();
+	tv->tv_nsec = 0;
 }
 
 char *strtok_r (char *s, const char *delim, char **save_ptr)

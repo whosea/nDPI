@@ -107,13 +107,13 @@ ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
 	spin_lock_bh(&t->lock);
 	do {
 		struct hash_ip4p_node *x = t->top;
-	 	struct timespec64 tm;
+	 	time64_t tm;
 
-	        getnstimeofday64(&tm);
+	        tm=ktime_get_real_seconds();
 		while(x && p < count - 128) {
 		        l =  inet_ntop_port(family,&x->ip,x->port,lbuf,sizeof(lbuf)-2);
 			l += snprintf(&lbuf[l],sizeof(lbuf)-l-1, " %d %x %u\n",
-				(int)(tm.tv_sec - x->lchg),x->flag,x->count);
+				(int)(tm - x->lchg),x->flag,x->count);
 
 			if (!(ACCESS_OK(VERIFY_WRITE, buf+p, l) &&
 				!__copy_to_user(buf+p, lbuf, l))) return -EFAULT;

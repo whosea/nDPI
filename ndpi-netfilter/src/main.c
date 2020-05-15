@@ -1189,7 +1189,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	uint32_t r_proto;
 	ndpi_protocol_nf proto = NDPI_PROTOCOL_NULL;
 	uint64_t time;
-	struct timespec64 tm;
+	time64_t tm;
 	const struct xt_ndpi_mtinfo *info = par->matchinfo;
 
 	enum ip_conntrack_info ctinfo;
@@ -1242,7 +1242,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	COUNTER(ndpi_pk);
 
-	getnstimeofday64(&tm);
+	tm = ktime_get_real_seconds();
 
 	ct = nf_ct_get (skb, &ctinfo);
 	if (ct == NULL) {
@@ -1279,7 +1279,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			if(ct_ndpi) {
 				WRITE_ONCE(ct_label->ndpi_ext, ct_ndpi);
 				WRITE_ONCE(ct_label->magic, MAGIC_CT);
-				ndpi_init_ct_struct(n,ct_ndpi,l4_proto,ct,is_ipv6,tm.tv_sec);
+				ndpi_init_ct_struct(n,ct_ndpi,l4_proto,ct,is_ipv6,tm);
 				if(ndpi_log_debug > 2)
 					pr_info("Create  ct_ndpi %p ct %p %s\n",
 						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
@@ -1375,7 +1375,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 #endif
 	if(ndpi_enable_flow && c_proto->magic != NDPI_ID ) {
-		ndpi_ct_counters_add(ct_ndpi,1,skb->len, ctinfo, tm.tv_sec);
+		ndpi_ct_counters_add(ct_ndpi,1,skb->len, ctinfo, tm);
 	}
 
 	if(test_detect_done(ct_ndpi)) {
@@ -1413,8 +1413,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ndpi_lskb += 1;
 		}
 
-		time = ((uint64_t)tm.tv_sec) * detection_tick_resolution +
-			(uint32_t)tm.tv_nsec / (1000000000ul / detection_tick_resolution);
+		time = (uint64_t)tm * detection_tick_resolution;
 
 		n = ndpi_pernet(nf_ct_net(ct));
 		r_proto = ndpi_process_packet(n, ct,
@@ -1820,7 +1819,7 @@ static void bt_port_gc(unsigned long data) {
         struct ndpi_net *n = (struct ndpi_net *)data;
 #endif
         struct ndpi_detection_module_struct *ndpi_struct = n->ndpi_struct;
-	struct timespec64 tm;
+	time64_t tm;
 	uint32_t now32;
 	int i;
 	uint32_t st_j;
@@ -1830,8 +1829,8 @@ static void bt_port_gc(unsigned long data) {
 	if(!read_trylock(&n->ndpi_busy)) return; // ndpi_net_exit() started!
 
 	st_j = READ_ONCE(jiffies);
-	getnstimeofday64(&tm);
-	now32 = (uint32_t)tm.tv_sec; // BUG AFTER YAER 2105
+	tm=ktime_get_real_seconds();
+	now32 = (uint32_t)tm; // BUG AFTER YAER 2105
 	{
 	    struct hash_ip4p_table *ht = READ_ONCE(ndpi_struct->bt_ht);
 	    if(ht) {
