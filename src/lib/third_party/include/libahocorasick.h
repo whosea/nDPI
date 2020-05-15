@@ -51,7 +51,7 @@ typedef unsigned char AC_ALPHABET_t;
  * union for this purpose. you can add your desired type in it.
  **/
 typedef struct {
-  u_int32_t number;
+  u_int32_t number; /* Often used to store procotolId */
   u_int16_t category, breed;
 } AC_REP_t;
 
