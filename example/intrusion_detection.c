@@ -1,7 +1,7 @@
 /*
  * intrusion_detection.c
  *
- * Copyright (C) 2011-19 - ntop.org
+ * Copyright (C) 2011-20 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -154,7 +154,7 @@ double Dos_goldeneye_score(struct ndpi_flow_info* flow){
 }
 
 double Dos_hulk_score(struct ndpi_flow_info* flow){
-  double f = (double)flow->first_seen/1000.0, l = (double)flow->last_seen/1000.0;
+  double f = (double)flow->first_seen_ms/1000.0, l = (double)flow->last_seen_ms/1000.0;
   int n_metrics = 6;
   ndpi_norm_value* scores = malloc(n_metrics * sizeof(ndpi_norm_value));
   /* duration */
@@ -308,7 +308,7 @@ double Ftp_patator_score(struct ndpi_flow_info* flow){
 }
 
 double Hearthbleed_score(struct ndpi_flow_info* flow){
-  double f = (double)flow->first_seen/1000.0, l = (double)flow->last_seen/1000.0;
+  double f = (double)flow->first_seen_ms/1000.0, l = (double)flow->last_seen_ms/1000.0;
   int n_metrics = 6;
   ndpi_norm_value* scores = malloc(n_metrics * sizeof(ndpi_norm_value));
   /* iat_flow_max */

@@ -1,7 +1,7 @@
 /*
  * ndpiReader.c
  *
- * Copyright (C) 2011-19 - ntop.org
+ * Copyright (C) 2011-20 - ntop.org
  *
  * nDPI is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -418,6 +418,7 @@ static void help(u_int long_help) {
 
     ndpi_dump_protocols(ndpi_info_mod);
   }
+  
   exit(!long_help);
 }
 
@@ -981,6 +982,33 @@ static char* is_unsafe_cipher(ndpi_cipher_weakness c) {
 
 /* ********************************** */
 
+void print_bin(const char *label, struct ndpi_bin *b) {
+  u_int8_t i;
+  FILE *out = results_file ? results_file : stdout;
+  
+  ndpi_normalize_bin(b);
+
+  fprintf(out, "[%s: ", label);
+  
+  for(i=0; i<b->num_bins; i++) {
+    switch(b->family) {
+    case ndpi_bin_family8:
+      fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins8[i]);
+      break;
+    case ndpi_bin_family16:
+      fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins16[i]);
+      break;
+    case ndpi_bin_family32:
+      fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins32[i]);
+    break;
+    }
+  }
+
+  fprintf(out, "]");
+}
+
+/* ********************************** */
+
 /**
  * @brief Print the flow
  */
@@ -1004,7 +1032,7 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
   if(csv_fp != NULL) {
     float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
-    double f = (double)flow->first_seen, l = (double)flow->last_seen;
+    double f = (double)flow->first_seen_ms, l = (double)flow->last_seen_ms;
 
     /* PLEASE KEEP IN SYNC WITH printCSVHeader() */
     dos_ge_score = Dos_goldeneye_score(flow);
@@ -1180,8 +1208,8 @@ if(!rep_mini) {
 	  100.0*((float)flow->src2dst_goodput_bytes / (float)(flow->src2dst_bytes+1)),
 	  100.0*((float)flow->dst2src_goodput_bytes / (float)(flow->dst2src_bytes+1)));
 
-  if(flow->last_seen > flow->first_seen)
-    fprintf(out, "[%.2f sec]", ((float)(flow->last_seen - flow->first_seen))/(float)1000);
+  if(flow->last_seen_ms > flow->first_seen_ms)
+    fprintf(out, "[%.2f sec]", ((float)(flow->last_seen_ms - flow->first_seen_ms))/(float)1000);
   else
     fprintf(out, "[< 1 sec]");
 
@@ -1290,14 +1318,25 @@ if(!rep_mini) {
     fprintf(out, "[Validity: %s - %s]", notBefore, notAfter);
   }
 
-  if(flow->ssh_tls.server_cipher != '\0') fprintf(out, "[Cipher: %s]", ndpi_cipher2str(flow->ssh_tls.server_cipher));
-  if(flow->bittorent_hash[0] != '\0') fprintf(out, "[BT Hash: %s]", flow->bittorent_hash);
-  if(flow->dhcp_fingerprint[0] != '\0') fprintf(out, "[DHCP Fingerprint: %s]", flow->dhcp_fingerprint);
+  if(flow->ssh_tls.server_cipher != '\0') fprintf(out, "[Cipher: %s]",
+						  ndpi_cipher2str(flow->ssh_tls.server_cipher));
+  if(flow->bittorent_hash[0] != '\0') fprintf(out, "[BT Hash: %s]",
+					      flow->bittorent_hash);
+  if(flow->dhcp_fingerprint[0] != '\0') fprintf(out, "[DHCP Fingerprint: %s]",
+						flow->dhcp_fingerprint);
 
-  if(flow->has_human_readeable_strings) fprintf(out, "[PLAIN TEXT (%s)]", flow->human_readeable_string_buffer);
+  if(flow->has_human_readeable_strings) fprintf(out, "[PLAIN TEXT (%s)]",
+		                                flow->human_readeable_string_buffer);
   if(flow->nf_mark) fprintf(out, "[NFMARK 0x%X]", flow->nf_mark);
 }
 
+#ifdef DIRECTION_BINS
+  print_bin("Plen c2s", &flow->payload_len_bin_src2dst);
+  print_bin("Plen s2c", &flow->payload_len_bin_dst2src);
+#else
+  print_bin("Plen Bins", &flow->payload_len_bin);
+#endif
+  
   fprintf(out, "\n");
 }
 
@@ -1781,7 +1820,7 @@ static void node_idle_scan_walker(const void *node, ndpi_VISIT which, int depth,
     return;
 
   if((which == ndpi_preorder) || (which == ndpi_leaf)) { /* Avoid walking the same node multiple times */
-    if(flow->last_seen + MAX_IDLE_TIME < ndpi_thread_info[thread_id].workflow->last_time) {
+    if(flow->last_seen_ms + MAX_IDLE_TIME < ndpi_thread_info[thread_id].workflow->last_time) {
 
       /* update stats */
       node_proto_guess_walker(node, which, depth, user_data);
@@ -3073,6 +3112,92 @@ void test_lib() {
 
 /* *********************************************** */
 
+static void dgaUnitTest() {
+  const char *dga[] = {
+		     "lbjamwptxz",
+		     "l54c2e21e80ba5471be7a8402cffb98768.so",
+		     "wdd7ee574106a84807a601beb62dd851f0.hk",
+		     "jaa12148a5831a5af92aa1d8fe6059e276.ws",
+		     "www.e6r5p57kbafwrxj3plz.com",
+		     // "grdawgrcwegpjaoo.eu",
+		     "mcfpeqbotiwxfxqu.eu",
+		     "adgxwxhqsegnrsih.eu",		     
+		     NULL
+  };
+
+  const char *non_dga[] = {
+		     "mz.gov.pl",
+		     "zoomam104zc.zoom.us",
+		     "5CI_DOMBIN",
+		     "ALICEGATE",
+		     "BOWIE",
+		     "D002465",
+		     "DESKTOP-RB5T12G",
+		     "ECI_DOM",
+		     "ECI_DOMA",
+		     "ECI_DOMAIN",
+		     "ENDIAN-PC",
+		     "GFILE",
+		     "GIOVANNI-PC",
+		     "GUNNAR",
+		     "ISATAP",
+		     "LAB111",
+		     "LP-RKERUR-OSX",
+		     "LUCAS-IMAC",
+		     "LUCASMACBOOKPRO",
+		     "MACBOOKAIR-E1D0",
+		     "MDJR98",
+		     "NASFILE",
+		     "SANJI-LIFEBOOK-",
+		     "SC.ARRANCAR.ORG",
+		     "WORKG",
+		     "WORKGROUP",
+		     "XSTREAM_HY",
+		     "__MSBROWSE__",
+		     "mqtt.facebook.com",
+		     NULL
+  };
+  int i;  
+  NDPI_PROTOCOL_BITMASK all;
+  struct ndpi_detection_module_struct *ndpi_str =  ndpi_init_detection_module(ndpi_no_prefs);
+
+  assert(ndpi_str != NULL);
+  
+  ndpi_set_protocol_detection_bitmask2(ndpi_str, &all);
+
+  ndpi_finalize_initalization(ndpi_str);
+    
+  assert(ndpi_str != NULL);
+
+  for(i=0; dga[i] != NULL; i++)
+    assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)dga[i]) == 1);
+  
+  for(i=0; non_dga[i] != NULL; i++)
+    assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)non_dga[i]) == 0);
+  
+
+  ndpi_exit_detection_module(ndpi_str);
+}
+
+/* *********************************************** */
+
+static void hllUnitTest() {
+  struct ndpi_hll h;
+  u_int8_t bits = 8; /* >= 4, <= 16 */
+  u_int32_t i;
+    
+  assert(ndpi_hll_init(&h, bits) == 0);
+
+  for(i=0; i<21320; i++)
+    ndpi_hll_add_number(&h, i);
+
+  /* printf("Count estimate: %f\n", ndpi_hll_count(&h)); */
+  
+  ndpi_hll_destroy(&h);
+}
+
+/* *********************************************** */
+
 static void bitmapUnitTest() {
   u_int32_t val, i, j;
 
@@ -3107,66 +3232,97 @@ void automataUnitTest() {
 
 void serializerUnitTest() {
   ndpi_serializer serializer, deserializer;
-  int i;
+  int i, loop_id;
   u_int8_t trace = 0;
-  u_int8_t use_json = 0;
+  ndpi_serialization_format fmt;
 
-  assert(ndpi_init_serializer(&serializer, use_json ? ndpi_serialization_format_json : ndpi_serialization_format_tlv) != -1);
+  for(loop_id=0; loop_id<3; loop_id++) {
+    switch(loop_id) {
+    case 0:
+      if (trace) printf("--- TLV test ---\n");
+      fmt = ndpi_serialization_format_tlv;
+      break;
 
-  for(i=0; i<16; i++) {
-    char kbuf[32], vbuf[32];
-    snprintf(kbuf, sizeof(kbuf), "Hello %d", i);
-    snprintf(vbuf, sizeof(vbuf), "World %d", i);
-    assert(ndpi_serialize_uint32_uint32(&serializer, i, i*i) != -1);
-    assert(ndpi_serialize_uint32_string(&serializer, i, "Hello") != -1);
-    assert(ndpi_serialize_string_string(&serializer, kbuf, vbuf) != -1);
-    assert(ndpi_serialize_string_uint32(&serializer, kbuf, i*i) != -1);
-    assert(ndpi_serialize_string_float(&serializer,  kbuf, (float)(i*i), "%f") != -1);
-  }
+    case 1:
+      if (trace) printf("--- JSON test ---\n");
+      fmt = ndpi_serialization_format_json;
+      break;
 
-  if (use_json) {
+    case 2:
+      if (trace) printf("--- CSV test ---\n");
+      fmt = ndpi_serialization_format_csv;
+      break;
+    }
+    assert(ndpi_init_serializer(&serializer, fmt) != -1);
 
-    assert(ndpi_serialize_start_of_list(&serializer, "List") != -1);
-
-    for(i=0; i<4; i++) {
+    for(i=0; i<16; i++) {
       char kbuf[32], vbuf[32];
-      snprintf(kbuf, sizeof(kbuf), "Ignored");
-      snprintf(vbuf, sizeof(vbuf), "Item %d", i);
+      snprintf(kbuf, sizeof(kbuf), "Key %d", i);
+      snprintf(vbuf, sizeof(vbuf), "Value %d", i);
       assert(ndpi_serialize_uint32_uint32(&serializer, i, i*i) != -1);
+      assert(ndpi_serialize_uint32_string(&serializer, i, "Data") != -1);
       assert(ndpi_serialize_string_string(&serializer, kbuf, vbuf) != -1);
+      assert(ndpi_serialize_string_uint32(&serializer, kbuf, i*i) != -1);
       assert(ndpi_serialize_string_float(&serializer,  kbuf, (float)(i*i), "%f") != -1);
-    }
-    assert(ndpi_serialize_end_of_list(&serializer) != -1);
-    assert(ndpi_serialize_string_string(&serializer, "Last", "Ok") != -1);
-
-    if(trace) {
-      u_int32_t buffer_len = 0;
-      char *buffer = ndpi_serializer_get_buffer(&serializer, &buffer_len);
-      printf("%s\n", buffer);
+      if ((i&0x3) == 0x3) ndpi_serialize_end_of_record(&serializer);
     }
 
-  } else {
-    if(trace)
-      printf("Serialization size: %u\n", ndpi_serializer_get_buffer_len(&serializer));
+    if (fmt == ndpi_serialization_format_json) {
+      assert(ndpi_serialize_start_of_list(&serializer, "List") != -1);
 
-    assert(ndpi_init_deserializer(&deserializer, &serializer) != -1);
+      for(i=0; i<4; i++) {
+	char kbuf[32], vbuf[32];
+	snprintf(kbuf, sizeof(kbuf), "Ignored");
+	snprintf(vbuf, sizeof(vbuf), "Item %d", i);
+	assert(ndpi_serialize_uint32_uint32(&serializer, i, i*i) != -1);
+	assert(ndpi_serialize_string_string(&serializer, kbuf, vbuf) != -1);
+	assert(ndpi_serialize_string_float(&serializer,  kbuf, (float)(i*i), "%f") != -1);
+      }
+      assert(ndpi_serialize_end_of_list(&serializer) != -1);
+      assert(ndpi_serialize_string_string(&serializer, "Last", "Ok") != -1);
 
-    while(1) {
-      ndpi_serialization_type kt, et;
-      et = ndpi_deserialize_get_item_type(&deserializer, &kt);
+      if(trace) {
+	u_int32_t buffer_len = 0;
+	char *buffer = ndpi_serializer_get_buffer(&serializer, &buffer_len);
+	printf("%s\n", buffer);
+      }
+    } else if (fmt == ndpi_serialization_format_csv) {
+      if(trace) {
+	u_int32_t buffer_len = 0;
+	char *buffer;
 
-      if(et == ndpi_serialization_unknown)
-        break;
-      else {
-        u_int32_t k32, v32;
-        ndpi_string ks, vs;
-        float vf;
+	buffer = ndpi_serializer_get_header(&serializer, &buffer_len);
+	printf("%s\n", buffer);
 
-        switch(kt) {
+	buffer = ndpi_serializer_get_buffer(&serializer, &buffer_len);
+	printf("%s\n", buffer);
+      }
+
+    } else {
+      if(trace)
+	printf("Serialization size: %u\n", ndpi_serializer_get_buffer_len(&serializer));
+
+      assert(ndpi_init_deserializer(&deserializer, &serializer) != -1);
+
+      while(1) {
+	ndpi_serialization_type kt, et;
+
+	et = ndpi_deserialize_get_item_type(&deserializer, &kt);
+
+	if(et == ndpi_serialization_unknown) {
+	  break;
+        } else if(et == ndpi_serialization_end_of_record) {
+          if (trace) printf("EOR\n");
+	} else {
+	  u_int32_t k32, v32;
+	  ndpi_string ks, vs;
+	  float vf;
+
+	  switch(kt) {
           case ndpi_serialization_uint32:
             ndpi_deserialize_key_uint32(&deserializer, &k32);
 	    if(trace) printf("%u=", k32);
-          break;
+	    break;
           case ndpi_serialization_string:
             ndpi_deserialize_key_string(&deserializer, &ks);
             if (trace) {
@@ -3175,17 +3331,18 @@ void serializerUnitTest() {
               printf("%s=", ks.str);
 	      ks.str[ks.str_len] = bkp;
             }
-          break;
+	    break;
           default:
-            printf("Unsupported TLV key type %u\n", kt);
-          return;
-        }
+            printf("ERROR: Unsupported TLV key type %u\n", kt);
+	    exit(0);
+	    return;
+	  }
 
-        switch(et) {
+	  switch(et) {
           case ndpi_serialization_uint32:
 	    assert(ndpi_deserialize_value_uint32(&deserializer, &v32) != -1);
 	    if(trace) printf("%u\n", v32);
-	  break;
+	    break;
 
           case ndpi_serialization_string:
 	    assert(ndpi_deserialize_value_string(&deserializer, &vs) != -1);
@@ -3195,25 +3352,29 @@ void serializerUnitTest() {
 	      printf("%s\n", vs.str);
 	      vs.str[vs.str_len] = bkp;
 	    }
-	  break;
+	    break;
 
           case ndpi_serialization_float:
 	    assert(ndpi_deserialize_value_float(&deserializer, &vf) != -1);
 	    if(trace) printf("%f\n", vf);
-	  break;
+	    break;
 
           default:
 	    if (trace) printf("\n");
             printf("serializerUnitTest: unsupported type %u detected!\n", et);
-          return;
-        }
-      }
+	    return;
+	  }
+	}
 
-      ndpi_deserialize_next(&deserializer);
+	ndpi_deserialize_next(&deserializer);
+      }
     }
+
+    ndpi_term_serializer(&serializer);
   }
 
-  ndpi_term_serializer(&serializer);
+  if (trace)
+    exit(0);
 }
 
 /* *********************************************** */
@@ -3329,17 +3490,19 @@ int orginal_main(int argc, char **argv) {
       return(-1);
     }
 
+    gettimeofday(&startup_time, NULL);
+    ndpi_info_mod = ndpi_init_detection_module(ndpi_no_prefs);
+
+    if(ndpi_info_mod == NULL) return -1;
+
     /* Internal checks */
+    dgaUnitTest();
+    hllUnitTest();
     bitmapUnitTest();
     automataUnitTest();
     serializerUnitTest();
     analyzeUnitTest();
     ndpi_self_check_host_match();
-
-    gettimeofday(&startup_time, NULL);
-    ndpi_info_mod = ndpi_init_detection_module(ndpi_no_prefs);
-
-    if(ndpi_info_mod == NULL) return -1;
 
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     if(getenv("REP_MINI"))

@@ -1,7 +1,7 @@
 /*
  * reader_util.c
  *
- * Copyright (C) 2011-19 - ntop.org
+ * Copyright (C) 2011-20 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -79,6 +79,11 @@
 #ifndef DLT_LINUX_SLL
 #define DLT_LINUX_SLL  113
 #endif
+
+#define PLEN_MAX         1504
+#define PLEN_BIN_LEN     32
+#define PLEN_NUM_BINS    47 /* 47*32 = 1504 */
+#define MAX_NUM_BIN_PKTS 256
 
 #include "ndpi_main.h"
 #include "reader_util.h"
@@ -464,6 +469,13 @@ void ndpi_flow_info_freer(void *node) {
   ndpi_free_flow_data_analysis(flow);
   ndpi_free_flow_tls_data(flow);
 
+#ifdef DIRECTION_BINS
+  ndpi_free_bin(&flow->payload_len_bin_src2dst);
+  ndpi_free_bin(&flow->payload_len_bin_dst2src);
+#else
+  ndpi_free_bin(&flow->payload_len_bin);
+#endif
+  
   ndpi_free(flow);
 }
 
@@ -832,6 +844,13 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 	newflow->pktlen_s_to_c =  ndpi_alloc_data_analysis(DATA_ANALUYSIS_SLIDING_WINDOW),
 	newflow->iat_flow = ndpi_alloc_data_analysis(DATA_ANALUYSIS_SLIDING_WINDOW);
 
+#ifdef DIRECTION_BINS
+      ndpi_init_bin(&newflow->payload_len_bin_src2dst, ndpi_bin_family8, PLEN_NUM_BINS);
+      ndpi_init_bin(&newflow->payload_len_bin_dst2src, ndpi_bin_family8, PLEN_NUM_BINS);
+#else
+      ndpi_init_bin(&newflow->payload_len_bin, ndpi_bin_family8, PLEN_NUM_BINS);
+#endif
+      
       if(version == IPVERSION) {
 	inet_ntop(AF_INET, &newflow->src_ip, newflow->src_name, sizeof(newflow->src_name));
 	inet_ntop(AF_INET, &newflow->dst_ip, newflow->dst_name, sizeof(newflow->dst_name));
@@ -844,6 +863,11 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 
       if((newflow->ndpi_flow = ndpi_flow_malloc(SIZEOF_FLOW_STRUCT)) == NULL) {
 	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(2): not enough memory\n", __FUNCTION__);
+#ifdef DIRECTION_BINS
+	ndpi_free_bin(&newflow->payload_len_bin_src2dst), ndpi_free_bin(&newflow->payload_len_bin_dst2src);
+#else
+	ndpi_free_bin(&newflow->payload_len_bin);
+#endif
 	free(newflow);
 	return(NULL);
       } else
@@ -851,6 +875,11 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 
       if((newflow->src_id = ndpi_malloc(SIZEOF_ID_STRUCT)) == NULL) {
 	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(3): not enough memory\n", __FUNCTION__);
+#ifdef DIRECTION_BINS
+	ndpi_free_bin(&newflow->payload_len_bin_src2dst), ndpi_free_bin(&newflow->payload_len_bin_dst2src);
+#else
+	ndpi_free_bin(&newflow->payload_len_bin);
+#endif
 	free(newflow);
 	return(NULL);
       } else
@@ -858,6 +887,11 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 
       if((newflow->dst_id = ndpi_malloc(SIZEOF_ID_STRUCT)) == NULL) {
 	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(4): not enough memory\n", __FUNCTION__);
+#ifdef DIRECTION_BINS
+	ndpi_free_bin(&newflow->payload_len_bin_src2dst), ndpi_free_bin(&newflow->payload_len_bin_dst2src);
+#else
+	ndpi_free_bin(&newflow->payload_len_bin);
+#endif
 	free(newflow);
 	return(NULL);
       } else
@@ -1105,7 +1139,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 	     sizeof(flow->ssh_tls.client_requested_server_name), "%s",
 	     flow->ndpi_flow->protos.stun_ssl.ssl.client_requested_server_name);
 
-    if(flow->ndpi_flow->protos.stun_ssl.ssl.server_names_len > 0)
+    if(flow->ndpi_flow->protos.stun_ssl.ssl.server_names_len > 0 && flow->ndpi_flow->protos.stun_ssl.ssl.server_names)
       flow->ssh_tls.server_names = ndpi_strdup(flow->ndpi_flow->protos.stun_ssl.ssl.server_names);
     flow->ssh_tls.notBefore = flow->ndpi_flow->protos.stun_ssl.ssl.notBefore;
     flow->ssh_tls.notAfter = flow->ndpi_flow->protos.stun_ssl.ssl.notAfter;
@@ -1220,6 +1254,20 @@ void update_tcp_flags_count(struct ndpi_flow_info* flow, struct ndpi_tcphdr* tcp
 }
 
 /* ****************************************************** */
+
+u_int8_t plen2slot(u_int16_t plen) {  
+  /* 
+     Slots [32 bytes lenght]
+     0..31, 32..63 ... 
+  */
+
+  if(plen > PLEN_MAX)
+    return(PLEN_NUM_BINS-1);
+  else
+    return(plen/PLEN_BIN_LEN);
+}
+
+/* ****************************************************** */
 /**
    Function to process the packet:
    determine the flow of a packet and try to decode it
@@ -1229,7 +1277,7 @@ void update_tcp_flags_count(struct ndpi_flow_info* flow, struct ndpi_tcphdr* tcp
 */
 static int nfmark_info=0;
 static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
-					   const u_int64_t time,
+					   const u_int64_t time_ms,
 					   u_int16_t vlan_id,
 					   u_int32_t nf_mark,
 					   ndpi_packet_tunnel tunnel_type,
@@ -1299,9 +1347,10 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 	  ndpi_data_add_value(flow->iat_flow, ms);
       }
     }
-    memcpy(&flow->entropy.flow_last_pkt_time, &when, sizeof(when));
 
-    if(src_to_dst_direction) {
+    memcpy(&flow->entropy.flow_last_pkt_time, &when, sizeof(when));
+    
+    if(src_to_dst_direction) {     
       if(flow->entropy.src2dst_last_pkt_time.tv_sec) {
 	ndpi_timer_sub(&when, &flow->entropy.src2dst_last_pkt_time, &tdiff);
 
@@ -1317,7 +1366,12 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       ndpi_data_add_value(flow->pktlen_c_to_s, rawsize);
       flow->src2dst_packets++, flow->src2dst_bytes += rawsize, flow->src2dst_goodput_bytes += payload_len;
       memcpy(&flow->entropy.src2dst_last_pkt_time, &when, sizeof(when));
-    } else {
+
+#ifdef DIRECTION_BINS
+      if(payload_len && (flow->src2dst_packets < MAX_NUM_BIN_PKTS))
+	ndpi_inc_bin(&flow->payload_len_bin_src2dst, plen2slot(payload_len));
+#endif
+    } else {      
       if(flow->entropy.dst2src_last_pkt_time.tv_sec && (!begin_or_end_tcp)) {
 	ndpi_timer_sub(&when, &flow->entropy.dst2src_last_pkt_time, &tdiff);
 
@@ -1330,7 +1384,17 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       ndpi_data_add_value(flow->pktlen_s_to_c, rawsize);
       flow->dst2src_packets++, flow->dst2src_bytes += rawsize, flow->dst2src_goodput_bytes += payload_len;
       memcpy(&flow->entropy.dst2src_last_pkt_time, &when, sizeof(when));
+
+#ifdef DIRECTION_BINS
+      if(payload_len && (flow->dst2src_packets < MAX_NUM_BIN_PKTS))
+	ndpi_inc_bin(&flow->payload_len_bin_dst2src, plen2slot(payload_len));
+#endif
     }
+
+#ifndef DIRECTION_BINS
+    if(payload_len && ((flow->src2dst_packets+flow->dst2src_packets) < MAX_NUM_BIN_PKTS))
+	ndpi_inc_bin(&flow->payload_len_bin, plen2slot(payload_len));
+#endif
 
     if(enable_payload_analyzer && (payload_len > 0))
       ndpi_payload_analyzer(flow, src_to_dst_direction,
@@ -1363,10 +1427,10 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       }
     }
 
-    if(flow->first_seen == 0)
-      flow->first_seen = time;
+    if(flow->first_seen_ms == 0)
+      flow->first_seen_ms = time_ms;
 
-    flow->last_seen = time;
+    flow->last_seen_ms = time_ms;
 
     /* Copy packets entropy if num packets count == 10 */
     ndpi_clear_entropy_stats(flow);
@@ -1417,7 +1481,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 
     flow->detected_protocol = ndpi_detection_process_packet(workflow->ndpi_struct, ndpi_flow,
 							    iph ? (uint8_t *)iph : (uint8_t *)iph6,
-							    ipsize, time, src, dst);
+							    ipsize, time_ms, src, dst);
     
     if(enough_packets || (flow->detected_protocol.app_protocol != NDPI_PROTOCOL_UNKNOWN)) {
       if((!enough_packets)
@@ -1604,7 +1668,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   int wifi_len = 0;
   int pyld_eth_len = 0;
   int check;
-  u_int64_t time;
+  u_int64_t time_ms;
   u_int16_t ip_offset = 0, ip_len;
   u_int16_t frag_off = 0, vlan_id = 0;
   u_int8_t proto = 0, recheck_type;
@@ -1619,15 +1683,15 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   workflow->stats.raw_packet_count++;
 
   /* setting time */
-  time = ((uint64_t) header->ts.tv_sec) * TICK_RESOLUTION + header->ts.tv_usec / (1000000 / TICK_RESOLUTION);
+  time_ms = ((uint64_t) header->ts.tv_sec) * TICK_RESOLUTION + header->ts.tv_usec / (1000000 / TICK_RESOLUTION);
 
   /* safety check */
-  if(workflow->last_time > time) {
+  if(workflow->last_time > time_ms) {
     /* printf("\nWARNING: timestamp bug in the pcap file (ts delta: %llu, repairing)\n", ndpi_thread_info[thread_id].last_time - time); */
-    time = workflow->last_time;
+    time_ms = workflow->last_time;
   }
   /* update last time value */
-  workflow->last_time = time;
+  workflow->last_time = time_ms;
 
   /*** check Data Link type ***/
   int datalink_type;
@@ -1996,7 +2060,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   }
 
   /* process the packet */
-  return(packet_processing(workflow, time, vlan_id, nf_mark, tunnel_type, iph, iph6,
+  return(packet_processing(workflow, time_ms, vlan_id, nf_mark, tunnel_type, iph, iph6,
 			   ip_offset, h_caplen - ip_offset,
 			   h_caplen, header, packet, header->ts));
 }

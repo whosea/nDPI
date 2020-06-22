@@ -156,8 +156,14 @@ void *ndpi_realloc(void *ptr, size_t old_size, size_t new_size) {
 /* ****************************************** */
 
 char *ndpi_strdup(const char *s) {
-  int len = strlen(s);
-  char *m = ndpi_malloc(len + 1);
+  int len;
+  char *m;
+  if(s == NULL ){
+    return NULL;
+  }
+
+  len = strlen(s);
+  m = ndpi_malloc(len + 1);
 
   if(m) {
     memcpy(m, s, len);
@@ -613,9 +619,14 @@ static void init_string_based_protocols(struct ndpi_detection_module_struct *ndp
   }
 #endif
 
+#if 1
   for (i = 0; ndpi_en_bigrams[i] != NULL; i++)
     ndpi_string_to_automa(ndpi_str, &ndpi_str->bigrams_automa, (char *) ndpi_en_bigrams[i], 1, 1, 1, 0);
-
+#else
+  for (i = 0; ndpi_en_popular_bigrams[i] != NULL; i++)
+    ndpi_string_to_automa(ndpi_str, &ndpi_str->bigrams_automa, (char *) ndpi_en_popular_bigrams[i], 1, 1, 1, 0);
+#endif
+  
   for (i = 0; ndpi_en_impossible_bigrams[i] != NULL; i++)
     ndpi_string_to_automa(ndpi_str, &ndpi_str->impossible_bigrams_automa, (char *) ndpi_en_impossible_bigrams[i], 1,
 			  1, 1, 0);
@@ -954,8 +965,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "Sopcast", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_TVANTS, 0 /* can_have_a_subprotocol */,
-			  no_master, no_master, "Tvants", NDPI_PROTOCOL_CATEGORY_VIDEO,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE_58, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "Free58", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_TVUPLAYER, 0 /* can_have_a_subprotocol */,
@@ -996,12 +1007,12 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  0 /* can_have_a_subprotocol */, no_master, no_master, "Unencrypted_Jabber",
 			  NDPI_PROTOCOL_CATEGORY_WEB, ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_OSCAR, 0 /* can_have_a_subprotocol */,
-			  no_master, no_master, "Oscar", NDPI_PROTOCOL_CATEGORY_CHAT,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE_69, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "Free69", NDPI_PROTOCOL_CATEGORY_CHAT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_BATTLEFIELD, 0 /* can_have_a_subprotocol */,
-			  no_master, no_master, "BattleField", NDPI_PROTOCOL_CATEGORY_GAME,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE_71, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "Free71", NDPI_PROTOCOL_CATEGORY_GAME,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_IP_VRRP, 0 /* can_have_a_subprotocol */,
@@ -1078,10 +1089,9 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "VNC", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
 			  ndpi_build_default_ports(ports_a, 5900, 5901, 5800, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_PCANYWHERE,
-			  0 /* can_have_a_subprotocol */, no_master, no_master, "PcAnywhere",
-			  NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
-			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE90, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "Free90", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
+			  ndpi_build_default_ports(ports_a, 5900, 5901, 5800, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_ZOOM, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "Zoom", NDPI_PROTOCOL_CATEGORY_VIDEO,
@@ -1096,7 +1106,6 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "WhatsApp", NDPI_PROTOCOL_CATEGORY_CHAT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_SAFE, NDPI_PROTOCOL_TLS, 1 /* can_have_a_subprotocol */, no_master,
 			  no_master, "TLS", NDPI_PROTOCOL_CATEGORY_WEB,
 			  ndpi_build_default_ports(ports_a, 443, 0, 0, 0, 0) /* TCP */,
@@ -1528,6 +1537,11 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_WEBSOCKET,
 			  1 /* can_have_a_subprotocol */, no_master,
 			  no_master, "WebSocket", NDPI_PROTOCOL_CATEGORY_WEB,
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_ANYDESK,
+			  1 /* no subprotocol */, no_master,
+			  no_master, "AnyDesk", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
@@ -2035,16 +2049,9 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
     NDPI_DIRECTCONNECT_CONNECTION_IP_TICK_TIMEOUT * ndpi_str->ticks_per_second;
 
   ndpi_str->rtsp_connection_timeout = NDPI_RTSP_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
-  ndpi_str->tvants_connection_timeout = NDPI_TVANTS_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->irc_timeout = NDPI_IRC_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->gnutella_timeout = NDPI_GNUTELLA_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
-
-  ndpi_str->battlefield_timeout = NDPI_BATTLEFIELD_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
-
   ndpi_str->thunder_timeout = NDPI_THUNDER_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
-  ndpi_str->yahoo_detect_http_connections = NDPI_YAHOO_DETECT_HTTP_CONNECTIONS;
-
-  ndpi_str->yahoo_lan_video_timeout = NDPI_YAHOO_LAN_VIDEO_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->zattoo_connection_timeout = NDPI_ZATTOO_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->jabber_stun_timeout = NDPI_JABBER_STUN_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->jabber_file_transfer_timeout = NDPI_JABBER_FT_TIMEOUT * ndpi_str->ticks_per_second;
@@ -2925,12 +2932,6 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
   /* NATS */
   init_nats_dissector(ndpi_str, &a, detection_bitmask);
 
-  /* YAHOO */
-  init_yahoo_dissector(ndpi_str, &a, detection_bitmask);
-
-  /* OSCAR */
-  init_oscar_dissector(ndpi_str, &a, detection_bitmask);
-
   /* APPLEJUICE */
   init_applejuice_dissector(ndpi_str, &a, detection_bitmask);
 
@@ -2969,9 +2970,6 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* NON_TCP_UDP */
   init_non_tcp_udp_dissector(ndpi_str, &a, detection_bitmask);
-
-  /* TVANTS */
-  init_tvants_dissector(ndpi_str, &a, detection_bitmask);
 
   /* SOPCAST */
   init_sopcast_dissector(ndpi_str, &a, detection_bitmask);
@@ -3056,12 +3054,6 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* BGP */
   init_bgp_dissector(ndpi_str, &a, detection_bitmask);
-
-  /* BATTLEFIELD */
-  init_battlefield_dissector(ndpi_str, &a, detection_bitmask);
-
-  /* PCANYWHERE */
-  init_pcanywhere_dissector(ndpi_str, &a, detection_bitmask);
 
   /* SNMP */
   init_snmp_dissector(ndpi_str, &a, detection_bitmask);
@@ -4208,7 +4200,7 @@ static inline uint32_t get_timestamp(uint64_t ts_l,uint32_t divisor) {
 
 void ndpi_process_extra_packet(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
                                const unsigned char *packet, const unsigned short packetlen,
-                               const u_int64_t current_tick_l, struct ndpi_id_struct *src, struct ndpi_id_struct *dst) {
+                               const u_int64_t current_time_ms, struct ndpi_id_struct *src, struct ndpi_id_struct *dst) {
   if(flow == NULL)
     return;
 
@@ -4220,8 +4212,8 @@ void ndpi_process_extra_packet(struct ndpi_detection_module_struct *ndpi_str, st
     return;
   }
 
-  flow->packet.tick_timestamp_l = current_tick_l;
-  flow->packet.tick_timestamp = get_timestamp(current_tick_l,ndpi_str->ticks_per_second);
+  flow->packet.current_time_ms = current_time_ms;
+  flow->packet.current_time = get_timestamp(current_time_ms,ndpi_str->ticks_per_second);
 
   /* parse packet */
   flow->packet.iph = (struct ndpi_iphdr *) packet;
@@ -4463,7 +4455,8 @@ static void ndpi_reset_packet_line_info(struct ndpi_packet_struct *packet) {
     packet->accept_line.len = 0, packet->user_agent_line.ptr = NULL, packet->user_agent_line.len = 0,
     packet->http_url_name.ptr = NULL, packet->http_url_name.len = 0, packet->http_encoding.ptr = NULL,
     packet->http_encoding.len = 0, packet->http_transfer_encoding.ptr = NULL, packet->http_transfer_encoding.len = 0,
-    packet->http_contentlen.ptr = NULL, packet->http_contentlen.len = 0, packet->http_cookie.ptr = NULL,
+    packet->http_contentlen.ptr = NULL, packet->http_contentlen.len = 0, packet->content_disposition_line.ptr = NULL,
+    packet->content_disposition_line.len = 0, packet->http_cookie.ptr = NULL,
     packet->http_cookie.len = 0, packet->http_origin.len = 0, packet->http_origin.ptr = NULL,
     packet->http_x_session_type.ptr = NULL, packet->http_x_session_type.len = 0, packet->server_line.ptr = NULL,
     packet->server_line.len = 0, packet->http_method.ptr = NULL, packet->http_method.len = 0,
@@ -4491,12 +4484,12 @@ static int ndpi_check_protocol_port_mismatch_exceptions(struct ndpi_detection_mo
       break;
     }
   }
-  
+
   return(0);
 }
 
 /* ********************************************************************************* */
-				    
+
 static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_str,
 				     struct ndpi_flow_struct *flow,
 				     ndpi_protocol *ret) {
@@ -4504,6 +4497,13 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
      Skype for a host doing MS Teams means MS Teams
      (MS Teams uses Skype as transport protocol for voice/video)
   */
+  
+  if(flow) {
+    /* Do not go for DNS when there is an application protocol. Example DNS.Apple */
+    if((flow->detected_protocol_stack[1] != NDPI_PROTOCOL_UNKNOWN)
+       && (flow->detected_protocol_stack[0] /* app */ != flow->detected_protocol_stack[1] /* major */))
+      NDPI_CLR_BIT(flow->risk, NDPI_SUSPICIOUS_DGA_DOMAIN);
+  }  
 
   switch(ret->app_protocol) {
   case NDPI_PROTOCOL_MSTEAMS:
@@ -4516,7 +4516,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
       if(ndpi_str->msteams_cache)
 	ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
 			      flow->packet.iph->saddr,
-			      flow->packet.tick_timestamp & 0xFFFF /* 16 bit */);
+			      (flow->packet.current_time_ms / 1000) & 0xFFFF /* 16 bit */);
     }
     break;
 
@@ -4529,7 +4529,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
       if(ndpi_lru_find_cache(ndpi_str->msteams_cache, flow->packet.iph->saddr,
 			     &when, 0 /* Don't remove it as it can be used for other connections */)) {
-	u_int16_t tdiff = (flow->packet.tick_timestamp & 0xFFFF) - when;
+	u_int16_t tdiff = ((flow->packet.current_time_ms /1000) & 0xFFFF) - when;
 
 	if(tdiff < 60 /* sec */) {
 	  // printf("====>> NDPI_PROTOCOL_SKYPE(_CALL) -> NDPI_PROTOCOL_MSTEAMS [%u]\n", tdiff);
@@ -4538,7 +4538,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 	  /* Refresh cache */
 	  ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
 				flow->packet.iph->saddr,
-				flow->packet.tick_timestamp & 0xFFFF /* 16 bit */);
+				(flow->packet.current_time_ms / 1000) & 0xFFFF /* 16 bit */);
 	}
       }
     }
@@ -4550,7 +4550,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
 ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct *ndpi_str,
                                             struct ndpi_flow_struct *flow, const unsigned char *packet,
-                                            const unsigned short packetlen, const u_int64_t current_tick_l,
+                                            const unsigned short packetlen, const u_int64_t current_time_ms,
                                             struct ndpi_id_struct *src, struct ndpi_id_struct *dst) {
   NDPI_SELECTION_BITMASK_PROTOCOL_SIZE ndpi_selection_packet;
   u_int32_t a;
@@ -4575,7 +4575,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 
   if(flow->detected_protocol_stack[0] != NDPI_PROTOCOL_UNKNOWN) {
     if(flow->check_extra_packets) {
-      ndpi_process_extra_packet(ndpi_str, flow, packet, packetlen, current_tick_l, src, dst);
+      ndpi_process_extra_packet(ndpi_str, flow, packet, packetlen, current_time_ms, src, dst);
       /* Update in case of new match */
       ret.master_protocol = flow->detected_protocol_stack[1], ret.app_protocol = flow->detected_protocol_stack[0];
 #ifndef __KERNEL__
@@ -4593,8 +4593,8 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     goto invalidate_ptr;
   }
 
-  flow->packet.tick_timestamp_l = current_tick_l;
-  flow->packet.tick_timestamp = get_timestamp(current_tick_l,ndpi_str->ticks_per_second);
+  flow->packet.current_time_ms = current_time_ms;
+  flow->packet.current_time = get_timestamp(current_time_ms,ndpi_str->ticks_per_second);
 
   /* parse packet */
   flow->packet.iph = (struct ndpi_iphdr *) packet;
@@ -4962,28 +4962,28 @@ u_int32_t ndpi_bytestream_to_ipv4(const u_int8_t *str, u_int16_t max_chars_to_re
   c = ndpi_bytestream_to_number(str, max_chars_to_read, &read);
   if(c > 255 || oldread == read || max_chars_to_read == read || str[read] != '.')
     return(0);
-  
+
   read++;
   val = c << 24;
   oldread = read;
   c = ndpi_bytestream_to_number(&str[read], max_chars_to_read - read, &read);
   if(c > 255 || oldread == read || max_chars_to_read == read || str[read] != '.')
     return(0);
-  
+
   read++;
   val = val + (c << 16);
   oldread = read;
   c = ndpi_bytestream_to_number(&str[read], max_chars_to_read - read, &read);
   if(c > 255 || oldread == read || max_chars_to_read == read || str[read] != '.')
     return(0);
-  
+
   read++;
   val = val + (c << 8);
   oldread = read;
   c = ndpi_bytestream_to_number(&str[read], max_chars_to_read - read, &read);
   if(c > 255 || oldread == read || max_chars_to_read == read)
     return(0);
-  
+
   val = val + c;
 
   *bytes_read = *bytes_read + read;
@@ -5010,15 +5010,13 @@ void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, 
   packet->line[packet->parsed_lines].ptr = packet->payload;
   packet->line[packet->parsed_lines].len = 0;
 
-  for (a = 0; (a < packet->payload_packet_len) && (packet->parsed_lines < NDPI_MAX_PARSE_LINES_PER_PACKET); a++) {
-    if((a + 1) >= packet->payload_packet_len)
-      return; /* Return if only one byte remains (prevent invalid reads past end-of-buffer) */
-
-    if(get_u_int16_t(packet->payload, a) == ntohs(0x0d0a)) {
+  for (a = 0; ((a+1) < packet->payload_packet_len) && (packet->parsed_lines < NDPI_MAX_PARSE_LINES_PER_PACKET); a++) {
+    if((packet->payload[a] == 0x0d) && (packet->payload[a+1] == 0x0a)) {
       /* If end of line char sequence CR+NL "\r\n", process line */
 
-      if(((a + 3) <= packet->payload_packet_len)
-	 && (get_u_int16_t(packet->payload, a+2) == ntohs(0x0d0a))) {
+      if(((a + 3) < packet->payload_packet_len)
+	 && (packet->payload[a+2] == 0x0d)
+	 && (packet->payload[a+3] == 0x0a)) {
 	/* \r\n\r\n */
 	int diff; /* No unsigned ! */
 	u_int32_t a1 = a + 4;
@@ -6043,10 +6041,10 @@ const char * ndpi_strncasestr(const char *str1, const char *str2, size_t len) {
 
   for(i = 0; i < (str1_len - str2_len + 1); i++){
     if(str1[0] == '\0')
-      return NULL;    
+      return NULL;
     else if(strncasecmp(str1, str2, str2_len) == 0)
       return(str1);
-    
+
     str1++;
   }
 
@@ -6646,4 +6644,129 @@ void ndpi_md5(const u_char *data, size_t data_len, u_char hash[16]) {
   ndpi_MD5Init(&ctx);
   ndpi_MD5Update(&ctx, data, data_len);
   ndpi_MD5Final(hash, &ctx);
+}
+
+/* ******************************************************************** */
+
+static int enough(int a, int b) {
+  u_int8_t percentage = 20;
+
+  if(b == 0) return(0);
+  if(a == 0) return(1);
+
+  if(b > (((a+1)*percentage)/100)) return(1);
+
+  return(0);
+}
+
+/* ******************************************************************** */
+
+// #define DGA_DEBUG 1
+
+int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
+			struct ndpi_flow_struct *flow,
+			char *name) {
+  int len, rc = 0;
+
+  len = strlen(name);
+  
+  if(len >= 5) {
+    int i, j, num_found = 0, num_impossible = 0, num_bigram_checks = 0, num_digits = 0, num_vowels = 0, num_words = 0;
+    char tmp[128], *word, *tok_tmp;
+
+    len = snprintf(tmp, sizeof(tmp)-1, "%s", name);
+    if(len < 0) return(0);
+
+    for(i=0, j=0; (i<len) && (j<(sizeof(tmp)-1)); i++) {
+	tmp[j++] = tolower(name[i]);
+    }
+
+    tmp[j] = '\0';
+    len = j;
+
+    for(word = strtok_r(tmp, ".", &tok_tmp); ; word = strtok_r(NULL, ".", &tok_tmp)) {
+      if(!word) break;
+
+      num_words++;
+      
+      if(strlen(word) < 3) continue;
+
+#ifdef DGA_DEBUG
+      printf("-> %s [%s][len: %u]\n", word, name, (unsigned int)strlen(word));
+#endif
+      
+      for(i = 0; word[i+1] != '\0'; i++) {
+	if(isdigit(word[i])) {
+	  num_digits++;
+	  
+	  // if(!isdigit(word[i+1])) num_impossible++;
+	  
+	  continue;	  
+	}
+	
+	switch(word[i]) {
+	case '_':
+	case '-':
+	case ':':
+	  continue;
+	  break;
+	
+	case '.':
+	  continue;
+	  break;
+	}
+
+	switch(word[i]) {
+	case 'a':
+	case 'e':
+	case 'i':
+	case 'o':
+	case 'u':
+	  num_vowels++;
+	  break;
+	}
+	
+	if(isdigit(word[i+1])) {
+	  num_digits++;
+	  // num_impossible++;
+	  continue;
+	}
+	
+	num_bigram_checks++;
+
+	if(ndpi_match_bigram(ndpi_str, &ndpi_str->bigrams_automa, &word[i])) {
+	  num_found++;
+	} else {
+	  if(ndpi_match_bigram(ndpi_str,
+			       &ndpi_str->impossible_bigrams_automa,
+			       &word[i])) {
+#ifdef DGA_DEBUG
+	    printf("IMPOSSIBLE %s\n", &word[i]);
+#endif
+	    num_impossible++;
+	  }
+	}
+      } /* for */
+    } /* for */
+
+#ifdef DGA_DEBUG
+    printf("[num_found: %u][num_impossible: %u][num_digits: %u][num_bigram_checks: %u][num_vowels: %u/%u]\n",
+	   num_found, num_impossible, num_digits, num_bigram_checks, num_vowels, j-num_vowels);
+#endif
+	    
+    if(num_bigram_checks
+       && ((num_found == 0) || ((num_digits > 5) && (num_words <= 3)) || enough(num_found, num_impossible)))
+      rc = 1;
+
+    if(rc && flow)
+      NDPI_SET_BIT(flow->risk, NDPI_SUSPICIOUS_DGA_DOMAIN);
+
+#ifdef DGA_DEBUG
+    if(rc)
+      printf("DGA %s [num_found: %u][num_impossible: %u]\n",
+	     name, num_found, num_impossible);
+#endif
+  }
+
+  return(rc);
 }

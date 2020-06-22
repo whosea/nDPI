@@ -932,93 +932,22 @@ void ndpi_serialize_risk(ndpi_serializer *serializer,
 
 /* ********************************** */
 /* ********************************** */
-
-const char* ndpi_tunnel2str(ndpi_packet_tunnel tt) {
-  switch(tt) {
-  case ndpi_no_tunnel:
-    return("No-Tunnel");
-    break;
-    
-  case ndpi_gtp_tunnel:
-    return("GTP");
-    break;
-    
-  case ndpi_capwap_tunnel:
-    return("CAPWAP");
-    break;
-    
-  case ndpi_tzsp_tunnel:
-    return("TZSP");
-    break;
-
-  case ndpi_l2tp_tunnel:
-    return("L2TP");
-    break;
-  }
-
-  return("");
-}
-
-
-/* ********************************** */
-/* ********************************** */
 #ifndef __KERNEL__
-int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
-		   struct ndpi_flow_struct *flow,
-		   u_int8_t ip_version,
-		   u_int8_t l4_protocol, u_int16_t vlan_id,
-		   u_int32_t src_v4, u_int32_t dst_v4,
-		   struct ndpi_in6_addr *src_v6, struct ndpi_in6_addr *dst_v6,
-		   u_int16_t src_port, u_int16_t dst_port,
-		   ndpi_protocol l7_protocol,
-		   ndpi_serializer *serializer) {
-  char buf[64], src_name[32], dst_name[32];
+/* NOTE: serializer must have been already initialized */
+int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
+		  struct ndpi_flow_struct *flow,
+		  ndpi_protocol l7_protocol,
+		  ndpi_serializer *serializer) {
+  char buf[64];
 
-  if(ndpi_init_serializer(serializer, ndpi_serialization_format_json) == -1)
-    return(-1);
-
-  if(ip_version == 4) {
-    inet_ntop(AF_INET, &src_v4, src_name, sizeof(src_name));
-    inet_ntop(AF_INET, &dst_v4, dst_name, sizeof(dst_name));
-  } else {
-    inet_ntop(AF_INET6, src_v6, src_name, sizeof(src_name));
-    inet_ntop(AF_INET6, dst_v6, dst_name, sizeof(dst_name));
-    /* For consistency across platforms replace :0: with :: */
-    ndpi_patchIPv6Address(src_name), ndpi_patchIPv6Address(dst_name);
-  }
-
-  ndpi_serialize_string_string(serializer, "src_ip", src_name);
-  ndpi_serialize_string_string(serializer, "dest_ip", dst_name);
-  if(src_port) ndpi_serialize_string_uint32(serializer, "src_port", src_port);
-  if(dst_port) ndpi_serialize_string_uint32(serializer, "dst_port", dst_port);
-
-  switch(l4_protocol) {
-  case IPPROTO_TCP:
-    ndpi_serialize_string_string(serializer, "proto", "TCP");
-    break;
-
-  case IPPROTO_UDP:
-    ndpi_serialize_string_string(serializer, "proto", "UDP");
-    break;
-
-  case IPPROTO_ICMP:
-    ndpi_serialize_string_string(serializer, "proto", "ICMP");
-    break;
-
-  default:
-    ndpi_serialize_string_uint32(serializer, "proto", l4_protocol);
-    break;
-  }
-
-  ndpi_serialize_risk(serializer, flow);
+  if(flow == NULL) return(-1);
   
   ndpi_serialize_start_of_block(serializer, "ndpi");
+  ndpi_serialize_risk(serializer, flow);
   ndpi_serialize_string_string(serializer, "proto", ndpi_protocol2name(ndpi_struct, l7_protocol, buf, sizeof(buf)));
   if(l7_protocol.category != NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
     ndpi_serialize_string_string(serializer, "category", ndpi_category_get_name(ndpi_struct, l7_protocol.category));
   ndpi_serialize_end_of_block(serializer);
-
-  if(flow == NULL) return(0);
 
   switch(l7_protocol.master_protocol ? l7_protocol.master_protocol : l7_protocol.app_protocol) {
   case NDPI_PROTOCOL_DHCP:
@@ -1204,6 +1133,87 @@ int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
   } /* switch */
 
   return(0);
+}
+
+/* ********************************** */
+
+/* NOTE: serializer is initialized by the function */
+int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
+		   struct ndpi_flow_struct *flow,
+		   u_int8_t ip_version,
+		   u_int8_t l4_protocol, u_int16_t vlan_id,
+		   u_int32_t src_v4, u_int32_t dst_v4,
+		   struct ndpi_in6_addr *src_v6, struct ndpi_in6_addr *dst_v6,
+		   u_int16_t src_port, u_int16_t dst_port,
+		   ndpi_protocol l7_protocol,
+		   ndpi_serializer *serializer) {
+  char src_name[32], dst_name[32];
+
+  if(ndpi_init_serializer(serializer, ndpi_serialization_format_json) == -1)
+    return(-1);
+
+  if(ip_version == 4) {
+    inet_ntop(AF_INET, &src_v4, src_name, sizeof(src_name));
+    inet_ntop(AF_INET, &dst_v4, dst_name, sizeof(dst_name));
+  } else {
+    inet_ntop(AF_INET6, src_v6, src_name, sizeof(src_name));
+    inet_ntop(AF_INET6, dst_v6, dst_name, sizeof(dst_name));
+    /* For consistency across platforms replace :0: with :: */
+    ndpi_patchIPv6Address(src_name), ndpi_patchIPv6Address(dst_name);
+  }
+
+  ndpi_serialize_string_string(serializer, "src_ip", src_name);
+  ndpi_serialize_string_string(serializer, "dest_ip", dst_name);
+  if(src_port) ndpi_serialize_string_uint32(serializer, "src_port", src_port);
+  if(dst_port) ndpi_serialize_string_uint32(serializer, "dst_port", dst_port);
+
+  switch(l4_protocol) {
+  case IPPROTO_TCP:
+    ndpi_serialize_string_string(serializer, "proto", "TCP");
+    break;
+
+  case IPPROTO_UDP:
+    ndpi_serialize_string_string(serializer, "proto", "UDP");
+    break;
+
+  case IPPROTO_ICMP:
+    ndpi_serialize_string_string(serializer, "proto", "ICMP");
+    break;
+
+  default:
+    ndpi_serialize_string_uint32(serializer, "proto", l4_protocol);
+    break;
+  }
+
+  return(ndpi_dpi2json(ndpi_struct, flow, l7_protocol, serializer));
+}
+
+/* ********************************** */
+
+const char* ndpi_tunnel2str(ndpi_packet_tunnel tt) {
+  switch(tt) {
+  case ndpi_no_tunnel:
+    return("No-Tunnel");
+    break;
+    
+  case ndpi_gtp_tunnel:
+    return("GTP");
+    break;
+    
+  case ndpi_capwap_tunnel:
+    return("CAPWAP");
+    break;
+    
+  case ndpi_tzsp_tunnel:
+    return("TZSP");
+    break;
+
+  case ndpi_l2tp_tunnel:
+    return("L2TP");
+    break;
+  }
+
+  return("");
 }
 
 /* ********************************** */
@@ -1495,6 +1505,12 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
 
   case NDPI_HTTP_SUSPICIOUS_HEADER:
     return("HTTP Suspicious Header");
+    
+  case NDPI_TLS_NOT_CARRYING_HTTPS:
+    return("TLS (probably) not carrying HTTPS");
+
+  case NDPI_SUSPICIOUS_DGA_DOMAIN:
+    return("Suspicious DGA domain name");
     
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);

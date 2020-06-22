@@ -56,6 +56,11 @@ typedef enum {
   ndpi_l2tp_tunnel,
 } ndpi_packet_tunnel;
 
+/*
+  NOTE
+  When the typedef below is modified don't forget
+  to update ndpi_risk2str (in ndpi_utils.c)
+ */
 typedef enum {
   NDPI_NO_RISK = 0,
   NDPI_URL_POSSIBLE_XSS,
@@ -72,6 +77,8 @@ typedef enum {
   NDPI_HTTP_NUMERIC_IP_HOST,
   NDPI_HTTP_SUSPICIOUS_URL,
   NDPI_HTTP_SUSPICIOUS_HEADER,
+  NDPI_TLS_NOT_CARRYING_HTTPS,
+  NDPI_SUSPICIOUS_DGA_DOMAIN,
   
   /* Leave this as last member */
   NDPI_MAX_RISK
@@ -533,17 +540,11 @@ struct ndpi_id_struct {
   /* NDPI_PROTOCOL_GNUTELLA */
   u_int32_t gnutella_ts;
 
-  /* NDPI_PROTOCOL_BATTLEFIELD */
-  u_int32_t battlefield_ts;
-
   /* NDPI_PROTOCOL_THUNDER */
   u_int32_t thunder_ts;
 
   /* NDPI_PROTOCOL_RTSP */
   u_int32_t rtsp_timer;
-
-  /* NDPI_PROTOCOL_OSCAR */
-  u_int32_t oscar_last_safe_access_time;
 
   /* NDPI_PROTOCOL_ZATTOO */
   u_int32_t zattoo_ts;
@@ -584,9 +585,6 @@ struct ndpi_id_struct {
 
   /* NDPI_PROTOCOL_IRC */
   u_int8_t irc_number_of_port;
-
-  /* NDPI_PROTOCOL_OSCAR */
-  u_int8_t oscar_ssl_session_id[33];
 
   /* NDPI_PROTOCOL_UNENCRYPTED_JABBER */
   u_int8_t jabber_voice_stun_used_ports;
@@ -757,14 +755,8 @@ struct ndpi_flow_tcp_struct {
 /* ************************************************** */
 
 struct ndpi_flow_udp_struct {
-  /* NDPI_PROTOCOL_BATTLEFIELD */
-  u_int32_t battlefield_msg_id;
-
   /* NDPI_PROTOCOL_SNMP */
   u_int32_t snmp_msg_id;
-
-  /* NDPI_PROTOCOL_BATTLEFIELD */
-  u_int32_t battlefield_stage:3;
 
   /* NDPI_PROTOCOL_SNMP */
   u_int32_t snmp_stage:2;
@@ -826,8 +818,8 @@ struct ndpi_packet_struct {
   const u_int8_t *generic_l4_ptr;	/* is set only for non tcp-udp traffic */
   const u_int8_t *payload;
 
-  u_int32_t tick_timestamp;
-  u_int64_t tick_timestamp_l;
+  u_int64_t current_time_ms;
+  u_int64_t current_time;
 
   u_int16_t detected_protocol_stack[NDPI_PROTOCOL_SIZE];
   u_int8_t detected_subprotocol_stack[NDPI_PROTOCOL_SIZE];
@@ -1130,16 +1122,12 @@ struct ndpi_detection_module_struct {
   u_int32_t irc_timeout;
   /* gnutella parameters */
   u_int32_t gnutella_timeout;
-  /* battlefield parameters */
-  u_int32_t battlefield_timeout;
   /* thunder parameters */
   u_int32_t thunder_timeout;
   /* SoulSeek parameters */
   u_int32_t soulseek_connection_ip_tick_timeout;
   /* rtsp parameters */
   u_int32_t rtsp_connection_timeout;
-  /* tvants parameters */
-  u_int32_t tvants_connection_timeout;
   /* rstp */
   u_int32_t orb_rstp_ts_timeout;
   /* yahoo */
@@ -1388,9 +1376,6 @@ struct ndpi_flow_struct {
   /* NDPI_PROTOCOL_THUNDER */
   u_int8_t thunder_stage:2;		        // 0 - 3
 
-  /* NDPI_PROTOCOL_OSCAR */
-  u_int8_t oscar_ssl_voice_stage:3, oscar_video_voice:1;
-
   /* NDPI_PROTOCOL_FLORENSIA */
   u_int8_t florensia_stage:1;
 
@@ -1493,6 +1478,7 @@ typedef enum {
   ndpi_serialization_string
 } ndpi_serialization_type;
 
+#define NDPI_SERIALIZER_DEFAULT_HEADER_SIZE 1024
 #define NDPI_SERIALIZER_DEFAULT_BUFFER_SIZE 8192
 #define NDPI_SERIALIZER_DEFAULT_BUFFER_INCR 1024
 
@@ -1503,18 +1489,29 @@ typedef enum {
 #define NDPI_SERIALIZER_STATUS_NOT_EMPTY (1 << 4)
 #define NDPI_SERIALIZER_STATUS_LIST      (1 << 5)
 #define NDPI_SERIALIZER_STATUS_SOL       (1 << 6)
+#define NDPI_SERIALIZER_STATUS_HDR_DONE  (1 << 7)
+
+typedef struct {
+  u_int32_t size_used;
+} ndpi_private_serializer_buffer_status;
 
 typedef struct {
   u_int32_t flags;
-  u_int32_t size_used;
+  ndpi_private_serializer_buffer_status buffer;
+  ndpi_private_serializer_buffer_status header;
 } ndpi_private_serializer_status;
 
 typedef struct {
+  u_int32_t initial_size;
+  u_int32_t size;
+  u_int8_t *data;
+} ndpi_private_serializer_buffer;
+
+typedef struct {
   ndpi_private_serializer_status status;
-  u_int32_t initial_buffer_size;
-  u_int32_t buffer_size;
+  ndpi_private_serializer_buffer buffer;
+  ndpi_private_serializer_buffer header;
   ndpi_serialization_format fmt;
-  u_int8_t *buffer;
   char csv_separator[2];
   u_int8_t has_snapshot;
   ndpi_private_serializer_status snapshot;
@@ -1551,5 +1548,34 @@ struct ndpi_analyze_struct {
 /* **************************************** */
 
 typedef struct ndpi_ptree ndpi_ptree_t;
+
+/* **************************************** */
+
+struct ndpi_hll {
+  u_int8_t bits;  
+  size_t size;
+  u_int8_t *registers;
+};
+
+/* **************************************** */
+
+enum ndpi_bin_family {
+   ndpi_bin_family8,
+   ndpi_bin_family16,
+   ndpi_bin_family32
+};
+
+struct ndpi_bin {
+  u_int8_t num_bins;
+  enum ndpi_bin_family family;
+  u_int32_t num_incs;
+  
+  union {
+    u_int8_t  *bins8; /* num_bins bins */
+    u_int16_t *bins16; /* num_bins bins */
+    u_int32_t *bins32; /* num_bins bins */
+  } u;
+};
+
 
 #endif /* __NDPI_TYPEDEFS_H__ */

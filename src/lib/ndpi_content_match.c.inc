@@ -8391,6 +8391,14 @@ static ndpi_network host_protocol_list[] = {
   { 0xD0163900 /* 208.22.57.0/24 */,   24, NDPI_PROTOCOL_BLOOMBERG },
   { 0x45BFC000 /* 69.191.192.0/18 */,  18, NDPI_PROTOCOL_BLOOMBERG },
 
+  /* AnyDesk */
+  { 0x3353EF8E /* 51.83.239.142/31 */, 31, NDPI_PROTOCOL_ANYDESK },
+  { 0x3353EF90 /* 51.83.239.144/31 */, 31, NDPI_PROTOCOL_ANYDESK },
+  { 0x3353EEC8 /* 51.83.238.200/29 */, 29, NDPI_PROTOCOL_ANYDESK },
+  { 0x3353EED0 /* 51.83.238.208/29 */, 29, NDPI_PROTOCOL_ANYDESK },
+  { 0x3353EED8 /* 51.83.238.216/30 */, 30, NDPI_PROTOCOL_ANYDESK },
+  { 0x3353EEDC /* 51.83.238.220/31 */, 31, NDPI_PROTOCOL_ANYDESK },
+
   /*
      Microsoft
 
@@ -8674,6 +8682,8 @@ ndpi_protocol_match host_match[] =
    { ".cloudfront.net",                                        "Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
    { ".us-west-2.compute.amazonaws.com","Amazon",           NDPI_PROTOCOL_AMAZON, NDPI_PROTOCOL_CATEGORY_WEB, NDPI_PROTOCOL_ACCEPTABLE },
 
+   { ".teamviewer.com",                                        "Teamviewer",           NDPI_PROTOCOL_TEAMVIEWER, NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS, NDPI_PROTOCOL_ACCEPTABLE },
+   
    /* Microsoft + Azure */
    { ".azure.com",                                            "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_CLOUD, NDPI_PROTOCOL_SAFE },
    { ".windows.net",                                        "Microsoft",        NDPI_PROTOCOL_MICROSOFT, NDPI_PROTOCOL_CATEGORY_CLOUD, NDPI_PROTOCOL_SAFE },
@@ -8937,6 +8947,7 @@ ndpi_protocol_match host_match[] =
 
    { ".spotify.",                               "Spotify",          NDPI_PROTOCOL_SPOTIFY, NDPI_PROTOCOL_CATEGORY_MUSIC, NDPI_PROTOCOL_FUN },
    { "audio-fa.scdn.co",                   "Spotify",          NDPI_PROTOCOL_SPOTIFY, NDPI_PROTOCOL_CATEGORY_MUSIC, NDPI_PROTOCOL_FUN },
+   { "spotifycdn.net",                   "Spotify",          NDPI_PROTOCOL_SPOTIFY, NDPI_PROTOCOL_CATEGORY_MUSIC, NDPI_PROTOCOL_FUN },
 
    { "edge-mqtt.facebook.com",        "Messenger",        NDPI_PROTOCOL_MESSENGER, NDPI_PROTOCOL_CATEGORY_CHAT, NDPI_PROTOCOL_ACCEPTABLE },
    { "mqtt-mini.facebook.com",        "Messenger",        NDPI_PROTOCOL_MESSENGER, NDPI_PROTOCOL_CATEGORY_CHAT, NDPI_PROTOCOL_ACCEPTABLE }, /* Messenger Lite */
@@ -9125,6 +9136,8 @@ ndpi_protocol_match host_match[] =
    { "brasilbandalarga.com.br",     "EAQ",              NDPI_PROTOCOL_EAQ, NDPI_PROTOCOL_CATEGORY_NETWORK, NDPI_PROTOCOL_ACCEPTABLE },
    { ".eaqbr.com.br",                       "EAQ",              NDPI_PROTOCOL_EAQ, NDPI_PROTOCOL_CATEGORY_NETWORK, NDPI_PROTOCOL_ACCEPTABLE },
 
+   { ".net.anydesk.com",              "AnyDesk",        NDPI_PROTOCOL_ANYDESK, NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS, NDPI_PROTOCOL_ACCEPTABLE },
+
    { NULL, NULL, NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_SAFE }
   };
 
@@ -9221,6 +9234,10 @@ static ndpi_category_match category_match[] = {
   word or just random chars.
 
   http://www3.nd.edu/~busiforc/handouts/cryptography/Letter%20Frequencies.html
+
+  DGA Datasets
+  - https://data.netlab.360.com/dga/
+  - https://github.com/baderj/domain_generation_algorithms
 */
 
 static const char *ndpi_en_bigrams[] = {
@@ -9260,12 +9277,55 @@ static const char *ndpi_en_bigrams[] = {
   NULL };
 
 /* ******************************************************************** */
+#if 0
+static const char *ndpi_en_popular_bigrams[] = {
+   "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd", "ti", "es", "or", "te", "of", "ed", "is", "it",
+   "al", "ar", "st", "to", "nt", "ng", "se", "ha", "as", "ou", "io", "le", "ve", "co", "me", "de", "hi", "ri",
+   "ro", "ic", "ne", "ea", "ra", "ce", "li", "ch", "ll", "be", "ma", "si", "om", "ur", "ca", "el", "ta", "la",
+   "ns", "di", "fo", "ho", "pe", "ec", "pr", "no", "ct", "us", "ac", "ot", "il", "tr", "ly", "nc", "et", "ut",
+   "ss", "so", "rs", "un", "lo", "wa", "ge", "ie", "wh", "ee", "wi", "em", "ad", "ol", "rt", "po", "we", "na",
+   "ul", "ni", "ts", "mo", "ow", "pa", "im", "mi", "ai", "sh", "ir", "su", "id", "os", "iv", "ia", "am", "fi",
+   "ci", "vi", "pl", "ig", "tu", "ev", "ld", "ry", "mp", "fe", "bl", "ab", "gh", "ty", "op", "wo", "sa", "ay",
+   "ex", "ke", "fr", "oo", "av", "ag", "if", "ap", "gr", "od", "bo", "sp", "rd", "do", "uc", "bu", "ei", "ov",
+   "by", "rm", "ep", "tt", "oc", "fa", "ef", "cu", "rn", "sc", "gi", "da", "yo", "cr", "cl", "du", "ga", "qu",
+   "ue", "ff", "ba", "ey", "ls", "va", "um", "pp", "ua", "up", "lu", "go", "ht", "ru", "ug", "ds", "lt", "pi",
+   "rc", "rr", "eg", "au", "ck", "ew", "mu", "br", "bi", "pt", "ak", "pu", "ui", "rg", "ib", "tl", "ny", "ki",
+   "rk", "ys", "ob", "mm", "fu", "ph", "og", "ms", "ye", "ud", "mb", "ip", "ub", "oi", "rl", "gu", "dr", "hr",
+   "cc", "tw", "ft", "wn", "nu", "af", "hu", "nn", "eo", "vo", "rv", "nf", "xp", "gn", "sm", "fl", "iz", "ok",
+   "nl", "my", "gl", "aw", "ju", "oa", "eq", "sy", "sl", "ps", "jo", "lf", "nv", "je", "nk", "kn", "gs", "dy",
+   "hy", "ze", "ks", "xt", "bs", "ik", "dd", "cy", "rp", "sk", "xi", "oe", "oy", "ws", "lv", "dl", "rf", "eu",
+   "dg", "wr", "xa", "yi", "nm", "eb", "rb", "tm", "xc", "eh", "tc", "gy", "ja", "hn", "yp", "za", "gg", "ym",
+   "sw", "bj", "lm", "cs", "ii", "ix", "xe", "oh", "lk", "dv", "lp", "ax", "ox", "uf", "dm", "iu", "sf", "bt",
+   "ka", "yt", "ek", "pm", "ya", "gt", "wl", "rh", "yl", "hs", "ah", "yc", "yn", "rw", "hm", "lw", "hl", "ae",
+   "zi", "az", "lc", "py", "aj", "iq", "nj", "bb", "nh", "uo", "kl", "lr", "tn", "gm", "sn", "nr", "fy", "mn",
+   "dw", "sb", "yr", "dn", "sq", "zo", "oj", "yd", "lb", "wt", "lg", "ko", "np", "sr", "nq", "ky", "ln", "nw",
+   "tf", "fs", "cq", "dh", "sd", "vy", "dj", "hw", "xu", "ao", "ml", "uk", "uy", "ej", "ez", "hb", "nz", "nb",
+   "mc", "yb", "tp", "xh", "ux", "tz", "bv", "mf", "wd", "oz", "yw", "kh", "gd", "bm", "mr", "ku", "uv", "dt",
+   "hd", "aa", "xx", "df", "db", "ji", "kr", "xo", "cm", "zz", "nx", "yg", "xy", "kg", "tb", "dc", "bd", "sg",
+   "wy", "zy", "aq", "hf", "cd", "vu", "kw", "zu", "bn", "ih", "tg", "xv", "uz", "bc", "xf", "yz", "km", "dp",
+   "lh", "wf", "kf", "pf", "cf", "mt", "yu", "cp", "pb", "td", "zl", "sv", "hc", "mg", "pw", "gf", "pd", "pn",
+   "pc", "rx", "tv", "ij", "wm", "uh", "wk", "wb", "bh", "oq", "kt", "rq", "kb", "cg", "vr", "cn", "pk", "uu",
+   "yf", "wp", "cz", "kp", "dq", "wu", "fm", "wc", "md", "kd", "zh", "gw", "rz", "cb", "iw", "xl", "hp", "mw",
+   "vs", "fc", "rj", "bp", "mh", "hh", "yh", "uj", "fg", "fd", "gb", "pg", "tk", "kk", "hq", "fn", "lz", "vl",
+   "gp", "hz", "dk", "yk", "qi", "lx", "vd", "zs", "bw", "xq", "mv", "uw", "hg", "fb", "sj", "ww", "gk", "uq",
+   "bg", "sz", "jr", "ql", "zt", "hk", "vc", "xm", "gc", "fw", "pz", "kc", "hv", "xw", "zw", "fp", "iy", "pv",
+   "vt", "jp", "cv", "zb", "vp", "zr", "fh", "yv", "zg", "zm", "zv", "qs", "kv", "vn", "zn", "qa", "yx", "jn",
+   "bf", "mk", "cw", "jm", "lq", "jh", "kj", "jc", "gz", "js", "tx", "fk", "jl", "vm", "lj", "tj", "jj", "cj",
+   "vg", "mj", "jt", "pj", "wg", "vh", "bk", "vv", "jd", "tq", "vb", "jf", "dz", "xb", "jb", "zc", "fj", "yy",
+   "qn", "xs", "qr", "jk", "jv", "qq", "xn", "vf", "px", "zd", "qt", "zp", "qo", "dx", "hj", "gv", "jw", "qc",
+   "jy", "gj", "qb", "pq", "jg", "bz", "mx", "qm", "mz", "qf", "wj", "zq", "xr", "zk", "cx", "fx", "fv", "bx",
+   "vw", "vj", "mq", "qv", "zf", "qe", "yj", "gx", "kx", "xg", "qd", "xj", "sx", "vz", "vx", "wv", "yq", "bq",
+   "gq", "vk", "zj", "xk", "qp", "hx", "fz", "qh", "qj", "jz", "vq", "kq", "xd", "qw", "jx", "qx", "kz", "wx",
+   "fq", "xz", "zx", "jq", "qg", "qk", "qy", "qz", "wq", "wz", NULL
+  };
+#endif
+/* ******************************************************************** */
 
 static const char *ndpi_en_impossible_bigrams[] = {
   "bk", "bq", "bx", "cb", "cf", "cg", "cj", "cp", "cv", "cw", "cx", "dx", "fk", "fq", "fv", "fx", /* "ee", removed it can be found in 'meeting' */
   "fz", "gq", "gv", "gx", "hh", "hk", "hv", "hx", "hz", "iy", "jb", /* "jc", jcrew.com */ "jd", "jf", "jg", "jh", "jk",
-  "jl", "jm", "jn", "jp", "jq", "jr", /* "js", */ "jt", "jv", "jw", "jx", "jy", "jz", "kg", "kq", "kv", "kx",
-  "kz", "lq", "lx", /* "mg" tamgrt.com , */ "mj", "mq", "mx", "mz", "pq", "pv", "px", "qb", "qc", "qd", "qe", "qf", "ii",
+  "jl", "jm", "jn", "jp", "jq", /* "jr",*/  /* "js", */ "jt", "jv", "jw", "jx", "jy", "jz", "kg", "kq", "kv", "kx",
+  "kz", "lq", "lx", /* "mg" tamgrt.com , */ "mj", /* "mq", mqtt */  "mx", "mz", "pq", "pv", "px", "qb", "qc", "qd", "qe", "qf", "ii",
   "qg", "qh", "qj", "qk", "ql", "qm", "qn", "qo", "qp", "qr", "qs", "qt", "qv", "qw", "qx", "qy", "uu",
   "qz", "sx", "sz", "tq", "tx", "vb", "vc", "vd", "vf", "vg", "vh", "vj", "vm", "vn", /* "vp", Removed for vpbank.com */ "bw", /* "vk", "zr" Removed for kavkazr */
   "vq", "vt", "vw", "vx", "vz", "wq", "wv", "wx", "wz", /* "xb", foxbusiness.com */

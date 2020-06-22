@@ -36,7 +36,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/armagetron.c \
 		     protocols/ayiya.c \
 		     protocols/amqp.c \
-		     protocols/battlefield.c \
 		     protocols/bgp.c \
 		     protocols/bittorrent.c \
 		     protocols/bjnp.c \
@@ -117,9 +116,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/openvpn.c \
 		     protocols/ookla.c \
 		     protocols/oracle.c \
-		     protocols/oscar.c \
 		     protocols/pando.c \
-		     protocols/pcanywhere.c \
 		     protocols/postgres.c \
 		     protocols/pplive.c \
 		     protocols/ppstream.c \
@@ -165,7 +162,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/tls.c \
 		     protocols/tor.c \
 		     protocols/teredo.c \
-		     protocols/tvants.c \
 		     protocols/tvuplayer.c \
 		     protocols/ubntac2.c \
 		     protocols/upnp.c \
@@ -181,7 +177,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/world_of_warcraft.c \
 		     protocols/xbox.c \
 		     protocols/xdmcp.c \
-		     protocols/yahoo.c \
 		     protocols/zattoo.c \
 		     protocols/zeromq.c \
 		     protocols/smpp.c \

@@ -87,6 +87,14 @@ static void ndpi_int_someip_add_connection (struct ndpi_detection_module_struct 
   NDPI_LOG_INFO(ndpi_struct, "found SOME/IP\n");
 }
 
+static u_int32_t someip_data_cover_32(const u_int8_t *data)
+{
+  u_int32_t value;
+
+  memcpy(&value,data,sizeof(u_int32_t));
+
+  return value;
+}
 /**
  * Dissector function that searches SOME/IP headers
  */
@@ -113,8 +121,8 @@ void ndpi_search_someip (struct ndpi_detection_module_struct *ndpi_struct,
   }
  
   //we extract the Message ID and Request ID and check for special cases later
-  message_id = ntohl(*((u_int32_t *)&packet->payload[0]));
-  request_id = ntohl(*((u_int32_t *)&packet->payload[8]));
+  message_id = ntohl(someip_data_cover_32(&packet->payload[0]));
+  request_id = ntohl(someip_data_cover_32(&packet->payload[8]));
 
   NDPI_LOG_DBG2(ndpi_struct, "====>>>> SOME/IP Message ID: %08x [len: %u]\n",
 	   message_id, packet->payload_packet_len);
@@ -127,7 +135,7 @@ void ndpi_search_someip (struct ndpi_detection_module_struct *ndpi_struct,
   //####Maximum packet size in SOMEIP depends on the carrier protocol, and I'm not certain how well enforced it is, so let's leave that for round 2####
 
   // we extract the remaining length
-  someip_len = ntohl(*((u_int32_t *)&packet->payload[4]));
+  someip_len = ntohl(someip_data_cover_32(&packet->payload[4]));
   if (packet->payload_packet_len != (someip_len + 8)) {
     NDPI_LOG_DBG(ndpi_struct, "Excluding SOME/IP .. Length field invalid!\n");
     NDPI_ADD_PROTOCOL_TO_BITMASK(flow->excluded_protocol_bitmask, NDPI_PROTOCOL_SOMEIP);

@@ -27,8 +27,9 @@
 #if !defined(NDPI_NO_STD_INC) && !defined(__KERNEL__)
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
+#include <unistd.h>
 #include <strings.h>
 
 /*
@@ -41,7 +42,6 @@ typedef unsigned long long int u_int64_t;
 #include <stdlib.h>
 #include <arpa/inet.h>
 #endif
-
 
 #include "btlib.h"
 
