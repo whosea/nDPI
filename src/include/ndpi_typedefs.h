@@ -66,17 +66,25 @@ typedef enum {
   NDPI_TLS_SELFSIGNED_CERTIFICATE,
   NDPI_TLS_OBSOLETE_VERSION,
   NDPI_TLS_WEAK_CIPHER,
-
+  NDPI_TLS_CERTIFICATE_EXPIRED,
+  NDPI_TLS_CERTIFICATE_MISMATCH,
+  NDPI_HTTP_SUSPICIOUS_USER_AGENT,
+  NDPI_HTTP_NUMERIC_IP_HOST,
+  NDPI_HTTP_SUSPICIOUS_URL,
+  NDPI_HTTP_SUSPICIOUS_HEADER,
+  
   /* Leave this as last member */
   NDPI_MAX_RISK
-} ndpi_risk;
+} ndpi_risk_enum;
+
+typedef u_int32_t ndpi_risk;
 
 /* NDPI_VISIT */
 typedef enum {
-	      ndpi_preorder,
-	      ndpi_postorder,
-	      ndpi_endorder,
-	      ndpi_leaf
+   ndpi_preorder,
+   ndpi_postorder,
+   ndpi_endorder,
+   ndpi_leaf
 } ndpi_VISIT;
 
 #include "../lib/third_party/include/libcache.h"
@@ -1161,6 +1169,9 @@ struct ndpi_detection_module_struct {
   /* NDPI_PROTOCOL_STUN and subprotocols */
   struct ndpi_lru_cache *stun_cache;
 
+  /* NDPI_PROTOCOL_MSTEAMS */
+  struct ndpi_lru_cache *msteams_cache;
+
   ndpi_proto_defaults_t proto_defaults[NDPI_MAX_SUPPORTED_PROTOCOLS+NDPI_MAX_NUM_CUSTOM_PROTOCOLS];
 
   u_int8_t direction_detect_disable:1, /* disable internal detection of packet direction */
@@ -1221,7 +1232,7 @@ struct ndpi_flow_struct {
   u_char host_server_name[240];
   u_int8_t initial_binary_bytes[8], initial_binary_bytes_len;
   u_int8_t risk_checked;
-  u_int16_t risk; /* Issues found with this flow [bitmask of ndpi_risk] */
+  u_int32_t risk; /* Issues found with this flow [bitmask of ndpi_risk] */
   
   /*
     This structure below will not not stay inside the protos
@@ -1273,6 +1284,11 @@ struct ndpi_flow_struct {
 	u_int32_t notBefore, notAfter;
 	char ja3_client[33], ja3_server[33];
 	u_int16_t server_cipher;
+
+	struct {
+	  u_int16_t cipher_suite;
+	  char *esni;
+	} encrypted_sni;
 	ndpi_cipher_weakness server_unsafe_cipher;
       } ssl;
 
@@ -1485,6 +1501,8 @@ typedef enum {
 #define NDPI_SERIALIZER_STATUS_EOR       (1 << 2)
 #define NDPI_SERIALIZER_STATUS_SOB       (1 << 3)
 #define NDPI_SERIALIZER_STATUS_NOT_EMPTY (1 << 4)
+#define NDPI_SERIALIZER_STATUS_LIST      (1 << 5)
+#define NDPI_SERIALIZER_STATUS_SOL       (1 << 6)
 
 typedef struct {
   u_int32_t flags;

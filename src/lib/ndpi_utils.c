@@ -910,6 +910,28 @@ char* ndpi_base64_encode(unsigned char const* bytes_to_encode, size_t in_len) {
 }
 
 /* ********************************** */
+#ifndef __KERNEL__
+void ndpi_serialize_risk(ndpi_serializer *serializer,
+			 struct ndpi_flow_struct *flow) {
+  if(flow->risk != 0) {
+    u_int32_t i;
+
+    ndpi_serialize_start_of_block(serializer, "flow_risk");
+    
+    for(i = 0; i < NDPI_MAX_RISK; i++) {
+      ndpi_risk_enum r = (ndpi_risk_enum)i;
+      
+      if(NDPI_ISSET_BIT(flow->risk, r))
+	ndpi_serialize_uint32_string(serializer, i, ndpi_risk2str(r));
+    }
+    
+    ndpi_serialize_end_of_block(serializer);
+  }
+}
+#endif
+
+/* ********************************** */
+/* ********************************** */
 
 const char* ndpi_tunnel2str(ndpi_packet_tunnel tt) {
   switch(tt) {
@@ -988,6 +1010,8 @@ int ndpi_flow2json(struct ndpi_detection_module_struct *ndpi_struct,
     break;
   }
 
+  ndpi_serialize_risk(serializer, flow);
+  
   ndpi_serialize_start_of_block(serializer, "ndpi");
   ndpi_serialize_string_string(serializer, "proto", ndpi_protocol2name(ndpi_struct, l7_protocol, buf, sizeof(buf)));
   if(l7_protocol.category != NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
@@ -1340,9 +1364,9 @@ static int ndpi_is_rce_injection(char* query) {
 
 /* ********************************** */
 
-ndpi_risk ndpi_validate_url(char *url) {
+ndpi_risk_enum ndpi_validate_url(char *url) {
   char *orig_str = NULL, *str = NULL, *question_mark = strchr(url, '?');
-  ndpi_risk rc = NDPI_NO_RISK;
+  ndpi_risk_enum rc = NDPI_NO_RISK;
 
   if(question_mark) {
     char *tmp;
@@ -1397,6 +1421,15 @@ ndpi_risk ndpi_validate_url(char *url) {
 
  validate_rc:
   if(orig_str) ndpi_free(orig_str);
+
+  if(rc == NDPI_NO_RISK) {
+    /* Let's do an extra check */
+    if(strstr(url, "..")) {
+      /* 127.0.0.1/msadc/..%255c../..%255c../..%255c../winnt/system32/cmd.exe */
+      rc = NDPI_HTTP_SUSPICIOUS_URL;
+    }
+  }
+  
   return(rc);
 }
 #endif
@@ -1417,7 +1450,9 @@ u_int8_t ndpi_is_protocol_detected(struct ndpi_detection_module_struct *ndpi_str
 
 /* ******************************************************************** */
 
-const char* ndpi_risk2str(ndpi_risk risk) {
+const char* ndpi_risk2str(ndpi_risk_enum risk) {
+  static char buf[16];
+  
   switch(risk) {
   case NDPI_URL_POSSIBLE_XSS:
     return("XSS attack");
@@ -1443,7 +1478,26 @@ const char* ndpi_risk2str(ndpi_risk risk) {
   case NDPI_TLS_WEAK_CIPHER:
     return("Weak TLS cipher");
 
-  default:  
-    return("");
+  case NDPI_TLS_CERTIFICATE_EXPIRED:
+    return("TLS Expired Certificate");
+    
+  case NDPI_TLS_CERTIFICATE_MISMATCH:
+    return("TLS Certificate Mismatch");
+
+  case NDPI_HTTP_SUSPICIOUS_USER_AGENT:
+    return("HTTP Suspicious User-Agent");
+
+  case NDPI_HTTP_NUMERIC_IP_HOST:
+    return("HTTP Numeric IP Address");
+
+  case NDPI_HTTP_SUSPICIOUS_URL:
+    return("HTTP Suspicious URL");
+
+  case NDPI_HTTP_SUSPICIOUS_HEADER:
+    return("HTTP Suspicious Header");
+    
+  default:
+    snprintf(buf, sizeof(buf), "%d", (int)risk);
+    return(buf);
   }
 }
