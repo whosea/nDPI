@@ -1189,7 +1189,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	uint32_t r_proto;
 	ndpi_protocol_nf proto = NDPI_PROTOCOL_NULL;
 	uint64_t time;
-	time64_t tm;
+	struct timespec64 tm;
 	const struct xt_ndpi_mtinfo *info = par->matchinfo;
 
 	enum ip_conntrack_info ctinfo;
@@ -1242,7 +1242,11 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	COUNTER(ndpi_pk);
 
-	tm = ktime_get_real_seconds();
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
+	ktime_get_ts64(&tm);
+#else
+	ktime_get_coarse_ts64(&tm);
+#endif
 
 	ct = nf_ct_get (skb, &ctinfo);
 	if (ct == NULL) {
@@ -1279,7 +1283,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			if(ct_ndpi) {
 				WRITE_ONCE(ct_label->ndpi_ext, ct_ndpi);
 				WRITE_ONCE(ct_label->magic, MAGIC_CT);
-				ndpi_init_ct_struct(n,ct_ndpi,l4_proto,ct,is_ipv6,tm);
+				ndpi_init_ct_struct(n,ct_ndpi,l4_proto,ct,is_ipv6,tm.tv_sec);
 				if(ndpi_log_debug > 2)
 					pr_info("Create  ct_ndpi %p ct %p %s\n",
 						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
@@ -1375,7 +1379,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 #endif
 	if(ndpi_enable_flow && c_proto->magic != NDPI_ID ) {
-		ndpi_ct_counters_add(ct_ndpi,1,skb->len, ctinfo, tm);
+		ndpi_ct_counters_add(ct_ndpi,1,skb->len, ctinfo, tm.tv_sec);
 	}
 
 	if(test_detect_done(ct_ndpi)) {
@@ -1413,7 +1417,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ndpi_lskb += 1;
 		}
 
-		time = (uint64_t)tm * detection_tick_resolution;
+		time = (uint64_t)(tm.tv_sec*1000 + tm.tv_nsec/1000000);
 
 		n = ndpi_pernet(nf_ct_net(ct));
 		r_proto = ndpi_process_packet(n, ct,
