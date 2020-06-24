@@ -1243,9 +1243,9 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	COUNTER(ndpi_pk);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
-	ktime_get_ts64(&tm);
+	ktime_get_real_ts64(&tm);
 #else
-	ktime_get_coarse_ts64(&tm);
+	ktime_get_coarse_real_ts64(&tm);
 #endif
 
 	ct = nf_ct_get (skb, &ctinfo);
