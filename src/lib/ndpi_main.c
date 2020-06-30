@@ -302,7 +302,7 @@ u_int8_t ndpi_is_subprotocol_informative(struct ndpi_detection_module_struct *nd
   if(protoId >= NDPI_MAX_SUPPORTED_PROTOCOLS + NDPI_MAX_NUM_CUSTOM_PROTOCOLS)
     return(0);
 
-  switch (protoId) {
+  switch(protoId) {
     /* All dissectors that have calls to ndpi_match_host_subprotocol() */
   case NDPI_PROTOCOL_DNS:
     return(1);
@@ -626,7 +626,7 @@ static void init_string_based_protocols(struct ndpi_detection_module_struct *ndp
   for (i = 0; ndpi_en_popular_bigrams[i] != NULL; i++)
     ndpi_string_to_automa(ndpi_str, &ndpi_str->bigrams_automa, (char *) ndpi_en_popular_bigrams[i], 1, 1, 1, 0);
 #endif
-  
+
   for (i = 0; ndpi_en_impossible_bigrams[i] != NULL; i++)
     ndpi_string_to_automa(ndpi_str, &ndpi_str->impossible_bigrams_automa, (char *) ndpi_en_impossible_bigrams[i], 1,
 			  1, 1, 0);
@@ -636,7 +636,7 @@ static void init_string_based_protocols(struct ndpi_detection_module_struct *ndp
 
 int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_str, ndpi_detection_preference pref,
                                    int value) {
-  switch (pref) {
+  switch(pref) {
   case ndpi_pref_direction_detect_disable:
     ndpi_str->direction_detect_disable = (u_int8_t) value;
     break;
@@ -2103,7 +2103,7 @@ void ndpi_finalize_initalization(struct ndpi_detection_module_struct *ndpi_str) 
   for (i = 0; i < 4; i++) {
     ndpi_automa *automa;
 
-    switch (i) {
+    switch(i) {
     case 0:
       automa = &ndpi_str->host_automa;
       break;
@@ -2467,7 +2467,7 @@ static ndpi_default_ports_tree_node_t *ndpi_get_guessed_protocol_id(struct ndpi_
   as they have been excluded
 */
 u_int8_t is_udp_guessable_protocol(u_int16_t l7_guessed_proto) {
-  switch (l7_guessed_proto) {
+  switch(l7_guessed_proto) {
   case NDPI_PROTOCOL_QUIC:
   case NDPI_PROTOCOL_SNMP:
   case NDPI_PROTOCOL_NETFLOW:
@@ -2503,7 +2503,7 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
   } else {
     /* No TCP/UDP */
 
-    switch (proto) {
+    switch(proto) {
     case NDPI_IPSEC_PROTOCOL_ESP:
     case NDPI_IPSEC_PROTOCOL_AH:
       return(NDPI_PROTOCOL_IP_IPSEC);
@@ -2512,6 +2512,21 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
       return(NDPI_PROTOCOL_IP_GRE);
       break;
     case NDPI_ICMP_PROTOCOL_TYPE:
+      if(flow) {
+	/* Run some basic consistency tests */
+
+	if(flow->packet.payload_packet_len < sizeof(struct ndpi_icmphdr))
+	  NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
+	else {
+	  u_int8_t icmp_type = (u_int8_t)flow->packet.payload[0];
+	  u_int8_t icmp_code = (u_int8_t)flow->packet.payload[1];
+
+	  /* https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml */
+	  if(((icmp_type >= 44) && (icmp_type <= 252))
+	     || (icmp_code > 15))
+	    NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
+	}
+      }
       return(NDPI_PROTOCOL_IP_ICMP);
       break;
     case NDPI_IGMP_PROTOCOL_TYPE:
@@ -2530,6 +2545,22 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
       return(NDPI_PROTOCOL_IP_IP_IN_IP);
       break;
     case NDPI_ICMPV6_PROTOCOL_TYPE:
+      if(flow) {
+	/* Run some basic consistency tests */
+
+	if(flow->packet.payload_packet_len < sizeof(struct ndpi_icmphdr))
+	  NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
+	else {
+	  u_int8_t icmp6_type = (u_int8_t)flow->packet.payload[0];
+	  u_int8_t icmp6_code = (u_int8_t)flow->packet.payload[1];
+
+	  /* https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol_for_IPv6 */
+	  if(((icmp6_type >= 5) && (icmp6_type <= 127))
+	     || (icmp6_type >= 156)
+	     || ((icmp6_code > 7) && (icmp6_type != 255)))
+	    NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
+	}
+      }
       return(NDPI_PROTOCOL_IP_ICMPV6);
       break;
     case 112:
@@ -2565,32 +2596,38 @@ char *strsep(char **sp, char *sep) {
 
 /* ******************************************************************** */
 
-int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, u_int8_t do_add)
-{
-    char *at, *proto, *elem;
-    ndpi_proto_defaults_t *def;
-    u_int16_t subprotocol_id, i;
+int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, u_int8_t do_add) {
+  char *at, *proto, *elem;
+  ndpi_proto_defaults_t *def;
+  u_int16_t subprotocol_id, i;
 
-    at = strrchr(rule, '@');
-    if (at == NULL) {
-        NDPI_LOG_ERR(ndpi_str, "Invalid rule '%s'\n", rule);
-        return (-1);
-    } else
-        at[0] = 0, proto = &at[1];
+  at = strrchr(rule, '@');
+  if(at == NULL) {
+    NDPI_LOG_ERR(ndpi_str, "Invalid rule '%s'\n", rule);
+    return(-1);
+  } else
+    at[0] = 0, proto = &at[1];
 
-    for (i = 0; proto[i] != '\0'; i++) {
-        switch (proto[i]) {
-            case '/':
-            case '&':
-            case '^':
-            case ':':
-            case ';':
-            case '\'':
-            case '"':
-            case ' ':
-                proto[i] = '_';
-                break;
-        }
+  for (i = 0; proto[i] != '\0'; i++) {
+    switch(proto[i]) {
+    case '/':
+    case '&':
+    case '^':
+    case ':':
+    case ';':
+    case '\'':
+    case '"':
+    case ' ':
+      proto[i] = '_';
+      break;
+    }
+  }
+
+  for (i = 0, def = NULL; i < (int) ndpi_str->ndpi_num_supported_protocols; i++) {
+    if(ndpi_str->proto_defaults[i].protoName && strcasecmp(ndpi_str->proto_defaults[i].protoName, proto) == 0) {
+      def = &ndpi_str->proto_defaults[i];
+      subprotocol_id = i;
+      break;
     }
 
     for (i = 0, def = NULL; i < (int) ndpi_str->ndpi_num_supported_protocols; i++) {
@@ -3354,6 +3391,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
   /* IEC 60870-5-104 */
   init_104_dissector(ndpi_str, &a, detection_bitmask);
 
+  /* DNP3 */
+  init_dnp3_dissector(ndpi_str, &a, detection_bitmask);
+
   /* WEBSOCKET */
   init_websocket_dissector(ndpi_str, &a, detection_bitmask);
 
@@ -3718,6 +3758,10 @@ static int ndpi_init_packet_header(struct ndpi_detection_module_struct *ndpi_str
     flow->packet.udp = (struct ndpi_udphdr *) l4ptr;
     flow->packet.payload_packet_len = flow->packet.l4_packet_len - 8;
     flow->packet.payload = ((u_int8_t *) flow->packet.udp) + 8;
+  } else if((l4protocol == IPPROTO_ICMP && flow->packet.l4_packet_len >= sizeof(struct ndpi_icmphdr))
+	    || (l4protocol == IPPROTO_ICMPV6 && flow->packet.l4_packet_len >= sizeof(struct ndpi_icmp6hdr))) {
+    flow->packet.payload = ((u_int8_t *) l4ptr);
+    flow->packet.payload_packet_len = flow->packet.l4_packet_len;
   } else {
     flow->packet.generic_l4_ptr = l4ptr;
   }
@@ -4460,7 +4504,8 @@ static void ndpi_reset_packet_line_info(struct ndpi_packet_struct *packet) {
     packet->http_cookie.len = 0, packet->http_origin.len = 0, packet->http_origin.ptr = NULL,
     packet->http_x_session_type.ptr = NULL, packet->http_x_session_type.len = 0, packet->server_line.ptr = NULL,
     packet->server_line.len = 0, packet->http_method.ptr = NULL, packet->http_method.len = 0,
-    packet->http_response.ptr = NULL, packet->http_response.len = 0, packet->http_num_headers = 0;
+    packet->http_response.ptr = NULL, packet->http_response.len = 0, packet->http_num_headers = 0,
+    packet->forwarded_line.ptr = NULL, packet->forwarded_line.len = 0;
 }
 
 /* ********************************************************************************* */
@@ -4497,13 +4542,13 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
      Skype for a host doing MS Teams means MS Teams
      (MS Teams uses Skype as transport protocol for voice/video)
   */
-  
+
   if(flow) {
     /* Do not go for DNS when there is an application protocol. Example DNS.Apple */
     if((flow->detected_protocol_stack[1] != NDPI_PROTOCOL_UNKNOWN)
        && (flow->detected_protocol_stack[0] /* app */ != flow->detected_protocol_stack[1] /* major */))
       NDPI_CLR_BIT(flow->risk, NDPI_SUSPICIOUS_DGA_DOMAIN);
-  }  
+  }
 
   switch(ret->app_protocol) {
   case NDPI_PROTOCOL_MSTEAMS:
@@ -5806,7 +5851,7 @@ char *ndpi_protocol2name(struct ndpi_detection_module_struct *ndpi_str,
 /* ****************************************************** */
 
 int ndpi_is_custom_category(ndpi_protocol_category_t category) {
-  switch (category) {
+  switch(category) {
   case NDPI_PROTOCOL_CATEGORY_CUSTOM_1:
   case NDPI_PROTOCOL_CATEGORY_CUSTOM_2:
   case NDPI_PROTOCOL_CATEGORY_CUSTOM_3:
@@ -5829,7 +5874,7 @@ void ndpi_category_set_name(struct ndpi_detection_module_struct *ndpi_str,
   if(!name)
     return;
 
-  switch (category) {
+  switch(category) {
   case NDPI_PROTOCOL_CATEGORY_CUSTOM_1:
     snprintf(ndpi_str->custom_category_labels[0], CUSTOM_CATEGORY_LABEL_LEN, "%s", name);
     break;
@@ -5870,7 +5915,7 @@ const char *ndpi_category_get_name(struct ndpi_detection_module_struct *ndpi_str
   }
 
   if((category >= NDPI_PROTOCOL_CATEGORY_CUSTOM_1) && (category <= NDPI_PROTOCOL_CATEGORY_CUSTOM_5)) {
-    switch (category) {
+    switch(category) {
     case NDPI_PROTOCOL_CATEGORY_CUSTOM_1:
       return(ndpi_str->custom_category_labels[0]);
     case NDPI_PROTOCOL_CATEGORY_CUSTOM_2:
@@ -5936,7 +5981,7 @@ ndpi_protocol_breed_t ndpi_get_proto_breed(struct ndpi_detection_module_struct *
 
 char *ndpi_get_proto_breed_name(struct ndpi_detection_module_struct *ndpi_str,
 				ndpi_protocol_breed_t breed_id) {
-  switch (breed_id) {
+  switch(breed_id) {
   case NDPI_PROTOCOL_SAFE:
     return("Safe");
     break;
@@ -6113,7 +6158,7 @@ static u_int8_t ndpi_is_more_generic_protocol(u_int16_t previous_proto, u_int16_
   if((previous_proto == NDPI_PROTOCOL_UNKNOWN) || (previous_proto == new_proto))
     return(0);
 
-  switch (previous_proto) {
+  switch(previous_proto) {
   case NDPI_PROTOCOL_WHATSAPP_CALL:
   case NDPI_PROTOCOL_WHATSAPP_FILES:
     if(new_proto == NDPI_PROTOCOL_WHATSAPP)
@@ -6464,7 +6509,7 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
 	 proto);
 #endif
 
-  switch (proto) {
+  switch(proto) {
   case NDPI_PROTOCOL_TLS:
     if(!flow->l4.tcp.tls.certificate_processed)
       return(1); /* TODO: add check for TLS 1.3 */
@@ -6505,7 +6550,7 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
 /* ******************************************************************** */
 
 const char *ndpi_get_l4_proto_name(ndpi_l4_proto_info proto) {
-  switch (proto) {
+  switch(proto) {
   case ndpi_l4_proto_unknown:
     return("");
     break;
@@ -6669,7 +6714,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
   int len, rc = 0;
 
   len = strlen(name);
-  
+
   if(len >= 5) {
     int i, j, num_found = 0, num_impossible = 0, num_bigram_checks = 0, num_digits = 0, num_vowels = 0, num_words = 0;
     char tmp[128], *word, *tok_tmp;
@@ -6688,29 +6733,29 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
       if(!word) break;
 
       num_words++;
-      
+
       if(strlen(word) < 3) continue;
 
 #ifdef DGA_DEBUG
       printf("-> %s [%s][len: %u]\n", word, name, (unsigned int)strlen(word));
 #endif
-      
+
       for(i = 0; word[i+1] != '\0'; i++) {
 	if(isdigit(word[i])) {
 	  num_digits++;
-	  
+
 	  // if(!isdigit(word[i+1])) num_impossible++;
-	  
-	  continue;	  
+
+	  continue;
 	}
-	
+
 	switch(word[i]) {
 	case '_':
 	case '-':
 	case ':':
 	  continue;
 	  break;
-	
+
 	case '.':
 	  continue;
 	  break;
@@ -6725,13 +6770,13 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	  num_vowels++;
 	  break;
 	}
-	
+
 	if(isdigit(word[i+1])) {
 	  num_digits++;
 	  // num_impossible++;
 	  continue;
 	}
-	
+
 	num_bigram_checks++;
 
 	if(ndpi_match_bigram(ndpi_str, &ndpi_str->bigrams_automa, &word[i])) {
@@ -6753,7 +6798,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
     printf("[num_found: %u][num_impossible: %u][num_digits: %u][num_bigram_checks: %u][num_vowels: %u/%u]\n",
 	   num_found, num_impossible, num_digits, num_bigram_checks, num_vowels, j-num_vowels);
 #endif
-	    
+
     if(num_bigram_checks
        && ((num_found == 0) || ((num_digits > 5) && (num_words <= 3)) || enough(num_found, num_impossible)))
       rc = 1;

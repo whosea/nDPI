@@ -9116,6 +9116,7 @@ ndpi_protocol_match host_match[] =
    { ".ppstream.com",                          "PPStream",         NDPI_PROTOCOL_PPSTREAM, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
    { ".pps.tv",                                   "PPStream",         NDPI_PROTOCOL_PPSTREAM, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
 
+   { ".hulustream.com",                                 "Hulu",            NDPI_PROTOCOL_HULU, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
    { ".hulu.com",                                       "Hulu",            NDPI_PROTOCOL_HULU, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
 
    /*
@@ -9277,6 +9278,7 @@ static const char *ndpi_en_bigrams[] = {
   NULL };
 
 /* ******************************************************************** */
+
 #if 0
 static const char *ndpi_en_popular_bigrams[] = {
    "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd", "ti", "es", "or", "te", "of", "ed", "is", "it",
@@ -9319,6 +9321,7 @@ static const char *ndpi_en_popular_bigrams[] = {
    "fq", "xz", "zx", "jq", "qg", "qk", "qy", "qz", "wq", "wz", NULL
   };
 #endif
+
 /* ******************************************************************** */
 
 static const char *ndpi_en_impossible_bigrams[] = {

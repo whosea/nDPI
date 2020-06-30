@@ -29,7 +29,6 @@
 #include "ndpi_md5.h"
 #include "ndpi_sha1.h"
 
-
 extern char *strptime(const char *s, const char *format, struct tm *tm);
 extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 				    struct ndpi_flow_struct *flow);
@@ -521,14 +520,18 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
 	 packet->payload[3], packet->payload[4], packet->payload[5]);
 #endif
 
-  if((packet->payload_packet_len != (length + 4)) || (packet->payload[1] != 0x0))
+  if((packet->payload_packet_len != (length + 4)) || (packet->payload[1] != 0x0)) {
+    NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
     return(-1); /* Invalid length */
-
+  }
+  
   certificates_length = (packet->payload[4] << 16) + (packet->payload[5] << 8) + packet->payload[6];
 
-  if((packet->payload[4] != 0x0) || ((certificates_length+3) != length))
+  if((packet->payload[4] != 0x0) || ((certificates_length+3) != length)) {
+    NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
     return(-2); /* Invalid length */
-
+  }
+  
   if(!flow->l4.tcp.tls.srv_cert_fingerprint_ctx) {
     if((flow->l4.tcp.tls.srv_cert_fingerprint_ctx = (void*)ndpi_malloc(sizeof(SHA1_CTX))) == NULL)
       return(-3); /* Not enough memory */
@@ -828,14 +831,14 @@ static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndp
 /* https://engineering.salesforce.com/tls-fingerprinting-with-ja3-and-ja3s-247362855967 */
 
 #define JA3_STR_LEN 1024
-#define MAX_NUM_JA3  128
+#define MAX_NUM_JA3  512
 
 struct ja3_info {
   u_int16_t tls_handshake_version;
   u_int16_t num_cipher, cipher[MAX_NUM_JA3];
   u_int16_t num_tls_extension, tls_extension[MAX_NUM_JA3];
   u_int16_t num_elliptic_curve, elliptic_curve[MAX_NUM_JA3];
-  u_int8_t num_elliptic_curve_point_format, elliptic_curve_point_format[MAX_NUM_JA3];
+  u_int16_t num_elliptic_curve_point_format, elliptic_curve_point_format[MAX_NUM_JA3];
 };
 
 /* **************************************** */
@@ -1178,7 +1181,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #ifdef DEBUG_TLS
 		printf("Client SSL [EllipticCurveFormat: len=%u]\n", extension_len);
 #endif
-		if((s_offset+extension_len) < total_len) {
+		if((s_offset+extension_len-1) <= total_len) {
 		  for(i=0; i<extension_len-1;i++) {
 		    u_int8_t s_group = packet->payload[s_offset+i];
 

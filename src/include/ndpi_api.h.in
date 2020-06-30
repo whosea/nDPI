@@ -943,8 +943,8 @@ extern "C" {
 
   /* ptree (trie) API */
   ndpi_ptree_t* ndpi_ptree_create(void);
-  int ndpi_ptree_insert(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int8_t bits, uint user_data);
-  int ndpi_ptree_match_addr(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, uint *user_data);
+  int ndpi_ptree_insert(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int8_t bits, u_int32_t user_data);
+  int ndpi_ptree_match_addr(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int32_t *user_data);
   void ndpi_ptree_destroy(ndpi_ptree_t *tree);
 
   /* DGA */
@@ -1092,7 +1092,10 @@ extern "C" {
   void ndpi_free_bin(struct ndpi_bin *b);
   void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id); 
   void ndpi_normalize_bin(struct ndpi_bin *b);
+  char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf, u_int out_buf_len);
+  float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t normalize_first);
   
+
 #ifdef __cplusplus
 }
 #endif

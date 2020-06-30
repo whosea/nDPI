@@ -172,6 +172,7 @@ struct ndpi_packet_trailer {
 };
 
 static pcap_dumper_t *extcap_dumper = NULL;
+static pcap_t *extcap_fifo_h = NULL;
 static char extcap_buf[16384];
 static char *extcap_capture_fifo    = NULL;
 static u_int16_t extcap_packet_filter = (u_int16_t)-1;
@@ -565,7 +566,16 @@ void extcap_capture() {
   if(trace) fprintf(trace, " #### %s #### \n", __FUNCTION__);
 #endif
 
-  if((extcap_dumper = pcap_dump_open(pcap_open_dead(DLT_EN10MB, 16384 /* MTU */),
+  if((extcap_fifo_h = pcap_open_dead(DLT_EN10MB, 16384 /* MTU */)) == NULL) {
+    fprintf(stderr, "Error pcap_open_dead");
+
+#ifdef DEBUG_TRACE
+    if(trace) fprintf(trace, "Error pcap_open_dead\n");
+#endif
+    return;
+  }
+
+  if((extcap_dumper = pcap_dump_open(extcap_fifo_h,
 				     extcap_capture_fifo)) == NULL) {
     fprintf(stderr, "Unable to open the pcap dumper on %s", extcap_capture_fifo);
 
@@ -839,13 +849,18 @@ static void parseOptions(int argc, char **argv) {
     }
   }
 
-  if(_pcap_file[0] == NULL)
-    help(0);
-
   if(csv_fp)
     printCSVHeader();
 
 #ifndef USE_DPDK
+  if(do_capture) {
+    quiet_mode = 1;
+    extcap_capture();
+  }
+
+  if(_pcap_file[0] == NULL)
+    help(0);
+
   if(strchr(_pcap_file[0], ',')) { /* multiple ingress interfaces */
     num_threads = 0;               /* setting number of threads = number of interfaces */
     __pcap_file = strtok(_pcap_file[0], ",");
@@ -983,28 +998,32 @@ static char* is_unsafe_cipher(ndpi_cipher_weakness c) {
 /* ********************************** */
 
 void print_bin(const char *label, struct ndpi_bin *b) {
-  u_int8_t i;
-  FILE *out = results_file ? results_file : stdout;
+  if(b->num_incs == 0)
+    return;
+  else {
+    u_int8_t i;
+    FILE *out = results_file ? results_file : stdout;
   
-  ndpi_normalize_bin(b);
+    ndpi_normalize_bin(b);
 
-  fprintf(out, "[%s: ", label);
+    fprintf(out, "[%s: ", label);
   
-  for(i=0; i<b->num_bins; i++) {
-    switch(b->family) {
-    case ndpi_bin_family8:
-      fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins8[i]);
-      break;
-    case ndpi_bin_family16:
-      fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins16[i]);
-      break;
-    case ndpi_bin_family32:
-      fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins32[i]);
-    break;
+    for(i=0; i<b->num_bins; i++) {
+      switch(b->family) {
+      case ndpi_bin_family8:
+	fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins8[i]);
+	break;
+      case ndpi_bin_family16:
+	fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins16[i]);
+	break;
+      case ndpi_bin_family32:
+	fprintf(out, "%s%u", (i > 0) ? "," : "", b->u.bins32[i]);
+	break;
+      }
     }
-  }
 
-  fprintf(out, "]");
+    fprintf(out, "]");
+  }
 }
 
 /* ********************************** */
@@ -1824,13 +1843,13 @@ static void node_idle_scan_walker(const void *node, ndpi_VISIT which, int depth,
 
       /* update stats */
       node_proto_guess_walker(node, which, depth, user_data);
+      if(verbose == 3)
+        port_stats_walker(node, which, depth, user_data);
 
       if((flow->detected_protocol.app_protocol == NDPI_PROTOCOL_UNKNOWN) && !undetected_flows_deleted)
         undetected_flows_deleted = 1;
 
-      ndpi_free_flow_info_half(flow);
-      ndpi_free_flow_data_analysis(flow);
-      ndpi_free_flow_tls_data(flow);
+      ndpi_flow_info_free_data(flow);
       ndpi_thread_info[thread_id].workflow->stats.ndpi_flow_count--;
 
       /* adding to a queue (we can't delete it from the tree inline ) */
@@ -3095,6 +3114,10 @@ void test_lib() {
     }
   }
 
+#ifdef USE_DPDK
+  dpdk_port_deinit(dpdk_port_id);
+#endif
+
   gettimeofday(&end, NULL);
   processing_time_usec = end.tv_sec*1000000 + end.tv_usec - (begin.tv_sec*1000000 + begin.tv_usec);
   setup_time_usec = begin.tv_sec*1000000 + begin.tv_usec - (startup_time.tv_sec*1000000 + startup_time.tv_usec);
@@ -3108,6 +3131,31 @@ void test_lib() {
 
     terminateDetection(thread_id);
   }
+}
+
+/* *********************************************** */
+
+static void binUnitTest() {
+  struct ndpi_bin b1, b2;
+  u_int8_t num_bins = 32;
+  u_int32_t i;
+  char out_buf[128];
+  
+  srand(time(NULL));
+  
+  ndpi_init_bin(&b1, ndpi_bin_family8, num_bins), ndpi_init_bin(&b2, ndpi_bin_family8, num_bins);
+  
+  for(i=0; i<32; i++)
+    ndpi_inc_bin(&b1, rand() % num_bins), ndpi_inc_bin(&b2, rand() % num_bins);
+
+#if 0
+  printf("1) %s\n", ndpi_print_bin(&b1, 0, out_buf, sizeof(out_buf)));
+  printf("2) %s\n", ndpi_print_bin(&b2, 0, out_buf, sizeof(out_buf)));
+
+  printf("Similarity: %f\n\n", ndpi_bin_similarity(&b1, &b2, 1));
+#endif
+  
+  ndpi_free_bin(&b1), ndpi_free_bin(&b2);
 }
 
 /* *********************************************** */
@@ -3162,7 +3210,8 @@ static void dgaUnitTest() {
   struct ndpi_detection_module_struct *ndpi_str =  ndpi_init_detection_module(ndpi_no_prefs);
 
   assert(ndpi_str != NULL);
-  
+
+  NDPI_BITMASK_SET_ALL(all);
   ndpi_set_protocol_detection_bitmask2(ndpi_str, &all);
 
   ndpi_finalize_initalization(ndpi_str);
@@ -3496,6 +3545,7 @@ int orginal_main(int argc, char **argv) {
     if(ndpi_info_mod == NULL) return -1;
 
     /* Internal checks */
+    binUnitTest();
     dgaUnitTest();
     hllUnitTest();
     bitmapUnitTest();
@@ -3528,6 +3578,7 @@ int orginal_main(int argc, char **argv) {
     if(results_path)  free(results_path);
     if(results_file)  fclose(results_file);
     if(extcap_dumper) pcap_dump_close(extcap_dumper);
+    if(extcap_fifo_h) pcap_close(extcap_fifo_h);
     if(ndpi_info_mod) ndpi_exit_detection_module(ndpi_info_mod);
     if(csv_fp)        fclose(csv_fp);
 
