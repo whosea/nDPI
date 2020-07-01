@@ -269,6 +269,7 @@ unsigned long int bt_hash_size=0;
 unsigned long int bt6_hash_size=0;
 unsigned long int bt_hash_tmo=1200;
 unsigned long int tls_buf_size=4;
+unsigned long int ndpi_stun_cache=0;
 
 static unsigned long  max_packet_unk_tcp=20;
 static unsigned long  max_packet_unk_udp=20;
@@ -339,6 +340,9 @@ MODULE_PARM_DESC(bt_hash_timeout,"The expiration time for inactive records in BT
 
 module_param_named(ndpi_enable_flow, ndpi_enable_flow, ulong, 0400);
 MODULE_PARM_DESC(ndpi_enable_flow,"Enable netflow info");
+
+module_param_named(ndpi_stun_cache,ndpi_stun_cache,ulong,0600);
+MODULE_PARM_DESC(ndpi_stun_cache,"STUN cache control (0-1). Disabled by default.");
 
 module_param_named(ndpi_flow_limit, ndpi_flow_limit, ulong, 0400);
 MODULE_PARM_DESC(ndpi_flow_limit,"Limit netflow records. Default 10000000 (~4.3Gb RAM)");
@@ -2478,6 +2482,7 @@ static int __net_init ndpi_net_init(struct net *net)
 		pr_err("xt_ndpi: alloc str_buf failed\n");
                 return -ENOMEM;
 	}
+	ndpi_stun_cache_enable = ndpi_stun_cache;
 
 	/* init global detection structure */
 	n->ndpi_struct = ndpi_init_detection_module(0);

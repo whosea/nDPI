@@ -1094,7 +1094,8 @@ extern "C" {
   void ndpi_normalize_bin(struct ndpi_bin *b);
   char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf, u_int out_buf_len);
   float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t normalize_first);
-  
+
+  extern int ndpi_stun_cache_enable;
 
 #ifdef __cplusplus
 }
