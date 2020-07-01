@@ -2629,14 +2629,7 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
       subprotocol_id = i;
       break;
     }
-
-    for (i = 0, def = NULL; i < (int) ndpi_str->ndpi_num_supported_protocols; i++) {
-        if (ndpi_str->proto_defaults[i].protoName && strcasecmp(ndpi_str->proto_defaults[i].protoName, proto) == 0) {
-            def = &ndpi_str->proto_defaults[i];
-            subprotocol_id = i;
-            break;
-        }
-    }
+  }
 
     if (def == NULL) {
         if (!do_add) {

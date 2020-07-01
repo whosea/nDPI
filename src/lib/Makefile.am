@@ -55,6 +55,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/directconnect.c \
 		     protocols/directdownloadlink.c \
 		     protocols/dns.c \
+		     protocols/dnp3.c \
 		     protocols/dofus.c \
 		     protocols/drda.c \
 		     protocols/dropbox.c \
