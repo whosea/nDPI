@@ -230,6 +230,7 @@ int main(int argc,char **argv) {
   char *outfile = NULL;
   char *infile = NULL;
   struct net_cidr_list *pnl = NULL;
+  char *protocol_name = NULL;
 
   while ((opt = getopt(argc, argv, "ahvo:y:")) != EOF) {
 	switch(opt) {
@@ -292,6 +293,8 @@ int main(int argc,char **argv) {
 						word,line,s);
 				exit(1);
 			}
+			if(protocol_name) free(protocol_name);
+			protocol_name = strdup(word);
 			add_net_cidr_proto(NULL,0,protocol);
 			pnl = net_cidr_list[protocol];
 			lastword[0] = '\0';
@@ -339,7 +342,8 @@ int main(int argc,char **argv) {
 			}
 			if(nm) *nm = '/';
 			if((pin.s_addr & htonl(~(0xfffffffful << (32 - ml)))) != 0)
-				fprintf(stderr,"Warning: line %4d: '%s' is not network\n",line,word);
+				fprintf(stderr,"Warning: line %4d: '%s' is not network (%s)\n",line,word,
+						protocol_name ? protocol_name : "unknown");
 			if((pin.s_addr & htonl(0xf0000000ul)) == htonl(0xe0000000ul))
 				fprintf(stderr,"Warning: line %4d: '%s' is multicast address!\n",line,word);
 			if((pin.s_addr & htonl(0x7f000000ul)) == htonl(0x7f000000ul))

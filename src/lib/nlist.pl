@@ -150,6 +150,9 @@ sub add_net {
 	die "Bad proto $s[2]" if $s[2] !~ /NDPI_(PROTOCOL|CONTENT|SERVICE)_(.*)$/;
 	$s[2] = $2;
 	$s[0] =~ s/0x//i;
+	if(length($s[0]) > 8) {
+		$s[0] = substr($s[0],-8);
+	}
 	my $ip = join('.',unpack('C4',pack('H8',$s[0])));
 
 	if( !defined $P{$s[2]} ) {
