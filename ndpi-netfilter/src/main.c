@@ -844,18 +844,18 @@ ndpi_alloc_flow (struct nf_ct_ext_ndpi *ct_ndpi)
 }
 #ifndef NF_CT_CUSTOM
 
-static void (*ndpi_nf_ct_destroy)(struct nf_conntrack *) __rcu __read_mostly;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+static struct nf_ct_hook ndpi_nf_ct_hook={NULL,NULL,NULL};
+static struct nf_ct_hook *ndpi_nf_ct_hook_old=NULL;
+#endif
+
+static void (*ndpi_nf_ct_destroy)(struct nf_conntrack *) = NULL;
 
 static void ndpi_destroy_conntrack(struct nf_conntrack *nfct) {
 	struct nf_conn *ct = (struct nf_conn *)nfct;
-	void (*destroy)(struct nf_conntrack *);
 
 	nf_ndpi_free_flow(ct);
-
-	rcu_read_lock();
-        destroy = rcu_dereference(ndpi_nf_ct_destroy);
-        if(destroy) destroy(nfct);
-        rcu_read_unlock();
+        if(ndpi_nf_ct_destroy) ndpi_nf_ct_destroy(nfct);
 }
 #endif
 
@@ -2725,51 +2725,50 @@ static int __net_init ndpi_net_init(struct net *net)
 }
 
 #ifndef NF_CT_CUSTOM
+DEFINE_SPINLOCK(ndpi_hook_mutex);
+
 static void replace_nf_destroy(void)
 {
+	spin_lock(&ndpi_hook_mutex);
+	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,19,0)
-	void (*destroy)(struct nf_conntrack *);
-	rcu_read_lock();
-	destroy = rcu_dereference(nf_ct_destroy);
-	BUG_ON(destroy == NULL);
-	rcu_assign_pointer(ndpi_nf_ct_destroy,destroy);
-        RCU_INIT_POINTER(nf_ct_destroy, ndpi_destroy_conntrack);
-	rcu_read_unlock();
+	ndpi_nf_ct_destroy = rcu_dereference_protected(nf_ct_destroy,lockdep_is_held(&ndpi_hook_mutex));
+	BUG_ON(ndpi_nf_ct_destroy == NULL);
+        rcu_assign_pointer(nf_ct_destroy, ndpi_destroy_conntrack);
 #else
 	struct nf_ct_hook *hook;
-	rcu_read_lock();
-	hook = rcu_dereference(nf_ct_hook);
+	hook = rcu_dereference_protected(nf_ct_hook,lockdep_is_held(&ndpi_hook_mutex));
 	BUG_ON(hook == NULL);
-	rcu_assign_pointer(ndpi_nf_ct_destroy,hook->destroy);
-	/* This is a hellish hack! */
-	hook->destroy = ndpi_destroy_conntrack;
-	rcu_read_unlock();
-
+	ndpi_nf_ct_hook_old = hook;
+	ndpi_nf_ct_hook = *hook;
+	ndpi_nf_ct_destroy = hook->destroy;
+	ndpi_nf_ct_hook.destroy = ndpi_destroy_conntrack;
+	rcu_assign_pointer(nf_ct_hook,&ndpi_nf_ct_hook);
 #endif
+	}
+	spin_unlock(&ndpi_hook_mutex);
+	synchronize_rcu();
 }
 
 static void restore_nf_destroy(void)
 {
+	spin_lock(&ndpi_hook_mutex);
+	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,19,0)
 	void (*destroy)(struct nf_conntrack *);
-	rcu_read_lock();
-	destroy = rcu_dereference(nf_ct_destroy);
+	destroy = rcu_dereference_protected(nf_ct_destroy,lockdep_is_held(&ndpi_hook_mutex));
 	BUG_ON(destroy != ndpi_destroy_conntrack);
-	destroy = rcu_dereference(ndpi_nf_ct_destroy);
-	BUG_ON(destroy == NULL);
-	rcu_assign_pointer(nf_ct_destroy,destroy);
-	rcu_read_unlock();
+	rcu_assign_pointer(nf_ct_destroy,ndpi_nf_ct_destroy);
 #else
 	struct nf_ct_hook *hook;
-	rcu_read_lock();
-	hook = rcu_dereference(nf_ct_hook);
-	BUG_ON(hook == NULL);
-	BUG_ON(hook->destroy != ndpi_destroy_conntrack);
-	/* This is a hellish hack! */
-	hook->destroy = rcu_dereference(ndpi_nf_ct_destroy);
-	rcu_assign_pointer(ndpi_nf_ct_destroy,NULL);
-	rcu_read_unlock();
+	hook = rcu_dereference_protected(nf_ct_hook,lockdep_is_held(&ndpi_hook_mutex));
+	BUG_ON(hook != &ndpi_nf_ct_hook);
+	rcu_assign_pointer(nf_ct_hook,ndpi_nf_ct_hook_old);
 #endif
+	}
+	spin_unlock(&ndpi_hook_mutex);
+	synchronize_rcu();
+	WRITE_ONCE(ndpi_nf_ct_destroy,NULL);
 }
 #else
 static struct nf_ct_ext_type ndpi_extend = {
