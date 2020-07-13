@@ -861,6 +861,7 @@ extern "C" {
   u_int ndpi_get_ndpi_num_custom_protocols(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_detection_module_size(void);
   void ndpi_set_log_level(struct ndpi_detection_module_struct *ndpi_mod, u_int l);
+  void ndpi_set_debug_bitmask(struct ndpi_detection_module_struct *ndpi_mod, NDPI_PROTOCOL_BITMASK debug_bitmask);
 
   /* LRU cache */
   struct ndpi_lru_cache* ndpi_lru_cache_init(u_int32_t num_entries);
@@ -910,7 +911,12 @@ extern "C" {
   u_int8_t ndpi_is_safe_ssl_cipher(u_int32_t cipher);
   u_int16_t ndpi_guess_host_protocol_id(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow);
-  char* ndpi_ssl_version2str(u_int16_t version, u_int8_t *unknown_tls_version);
+  int ndpi_has_human_readeable_string(struct ndpi_detection_module_struct *ndpi_struct,
+				      char *buffer, u_int buffer_size,
+				      u_int8_t min_string_match_len, /* Will return 0 if no string > min_string_match_len have been found */
+				      char *outbuf, u_int outbuf_len);
+  char* ndpi_ssl_version2str(struct ndpi_flow_struct *flow,
+                             u_int16_t version, u_int8_t *unknown_tls_version);
   void ndpi_patchIPv6Address(char *str);
   void ndpi_user_pwd_payload_copy(u_int8_t *dest, u_int dest_len, u_int offset,
 				  const u_int8_t *src, u_int src_len);
@@ -1067,7 +1073,7 @@ extern "C" {
   u_int8_t ndpi_is_protocol_detected(struct ndpi_detection_module_struct *ndpi_str,
 				     ndpi_protocol proto);
   void ndpi_serialize_risk(ndpi_serializer *serializer, struct ndpi_flow_struct *flow);
-#endif
+#endif /* KERNEL */
 
   const char* ndpi_risk2str(ndpi_risk_enum risk);
 
@@ -1087,13 +1093,20 @@ extern "C" {
   double ndpi_hll_count(struct ndpi_hll *hll);
 
   /* ******************************* */
-  
+
   int  ndpi_init_bin(struct ndpi_bin *b, enum ndpi_bin_family f, u_int8_t num_bins);
   void ndpi_free_bin(struct ndpi_bin *b);
-  void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id); 
+  struct ndpi_bin* ndpi_clone_bin(struct ndpi_bin *b);
+  void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val);
+  void ndpi_set_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t value);
+  u_int32_t ndpi_get_bin_value(struct ndpi_bin *b, u_int8_t slot_id);
+  void ndpi_reset_bin(struct ndpi_bin *b);
   void ndpi_normalize_bin(struct ndpi_bin *b);
   char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf, u_int out_buf_len);
   float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t normalize_first);
+  int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
+			u_int8_t num_clusters, u_int16_t *cluster_ids,
+			struct ndpi_bin *centroids);
 
   extern int ndpi_stun_cache_enable;
 

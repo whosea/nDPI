@@ -2021,9 +2021,10 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   int i;
 
   if(ndpi_str == NULL) {
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-    NDPI_LOG_ERR(ndpi_str, "ndpi_init_detection_module initial malloc failed for ndpi_str\n");
-#endif /* NDPI_ENABLE_DEBUG_MESSAGES */
+    /* Logging this error is a bit tricky. At this point, we can't use NDPI_LOG*
+       functions yet, we don't have a custom log function and, as a library,
+       we shouldn't use stdout/stderr. Since this error is quite unlikely,
+       simply avoid any logs at all */
     return(NULL);
   }
 
@@ -2032,6 +2033,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 #ifndef __KERNEL__
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
   set_ndpi_debug_function(ndpi_str, (ndpi_debug_function_ptr) ndpi_debug_printf);
+  NDPI_BITMASK_RESET(ndpi_str->debug_bitmask);
 #endif /* NDPI_ENABLE_DEBUG_MESSAGES */
 #endif
 
@@ -2079,8 +2081,10 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   ndpi_str->custom_categories.ipAddresses = ndpi_New_Patricia(32 /* IPv4 */);
   ndpi_str->custom_categories.ipAddresses_shadow = ndpi_New_Patricia(32 /* IPv4 */);
 
-  if((ndpi_str->custom_categories.ipAddresses == NULL) || (ndpi_str->custom_categories.ipAddresses_shadow == NULL))
+  if((ndpi_str->custom_categories.ipAddresses == NULL) || (ndpi_str->custom_categories.ipAddresses_shadow == NULL)) {
+    NDPI_LOG_ERR(ndpi_str, "[NDPI] Error allocating Patricia trees\n");
     return(NULL);
+  }
 
   ndpi_init_protocol_defaults(ndpi_str);
 
@@ -5049,7 +5053,7 @@ void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, 
   packet->line[packet->parsed_lines].len = 0;
 
   for (a = 0; ((a+1) < packet->payload_packet_len) && (packet->parsed_lines < NDPI_MAX_PARSE_LINES_PER_PACKET); a++) {
-    if((packet->payload[a] == 0x0d) && (packet->payload[a+1] == 0x0a)) {
+    if(((a + 1) < packet->payload_packet_len) &&(packet->payload[a] == 0x0d) && (packet->payload[a+1] == 0x0a)) {
       /* If end of line char sequence CR+NL "\r\n", process line */
 
       if(((a + 3) < packet->payload_packet_len)
@@ -6433,6 +6437,12 @@ u_int ndpi_get_ndpi_num_custom_protocols(struct ndpi_detection_module_struct *nd
 
 u_int ndpi_get_ndpi_detection_module_size() {
   return(sizeof(struct ndpi_detection_module_struct));
+}
+
+void ndpi_set_debug_bitmask(struct ndpi_detection_module_struct *ndpi_str, NDPI_PROTOCOL_BITMASK debug_bitmask) {
+#ifdef NDPI_ENABLE_DEBUG_MESSAGES
+  ndpi_str->debug_bitmask = debug_bitmask;
+#endif
 }
 
 void ndpi_set_log_level(struct ndpi_detection_module_struct *ndpi_str, u_int l){

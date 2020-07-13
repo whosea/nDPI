@@ -92,7 +92,6 @@
 extern u_int8_t enable_protocol_guess, enable_joy_stats, enable_payload_analyzer;
 extern u_int8_t verbose, human_readeable_string_len;
 extern u_int8_t max_num_udp_dissected_pkts /* 8 */, max_num_tcp_dissected_pkts /* 10 */;
-
 static u_int32_t flow_id = 0;
 
 /* ****************************************************** */
@@ -143,11 +142,11 @@ void ndpi_analyze_payload(struct ndpi_flow_info *flow,
 
   HASH_FIND(hh, pstats, payload, payload_len, ret);
   if(ret == NULL) {
-    if((ret = (struct payload_stats*)calloc(1, sizeof(struct payload_stats))) == NULL)
+    if((ret = (struct payload_stats*)ndpi_calloc(1, sizeof(struct payload_stats))) == NULL)
       return; /* OOM */
 
-    if((ret->pattern = (u_int8_t*)malloc(payload_len)) == NULL) {
-      free(ret);
+    if((ret->pattern = (u_int8_t*)ndpi_malloc(payload_len)) == NULL) {
+      ndpi_free(ret);
       return;
     }
 
@@ -167,7 +166,7 @@ void ndpi_analyze_payload(struct ndpi_flow_info *flow,
 
   HASH_FIND_INT(ret->flows, &flow->flow_id, f);
   if(f == NULL) {
-    if((f = (struct flow_id_stats*)calloc(1, sizeof(struct flow_id_stats))) == NULL)
+    if((f = (struct flow_id_stats*)ndpi_calloc(1, sizeof(struct flow_id_stats))) == NULL)
       return; /* OOM */
 
     f->flow_id = flow->flow_id;
@@ -176,7 +175,7 @@ void ndpi_analyze_payload(struct ndpi_flow_info *flow,
 
   HASH_FIND_INT(ret->packets, &packet_id, p);
   if(p == NULL) {
-    if((p = (struct packet_id_stats*)calloc(1, sizeof(struct packet_id_stats))) == NULL)
+    if((p = (struct packet_id_stats*)ndpi_calloc(1, sizeof(struct packet_id_stats))) == NULL)
       return; /* OOM */
     p->packet_id = packet_id;
 
@@ -288,14 +287,14 @@ void ndpi_report_payload_stats() {
     if(num <= max_num_reported_top_payloads)
       print_payload_stat(p);
 
-    free(p->pattern);
+    ndpi_free(p->pattern);
 
     {
       struct flow_id_stats *p1, *tmp1;
 
       HASH_ITER(hh, p->flows, p1, tmp1) {
 	HASH_DEL(p->flows, p1);
-	free(p1);
+	ndpi_free(p1);
       }
     }
 
@@ -304,12 +303,12 @@ void ndpi_report_payload_stats() {
 
       HASH_ITER(hh, p->packets, p1, tmp1) {
 	HASH_DEL(p->packets, p1);
-	free(p1);
+	ndpi_free(p1);
       }
     }
 
     HASH_DEL(pstats, p);
-    free(p);
+    ndpi_free(p);
     num++;
   }
 }
@@ -327,15 +326,15 @@ void ndpi_free_flow_info_half(struct ndpi_flow_info *flow) {
 extern u_int32_t current_ndpi_memory, max_ndpi_memory;
 
 /**
- * @brief malloc wrapper function
+ * @brief ndpi_malloc wrapper function
  */
-static void *malloc_wrapper(size_t size) {
+static void *ndpi_malloc_wrapper(size_t size) {
   current_ndpi_memory += size;
 
   if(current_ndpi_memory > max_ndpi_memory)
     max_ndpi_memory = current_ndpi_memory;
 
-  return malloc(size);
+  return(malloc(size)); /* Don't change to ndpi_malloc !!!!! */
 }
 
 /* ***************************************************** */
@@ -344,7 +343,7 @@ static void *malloc_wrapper(size_t size) {
  * @brief free wrapper function
  */
 static void free_wrapper(void *freeable) {
-  free(freeable);
+  free(freeable); /* Don't change to ndpi_free !!!!! */
 }
 
 /* ***************************************************** */
@@ -418,20 +417,20 @@ struct ndpi_workflow* ndpi_workflow_init(const struct ndpi_workflow_prefs * pref
   struct ndpi_detection_module_struct * module;
   struct ndpi_workflow * workflow;
 
-  set_ndpi_malloc(malloc_wrapper), set_ndpi_free(free_wrapper);
+  set_ndpi_malloc(ndpi_malloc_wrapper), set_ndpi_free(free_wrapper);
   set_ndpi_flow_malloc(NULL), set_ndpi_flow_free(NULL);
 
-  /* TODO: just needed here to init ndpi malloc wrapper */
+  /* TODO: just needed here to init ndpi ndpi_malloc wrapper */
   module = ndpi_init_detection_module(ndpi_no_prefs);
 
   if(module == NULL) {
-    NDPI_LOG(0, NULL, NDPI_LOG_ERROR, "global structure initialization failed\n");
+    LOG(NDPI_LOG_ERROR, "global structure initialization failed\n");
     exit(-1);
   }
 
   workflow = ndpi_calloc(1, sizeof(struct ndpi_workflow));
   if(workflow == NULL) {
-    NDPI_LOG(0, NULL, NDPI_LOG_ERROR, "global structure initialization failed\n");
+    LOG(NDPI_LOG_ERROR, "global structure initialization failed\n");
     ndpi_free(module);
     exit(-1);
   }
@@ -447,13 +446,8 @@ struct ndpi_workflow* ndpi_workflow_init(const struct ndpi_workflow_prefs * pref
       exit(-1);
     _debug_protocols_ok = 1;
   }
-
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-  NDPI_BITMASK_RESET(module->debug_bitmask);
-
   if(_debug_protocols_ok)
-    module->debug_bitmask = debug_bitmask;
-#endif
+    ndpi_set_debug_bitmask(module, debug_bitmask);
 
   workflow->ndpi_flows_root = ndpi_calloc(workflow->prefs.num_roots, sizeof(void *));
 
@@ -541,8 +535,8 @@ void ndpi_workflow_free(struct ndpi_workflow * workflow) {
     ndpi_tdestroy(workflow->ndpi_flows_root[i], ndpi_flow_info_freer);
 
   ndpi_exit_detection_module(workflow->ndpi_struct);
-  free(workflow->ndpi_flows_root);
-  free(workflow);
+  ndpi_free(workflow->ndpi_flows_root);
+  ndpi_free(workflow);
 }
 
 /* ***************************************************** */
@@ -823,15 +817,15 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 
   if(ret == NULL) {
     if(workflow->stats.ndpi_flow_count == workflow->prefs.max_ndpi_flows) {
-      NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR,
+      LOG(NDPI_LOG_ERROR,
 	       "maximum flow count (%u) has been exceeded\n",
 	       workflow->prefs.max_ndpi_flows);
       exit(-1);
     } else {
-      struct ndpi_flow_info *newflow = (struct ndpi_flow_info*)malloc(sizeof(struct ndpi_flow_info));
+      struct ndpi_flow_info *newflow = (struct ndpi_flow_info*)ndpi_malloc(sizeof(struct ndpi_flow_info));
 
       if(newflow == NULL) {
-	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(1): not enough memory\n", __FUNCTION__);
+	LOG(NDPI_LOG_ERROR, "[NDPI] %s(1): not enough memory\n", __FUNCTION__);
 	return(NULL);
       } else
         workflow->num_allocated_flows++;
@@ -868,37 +862,37 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
       }
 
       if((newflow->ndpi_flow = ndpi_flow_malloc(SIZEOF_FLOW_STRUCT)) == NULL) {
-	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(2): not enough memory\n", __FUNCTION__);
+	LOG(NDPI_LOG_ERROR, "[NDPI] %s(2): not enough memory\n", __FUNCTION__);
 #ifdef DIRECTION_BINS
 	ndpi_free_bin(&newflow->payload_len_bin_src2dst), ndpi_free_bin(&newflow->payload_len_bin_dst2src);
 #else
 	ndpi_free_bin(&newflow->payload_len_bin);
 #endif
-	free(newflow);
+	ndpi_free(newflow);
 	return(NULL);
       } else
 	memset(newflow->ndpi_flow, 0, SIZEOF_FLOW_STRUCT);
 
       if((newflow->src_id = ndpi_malloc(SIZEOF_ID_STRUCT)) == NULL) {
-	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(3): not enough memory\n", __FUNCTION__);
+	LOG(NDPI_LOG_ERROR, "[NDPI] %s(3): not enough memory\n", __FUNCTION__);
 #ifdef DIRECTION_BINS
 	ndpi_free_bin(&newflow->payload_len_bin_src2dst), ndpi_free_bin(&newflow->payload_len_bin_dst2src);
 #else
 	ndpi_free_bin(&newflow->payload_len_bin);
 #endif
-	free(newflow);
+	ndpi_free(newflow);
 	return(NULL);
       } else
 	memset(newflow->src_id, 0, SIZEOF_ID_STRUCT);
 
       if((newflow->dst_id = ndpi_malloc(SIZEOF_ID_STRUCT)) == NULL) {
-	NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_ERROR, "[NDPI] %s(4): not enough memory\n", __FUNCTION__);
+	LOG(NDPI_LOG_ERROR, "[NDPI] %s(4): not enough memory\n", __FUNCTION__);
 #ifdef DIRECTION_BINS
 	ndpi_free_bin(&newflow->payload_len_bin_src2dst), ndpi_free_bin(&newflow->payload_len_bin_dst2src);
 #else
 	ndpi_free_bin(&newflow->payload_len_bin);
 #endif
-	free(newflow);
+	ndpi_free(newflow);
 	return(NULL);
       } else
 	memset(newflow->dst_id, 0, SIZEOF_ID_STRUCT);
@@ -1033,7 +1027,7 @@ void correct_csv_data_field(char* data) {
 
 /* ****************************************************** */
 
-void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_flow_info *flow) {
+void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_flow_info *flow, FILE * csv_fp) {
   u_int i;
 
   if(!flow->ndpi_flow) return;
@@ -1187,14 +1181,24 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
        && flow->ndpi_flow->protos.stun_ssl.ssl.tls_supported_versions) {
       correct_csv_data_field(flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
       correct_csv_data_field(flow->ndpi_flow->protos.stun_ssl.ssl.tls_supported_versions);
-      snprintf(flow->info, sizeof(flow->info), "ALPN: %s][TLS Supported Versions: %s",
-	       flow->ndpi_flow->protos.stun_ssl.ssl.alpn,
-	       flow->ndpi_flow->protos.stun_ssl.ssl.tls_supported_versions);
+
+      if(csv_fp)
+	snprintf(flow->info, sizeof(flow->info), "%s",
+		 flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
+      else
+	snprintf(flow->info, sizeof(flow->info), "ALPN: %s][TLS Supported Versions: %s",
+		 flow->ndpi_flow->protos.stun_ssl.ssl.alpn,
+		 flow->ndpi_flow->protos.stun_ssl.ssl.tls_supported_versions);
     }
     else if(flow->ndpi_flow->protos.stun_ssl.ssl.alpn) {
       correct_csv_data_field(flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
-      snprintf(flow->info, sizeof(flow->info), "ALPN: %s",
-	       flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
+
+      if(csv_fp)
+	snprintf(flow->info, sizeof(flow->info), "%s,",
+		 flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
+      else
+	snprintf(flow->info, sizeof(flow->info), "ALPN: %s",
+		 flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
     }
   }
 
@@ -1293,7 +1297,8 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 					   u_int16_t ipsize, u_int16_t rawsize,
 					   const struct pcap_pkthdr *header,
 					   const u_char *packet,
-                                           struct timeval when) {
+                       struct timeval when,
+                       FILE * csv_fp) {
   struct ndpi_id_struct *src, *dst;
   struct ndpi_flow_info *flow = NULL;
   struct ndpi_flow_struct *ndpi_flow = NULL;
@@ -1398,8 +1403,13 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     }
 
 #ifndef DIRECTION_BINS
-    if(payload_len && ((flow->src2dst_packets+flow->dst2src_packets) < MAX_NUM_BIN_PKTS))
-	ndpi_inc_bin(&flow->payload_len_bin, plen2slot(payload_len));
+    if(payload_len && ((flow->src2dst_packets+flow->dst2src_packets) < MAX_NUM_BIN_PKTS)) {
+#if 0
+      /* Discard packets until the protocol is detected */
+      if(flow->detected_protocol.app_protocol != NDPI_PROTOCOL_UNKNOWN)
+#endif
+	ndpi_inc_bin(&flow->payload_len_bin, plen2slot(payload_len), 1);
+    }
 #endif
 
     if(enable_payload_analyzer && (payload_len > 0))
@@ -1510,7 +1520,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 							  enable_protocol_guess, &proto_guessed);
 	}
 
-	process_ndpi_collected_info(workflow, flow);
+	process_ndpi_collected_info(workflow, flow, csv_fp);
       }
     }
   }
@@ -1632,7 +1642,8 @@ static const u_char *parse_nflog_packet(const struct pcap_pkthdr *h, const u_cha
 
 struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 					       const struct pcap_pkthdr *header_o,
-					       const u_char *packet) {
+					       const u_char *packet,
+                           FILE * csv_fp) {
   struct pcap_pkthdr *header,header_c;
   /*
    * Declare pointers to packet headers
@@ -1798,6 +1809,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       break;
 
     /* Check ether_type from LLC */
+    if(header->caplen < (eth_offset + wifi_len + radio_len + sizeof(struct ndpi_llc_header_snap)))
+      return(nproto);
     llc = (struct ndpi_llc_header_snap*)(packet + eth_offset + wifi_len + radio_len);
     if(llc->dsap == SNAP)
       type = ntohs(llc->snap.proto_ID);
@@ -1852,7 +1865,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     workflow->stats.mpls_count++;
     type = ETH_P_IP, ip_offset += 4;
 
-    while(!mpls.mpls.s) {
+    while(!mpls.mpls.s && (((bpf_u_int32)ip_offset) + 4 < header->caplen)) {
       mpls.u32 = *((uint32_t *) &packet[ip_offset]);
       mpls.u32 = ntohl(mpls.u32);
       ip_offset += 4;
@@ -1893,7 +1906,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 
       if(cap_warning_used == 0) {
 	if(!workflow->prefs.quiet_mode)
-	  NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_DEBUG,
+	  LOG(NDPI_LOG_DEBUG,
 		   "\n\nWARNING: packet capture size is smaller than packet size, DETECTION MIGHT NOT WORK CORRECTLY\n\n");
 	cap_warning_used = 1;
       }
@@ -1916,7 +1929,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 
       if(ipv4_frags_warning_used == 0) {
 	if(!workflow->prefs.quiet_mode)
-	  NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_DEBUG, "\n\nWARNING: IPv4 fragments are not handled by this demo (nDPI supports them)\n");
+	  LOG(NDPI_LOG_DEBUG, "\n\nWARNING: IPv4 fragments are not handled by this demo (nDPI supports them)\n");
 	ipv4_frags_warning_used = 1;
       }
 
@@ -1950,7 +1963,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   v4_warning:
     if(ipv4_warning_used == 0) {
       if(!workflow->prefs.quiet_mode)
-        NDPI_LOG(0, workflow->ndpi_struct, NDPI_LOG_DEBUG,
+        LOG(NDPI_LOG_DEBUG,
 		 "\n\nWARNING: only IPv4/IPv6 packets are supported in this demo (nDPI supports both IPv4 and IPv6), all other packets will be discarded\n\n");
       ipv4_warning_used = 1;
     }
@@ -2067,8 +2080,9 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 
   /* process the packet */
   return(packet_processing(workflow, time_ms, vlan_id, nf_mark, tunnel_type, iph, iph6,
-			   ip_offset, h_caplen - ip_offset,
-			   h_caplen, header, packet, header->ts));
+			   ip_offset, header->caplen - ip_offset,
+			   header->caplen, header, packet, header->ts,
+               csv_fp));
 }
 
 /* ********************************************************** */

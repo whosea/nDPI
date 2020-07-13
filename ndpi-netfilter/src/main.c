@@ -416,7 +416,6 @@ static inline struct ndpi_net *ndpi_pernet(struct net *net)
 }
 
 /* detection */
-static uint32_t detection_tick_resolution = 1000;
 
 static	enum nf_ct_ext_id nf_ct_ext_id_ndpi = 0;
 static	struct kmem_cache *osdpi_flow_cache = NULL;

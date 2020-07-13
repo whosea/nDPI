@@ -61,6 +61,7 @@ typedef enum {
   When the typedef below is modified don't forget to update
   - ndpi_risk2str (in ndpi_utils.c)
   - https://github.com/ntop/ntopng/blob/dev/scripts/lua/modules/flow_risk_utils.lua
+  - ndpi_risk_enum (in python/ndpi.py)
  */
 typedef enum {
   NDPI_NO_RISK = 0,
@@ -1268,6 +1269,7 @@ struct ndpi_flow_struct {
 
     struct {
       struct {
+        char ssl_version_str[12];
 	u_int16_t ssl_version, server_names_len;
 	char client_requested_server_name[64], *server_names,
 	  *alpn, *tls_supported_versions, *issuerDN, *subjectDN;
@@ -1568,9 +1570,8 @@ enum ndpi_bin_family {
 };
 
 struct ndpi_bin {
-  u_int8_t num_bins;
+  u_int8_t num_bins, is_empty;
   enum ndpi_bin_family family;
-  u_int32_t num_incs;
   
   union {
     u_int8_t  *bins8; /* num_bins bins */

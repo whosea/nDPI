@@ -566,6 +566,14 @@ static void check_http_payload(struct ndpi_detection_module_struct *ndpi_struct,
 
 /* ************************************************************* */
 
+#ifdef NDPI_ENABLE_DEBUG_MESSAGES
+static uint8_t non_ctrl(uint8_t c) {
+  return c < 32 ? '.':c;
+}
+#endif
+
+/* ************************************************************* */
+
 /**
  * Functions to check whether the packet begins with a valid http request
  * @param ndpi_struct
@@ -591,20 +599,16 @@ static struct l_string {
 		    STATIC_STRING_L("REPORT ") };
 static const char *http_fs = "CDGHOPR";
 
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-static uint8_t non_ctrl(uint8_t c) {
-  return c < 32 ? '.':c;
-}
-#endif
-
 static u_int16_t http_request_url_offset(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = &flow->packet;
   int i;
 
   NDPI_LOG_DBG2(ndpi_struct, "====>>>> HTTP: %c%c%c%c [len: %u]\n",
-		non_ctrl(packet->payload[0]), non_ctrl(packet->payload[1]),
-		non_ctrl(packet->payload[2]), non_ctrl(packet->payload[3]),
+		packet->payload_packet_len > 0 ? non_ctrl(packet->payload[0]) : '.',
+		packet->payload_packet_len > 1 ? non_ctrl(packet->payload[1]) : '.',
+		packet->payload_packet_len > 2 ? non_ctrl(packet->payload[2]) : '.',
+		packet->payload_packet_len > 3 ? non_ctrl(packet->payload[3]) : '.',
 		packet->payload_packet_len);
 
   /* Check first char */
@@ -816,6 +820,13 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
 	    ndpi_lru_add_to_cache(ndpi_struct->ookla_cache, packet->iph->daddr, 1 /* dummy */);
 	}
 
+        return;
+      }
+
+      /* try to get some additional request header info even if the packet may not be HTTP */
+      ndpi_parse_packet_line_info(ndpi_struct, flow);
+      if (packet->http_num_headers > 0) {
+        check_content_type_and_change_protocol(ndpi_struct, flow);
         return;
       }
 
