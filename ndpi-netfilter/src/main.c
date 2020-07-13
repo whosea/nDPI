@@ -2794,8 +2794,6 @@ static int __init ndpi_mt_init(void)
 
 	ndpi_size_id_struct = sizeof(struct osdpi_id_node);
 	ndpi_size_flow_struct = ndpi_detection_get_sizeof_ndpi_flow_struct();
-	detection_tick_resolution = HZ;
-	set_ndpi_ticks_per_second(detection_tick_resolution);
 	set_ndpi_malloc(malloc_wrapper);
 	set_ndpi_free(free_wrapper);
 
