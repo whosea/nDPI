@@ -4542,7 +4542,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
       if(ndpi_str->msteams_cache)
 	ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
 			      flow->packet.iph->saddr,
-			      (flow->packet.current_time_ms / 1000) & 0xFFFF /* 16 bit */);
+			      flow->packet.current_time & 0xFFFF /* 16 bit */);
     }
     break;
 
@@ -4555,7 +4555,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
       if(ndpi_lru_find_cache(ndpi_str->msteams_cache, flow->packet.iph->saddr,
 			     &when, 0 /* Don't remove it as it can be used for other connections */)) {
-	u_int16_t tdiff = ((flow->packet.current_time_ms /1000) & 0xFFFF) - when;
+	u_int16_t tdiff = (flow->packet.current_time & 0xFFFF) - when;
 
 	if(tdiff < 60 /* sec */) {
 	  // printf("====>> NDPI_PROTOCOL_SKYPE(_CALL) -> NDPI_PROTOCOL_MSTEAMS [%u]\n", tdiff);
@@ -4564,7 +4564,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 	  /* Refresh cache */
 	  ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
 				flow->packet.iph->saddr,
-				(flow->packet.current_time_ms / 1000) & 0xFFFF /* 16 bit */);
+				flow->packet.current_time & 0xFFFF /* 16 bit */);
 	}
       }
     }
