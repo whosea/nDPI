@@ -719,7 +719,7 @@ static inline void ndpi_ct_counters_add(struct nf_ct_ext_ndpi *ct_ndpi,
 	ct_ndpi->flinfo.time_end = m_time;
 	set_flow_info(ct_ndpi);
 	if(ndpi_log_debug > 1)
-		pr_info("ndpi: ct_ndpi %pK counter pkt %lu bytes %lu\n",ct_ndpi,npkt,len);
+		pr_info("ndpi: ct_ndpi %pK counter pkt %zu bytes %zu\n",ct_ndpi,npkt,len);
 }
 		
 
@@ -2205,7 +2205,7 @@ ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 				n->flow_l = prev;
 				if(r < 0 && count != 0) {
 					p = -EFAULT;
-					pr_info("%s:%s cond4 p %d count %ld\n",
+					pr_info("%s:%s cond4 p %d count %zd\n",
 						__func__, n->ns_name, p, count);
 				}
 				break;
