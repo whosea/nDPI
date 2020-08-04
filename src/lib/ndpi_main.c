@@ -625,6 +625,10 @@ int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_str
     ndpi_str->direction_detect_disable = (u_int8_t) value;
     break;
 
+  case ndpi_pref_enable_tls_block_dissection:
+    ndpi_str->num_tls_blocks_to_follow = NDPI_MAX_NUM_TLS_APPL_BLOCKS;
+    break;
+
   default:
     return(-1);
   }
@@ -854,7 +858,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_TEREDO, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "Teredo", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 3544, 0, 0, 0, 0) /* UDP */);
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(
 			  ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_WECHAT, 0 /* can_have_a_subprotocol */, no_master, /* wechat.com */
 			  no_master, "WeChat", NDPI_PROTOCOL_CATEGORY_CHAT, ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
@@ -912,7 +916,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_XBOX, 0 /* can_have_a_subprotocol */, no_master,
 			  no_master, "Xbox", NDPI_PROTOCOL_CATEGORY_GAME,
 			  ndpi_build_default_ports(ports_a, 3074, 3076, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 3074, 3076, 500, 3544, 4500) /* UDP */);
+			  ndpi_build_default_ports(ports_b, 3074, 3076, 500, 4500, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_PLAYSTATION, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "Playstation", NDPI_PROTOCOL_CATEGORY_GAME,
 			  ndpi_build_default_ports(ports_a, 1935, 3478, 3479, 3480, 0) /* TCP */,
@@ -1074,8 +1078,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_a, 5900, 5901, 5800, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE90, 0 /* can_have_a_subprotocol */,
-			  no_master, no_master, "Free90", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
-			  ndpi_build_default_ports(ports_a, 5900, 5901, 5800, 0, 0) /* TCP */,
+			  no_master, no_master, "FREE_90", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_ZOOM, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "Zoom", NDPI_PROTOCOL_CATEGORY_VIDEO,
@@ -5037,7 +5041,7 @@ void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, 
   packet->line[packet->parsed_lines].len = 0;
 
   for (a = 0; ((a+1) < packet->payload_packet_len) && (packet->parsed_lines < NDPI_MAX_PARSE_LINES_PER_PACKET); a++) {
-    if(((a + 1) < packet->payload_packet_len) &&(packet->payload[a] == 0x0d) && (packet->payload[a+1] == 0x0a)) {
+    if((packet->payload[a] == 0x0d) && (packet->payload[a+1] == 0x0a)) {
       /* If end of line char sequence CR+NL "\r\n", process line */
 
       if(((a + 3) < packet->payload_packet_len)
@@ -6498,8 +6502,11 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
 
   switch(proto) {
   case NDPI_PROTOCOL_TLS:
-    if(!flow->l4.tcp.tls.certificate_processed)
+    if((!flow->l4.tcp.tls.certificate_processed)
+       || (flow->l4.tcp.tls.num_tls_blocks <= ndpi_str->num_tls_blocks_to_follow)) {
+      // printf("*** %u/%u\n", flow->l4.tcp.tls.num_tls_blocks, ndpi_str->num_tls_blocks_to_follow);
       return(1); /* TODO: add check for TLS 1.3 */
+    }
     break;
 
   case NDPI_PROTOCOL_HTTP:
@@ -6765,6 +6772,10 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	}
 
 	num_bigram_checks++;
+
+#ifdef DGA_DEBUG
+	printf("-> Checking %c%c\n", word[i], word[i+1]);
+#endif
 
 	if(ndpi_match_bigram(ndpi_str, &ndpi_str->bigrams_automa, &word[i])) {
 	  num_found++;

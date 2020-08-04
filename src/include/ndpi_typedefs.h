@@ -82,6 +82,9 @@ typedef enum {
   NDPI_TLS_NOT_CARRYING_HTTPS,
   NDPI_SUSPICIOUS_DGA_DOMAIN,
   NDPI_MALFORMED_PACKET,
+  NDPI_SSH_OBSOLETE_CLIENT_VERSION_OR_CIPHER,
+  NDPI_SSH_OBSOLETE_SERVER_VERSION_OR_CIPHER,
+  NDPI_SMB_INSECURE_VERSION,
   
   /* Leave this as last member */
   NDPI_MAX_RISK
@@ -690,7 +693,8 @@ struct ndpi_flow_tcp_struct {
     /* NDPI_PROTOCOL_TLS */
     u_int8_t hello_processed:1, certificate_processed:1, subprotocol_detected:1,
 	fingerprint_set:1, _pad:4;
-    u_int8_t sha1_certificate_fingerprint[20];
+    u_int8_t sha1_certificate_fingerprint[20], num_tls_blocks;
+    int16_t tls_application_blocks_len[NDPI_MAX_NUM_TLS_APPL_BLOCKS]; /* + = src->dst, - = dst->src */
   } tls;
   
   /* NDPI_PROTOCOL_POSTGRES */
@@ -991,6 +995,7 @@ typedef enum {
 
 typedef enum {
    ndpi_pref_direction_detect_disable = 0,
+   ndpi_pref_enable_tls_block_dissection
 } ndpi_detection_preference;
 
 /* ntop extensions */
@@ -1057,9 +1062,8 @@ struct ndpi_detection_module_struct {
 
   u_int32_t current_ts;
   u_int32_t ticks_per_second;
-
-  void *user_data;
-
+  u_int16_t num_tls_blocks_to_follow;
+  
   char custom_category_labels[NUM_CUSTOM_CATEGORIES][CUSTOM_CATEGORY_LABEL_LEN];
   /* callback function buffer */
   struct ndpi_call_function_struct callback_buffer[NDPI_MAX_SUPPORTED_PROTOCOLS + 1];
@@ -1081,6 +1085,8 @@ struct ndpi_detection_module_struct {
 
   ndpi_log_level_t ndpi_log_level; /* default error */
 
+  /* NDPI_ENABLE_DEBUG_MESSAGES */
+  void *user_data;
   /* debug callback, only set when debug is used */
   ndpi_debug_function_ptr ndpi_debug_printf;
   const char *ndpi_debug_print_file;
@@ -1089,8 +1095,8 @@ struct ndpi_detection_module_struct {
   NDPI_PROTOCOL_BITMASK debug_bitmask;
 
   //fixme
-  #define NDPI_IP_STRING_SIZE 48
-  char ip_string[NDPI_IP_STRING_SIZE];
+  //#define NDPI_IP_STRING_SIZE 48
+  //  char ip_string[NDPI_IP_STRING_SIZE];
 
   /* misc parameters */
   u_int32_t tcp_max_retransmission_window_size;
@@ -1228,7 +1234,7 @@ struct ndpi_flow_struct {
   u_char host_server_name[240];
   u_int8_t initial_binary_bytes[8], initial_binary_bytes_len;
   u_int8_t risk_checked;
-  u_int32_t risk; /* Issues found with this flow [bitmask of ndpi_risk] */
+  ndpi_risk risk; /* Issues found with this flow [bitmask of ndpi_risk] */
   
   /*
     This structure below will not not stay inside the protos

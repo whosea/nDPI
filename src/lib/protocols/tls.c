@@ -35,7 +35,7 @@ extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_st
 
 // #define DEBUG_TLS_MEMORY       1
 // #define DEBUG_TLS              1
-
+// #define DEBUG_TLS_BLOCKS          1
 // #define DEBUG_CERTIFICATE_HASH
 
 /* #define DEBUG_FINGERPRINT      1 */
@@ -491,7 +491,8 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
     }
   }
 
-  if(rdn_len) flow->protos.stun_ssl.ssl.subjectDN = ndpi_strdup(rdnSeqBuf);
+  if(rdn_len && (flow->protos.stun_ssl.ssl.subjectDN == NULL))
+    flow->protos.stun_ssl.ssl.subjectDN = ndpi_strdup(rdnSeqBuf);
 
   if(flow->protos.stun_ssl.ssl.subjectDN && flow->protos.stun_ssl.ssl.issuerDN
      && (!strcmp(flow->protos.stun_ssl.ssl.subjectDN, flow->protos.stun_ssl.ssl.issuerDN)))
@@ -524,14 +525,14 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
     NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
     return(-1); /* Invalid length */
   }
-  
+
   certificates_length = (packet->payload[4] << 16) + (packet->payload[5] << 8) + packet->payload[6];
 
   if((packet->payload[4] != 0x0) || ((certificates_length+3) != length)) {
     NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
     return(-2); /* Invalid length */
   }
-  
+
   if(!flow->l4.tcp.tls.srv_cert_fingerprint_ctx) {
     if((flow->l4.tcp.tls.srv_cert_fingerprint_ctx = (void*)ndpi_malloc(sizeof(SHA1_CTX))) == NULL)
       return(-3); /* Not enough memory */
@@ -604,7 +605,15 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
     certificates_offset += certificate_len;
   }
 
-  flow->extra_packets_func = NULL; /* We're good now */
+  if(( ndpi_struct->num_tls_blocks_to_follow != 0)
+     && (flow->l4.tcp.tls.num_tls_blocks >= ndpi_struct->num_tls_blocks_to_follow)) {
+#ifdef DEBUG_TLS_BLOCKS
+    printf("*** [TLS Block] Enough blocks dissected\n");
+#endif
+    
+    flow->extra_packets_func = NULL; /* We're good now */  
+  }
+  
   return(1);
 }
 
@@ -646,7 +655,7 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
   u_int8_t something_went_wrong = 0;
 
 #ifdef DEBUG_TLS_MEMORY
-  printf("[TLS Mem] ndpi_search_tls_tcp() [payload_packet_len: %u]\n",
+  printf("[TLS Mem] ndpi_search_tls_tcp() Processing new packet [payload_packet_len: %u]\n",
 	 packet->payload_packet_len);
 #endif
 
@@ -656,13 +665,13 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_search_tls_tcp_memory(ndpi_struct, flow);
 
   while(!something_went_wrong) {
-    u_int16_t processed;
     u_int16_t len, p_len;
     const u_int8_t *p;
-
+    u_int8_t content_type;
+      
     if(flow->l4.tcp.tls.message.buffer_used < 5)
       return(1); /* Keep working */
-
+    
     len = (flow->l4.tcp.tls.message.buffer[3] << 8) + flow->l4.tcp.tls.message.buffer[4] + 5;
 
     if(len > flow->l4.tcp.tls.message.buffer_used) {
@@ -687,37 +696,50 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
     printf("[TLS Mem] Processing %u bytes message\n", len);
 #endif
 
+    content_type = flow->l4.tcp.tls.message.buffer[0];
+    
     /* Overwriting packet payload */
     p = packet->payload, p_len = packet->payload_packet_len; /* Backup */
 
-    /* Split the element in blocks */
-    processed = 5;
+    if((len > 9)
+       && (content_type != 0x17 /* Application Data */)
+       && (!flow->l4.tcp.tls.certificate_processed)) {
+      /* Split the element in blocks */
+      u_int16_t processed = 5;
 
-    while((processed+4) < len) {
-      const u_int8_t *block = (const u_int8_t *)&flow->l4.tcp.tls.message.buffer[processed];
-      u_int32_t block_len   = (block[1] << 16) + (block[2] << 8) + block[3];
+      while((processed+4) <= len) {
+	const u_int8_t *block = (const u_int8_t *)&flow->l4.tcp.tls.message.buffer[processed];
+	u_int32_t block_len   = (block[1] << 16) + (block[2] << 8) + block[3];
 
-      if((block_len == 0) || (block_len > len) || ((block[1] != 0x0))) {
-	something_went_wrong = 1;
-	break;
+	if(/* (block_len == 0) || */ /* Note blocks can have zero lenght */
+	   (block_len > len) || ((block[1] != 0x0))) {
+	  something_went_wrong = 1;
+	  break;
+	}
+
+	packet->payload = block, packet->payload_packet_len = ndpi_min(block_len+4, flow->l4.tcp.tls.message.buffer_used);
+
+	if((processed+packet->payload_packet_len) > len) {
+	  something_went_wrong = 1;
+	  break;
+	}
+
+	processTLSBlock(ndpi_struct, flow);
+	
+	processed += packet->payload_packet_len;
       }
-
-      packet->payload = block, packet->payload_packet_len = ndpi_min(block_len+4, flow->l4.tcp.tls.message.buffer_used);
-
-      if((processed+packet->payload_packet_len) > len) {
-	something_went_wrong = 1;
-	break;
-      }
-
-#ifdef DEBUG_TLS_MEMORY
-      printf("*** [TLS Mem] Processing %u bytes block [%02X %02X %02X %02X %02X]\n",
-	     packet->payload_packet_len,
-	     packet->payload[0], packet->payload[1], packet->payload[2], packet->payload[3], packet->payload[4]);
+    } else {
+      /* Process element as a whole */
+      if(content_type == 0x17 /* Application Data */) {
+	if(flow->l4.tcp.tls.num_tls_blocks < ndpi_struct->num_tls_blocks_to_follow)
+	  flow->l4.tcp.tls.tls_application_blocks_len[flow->l4.tcp.tls.num_tls_blocks++] =
+	    (packet->packet_direction == 0) ? (len-5) : -(len-5);
+	
+#ifdef DEBUG_TLS_BLOCKS
+	printf("*** [TLS Block] [len: %u][num_tls_blocks: %u/%u]\n",
+	       len-5, flow->l4.tcp.tls.num_tls_blocks, ndpi_struct->num_tls_blocks_to_follow);
 #endif
-
-
-      processTLSBlock(ndpi_struct, flow);
-      processed += packet->payload_packet_len;
+      }
     }
 
     packet->payload = p, packet->payload_packet_len = p_len; /* Restore */
@@ -735,8 +757,15 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
   }
 
-  if(something_went_wrong) {
-    flow->check_extra_packets = 0, flow->extra_packets_func = NULL;
+  if(something_went_wrong
+     || ((ndpi_struct->num_tls_blocks_to_follow > 0)
+	 && (flow->l4.tcp.tls.num_tls_blocks == ndpi_struct->num_tls_blocks_to_follow))
+     ) {
+#ifdef DEBUG_TLS_BLOCKS
+    printf("*** [TLS Block] No more blocks\n");
+#endif
+    flow->check_extra_packets = 0;
+    flow->extra_packets_func = NULL;
     return(0); /* That's all */
   } else
     return(1);
@@ -794,11 +823,12 @@ static int ndpi_search_tls_udp(struct ndpi_detection_module_struct *ndpi_struct,
 
 /* **************************************** */
 
-static void tlsInitExtraPacketProcessing(struct ndpi_flow_struct *flow) {
+static void tlsInitExtraPacketProcessing(struct ndpi_detection_module_struct *ndpi_struct,
+					 struct ndpi_flow_struct *flow) {
   flow->check_extra_packets = 1;
 
   /* At most 12 packets should almost always be enough to find the server certificate if it's there */
-  flow->max_extra_packets_to_check = 12;
+  flow->max_extra_packets_to_check = 12 + (ndpi_struct->num_tls_blocks_to_follow*4);
   flow->extra_packets_func = (flow->packet.udp != NULL) ? ndpi_search_tls_udp : ndpi_search_tls_tcp;
 }
 
@@ -813,7 +843,7 @@ static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndp
   if((flow->detected_protocol_stack[0] == protocol)
      || (flow->detected_protocol_stack[1] == protocol)) {
     if(!flow->check_extra_packets)
-      tlsInitExtraPacketProcessing(flow);
+      tlsInitExtraPacketProcessing(ndpi_struct, flow);
     return;
   }
 
@@ -823,7 +853,7 @@ static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndp
     protocol = ndpi_tls_refine_master_protocol(ndpi_struct, flow, protocol);
 
   ndpi_set_detected_protocol(ndpi_struct, flow, protocol, NDPI_PROTOCOL_TLS);
-  tlsInitExtraPacketProcessing(flow);
+  tlsInitExtraPacketProcessing(ndpi_struct, flow);
 }
 
 /* **************************************** */
@@ -935,7 +965,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
       for(i=0; i<extension_len; ) {
 	u_int16_t extension_id, extension_len;
 
-	if(offset >= (packet->payload_packet_len+4)) break;
+	if((offset+4) > packet->payload_packet_len) break;
 
 	extension_id  = ntohs(*((u_int16_t*)&packet->payload[offset]));
 	extension_len = ntohs(*((u_int16_t*)&packet->payload[offset+2]));
@@ -1269,7 +1299,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 
 #ifdef DEBUG_TLS
 		    printf("Client SSL [TLS version: %s/0x%04X]\n",
-			   ndpi_ssl_version2str(tls_version, &unknown_tls_version), tls_version);
+			   ndpi_ssl_version2str(NULL, tls_version, &unknown_tls_version), tls_version);
 #endif
 
 		    if((version_str_len+8) < sizeof(version_str)) {

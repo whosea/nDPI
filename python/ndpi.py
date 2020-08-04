@@ -2,7 +2,7 @@
 file: ndpi.py
 This file is part of nfstream.
 
-Copyright (C) 2019-20 - Zied Aouini <aouinizied@gmail.com>
+Copyright (C) 2019-20 - nfstream.org
 
 nfstream is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -265,6 +265,9 @@ struct tinc_cache_entry {
 """
 
 cc_ndpi_stuctures = """
+
+#define NDPI_MAX_NUM_TLS_APPL_BLOCKS      8
+
 typedef enum {
   NDPI_LOG_ERROR,
   NDPI_LOG_TRACE,
@@ -306,6 +309,9 @@ typedef enum {
   NDPI_TLS_NOT_CARRYING_HTTPS,
   NDPI_SUSPICIOUS_DGA_DOMAIN,
   NDPI_MALFORMED_PACKET,
+  NDPI_SSH_OBSOLETE_CLIENT_VERSION_OR_CIPHER,
+  NDPI_SSH_OBSOLETE_SERVER_VERSION_OR_CIPHER,
+  NDPI_SMB_INSECURE_VERSION,
   /* Leave this as last member */
   NDPI_MAX_RISK
 } ndpi_risk_enum;
@@ -576,7 +582,8 @@ struct ndpi_flow_tcp_struct {
 
     /* NDPI_PROTOCOL_TLS */
     uint8_t hello_processed:1, certificate_processed:1, subprotocol_detected:1, fingerprint_set:1, _pad:4; 
-    uint8_t sha1_certificate_fingerprint[20];
+    uint8_t sha1_certificate_fingerprint[20], num_tls_blocks;
+    int16_t tls_application_blocks_len[NDPI_MAX_NUM_TLS_APPL_BLOCKS];
   } tls;
 
   /* NDPI_PROTOCOL_POSTGRES */
@@ -845,6 +852,7 @@ typedef enum {
 
 typedef enum {
   ndpi_pref_direction_detect_disable = 0,
+  ndpi_pref_enable_tls_block_dissection
 } ndpi_detection_preference;
 
 /* ntop extensions */
@@ -889,7 +897,10 @@ struct ndpi_detection_module_struct {
   NDPI_PROTOCOL_BITMASK generic_http_packet_bitmask;
 
   uint32_t current_ts;
+
   uint32_t ticks_per_second;
+
+  uint16_t num_tls_blocks_to_follow;
 
   char custom_category_labels[NUM_CUSTOM_CATEGORIES][CUSTOM_CATEGORY_LABEL_LEN];
   /* callback function buffer */
@@ -1031,7 +1042,7 @@ struct ndpi_flow_struct {
   uint8_t host_server_name[240];
   uint8_t initial_binary_bytes[8], initial_binary_bytes_len;
   uint8_t risk_checked;
-  uint32_t risk; /* Issues found with this flow [bitmask of ndpi_risk] */
+  ndpi_risk risk; /* Issues found with this flow [bitmask of ndpi_risk] */
 
   /*
     This structure below will not stay inside the protos

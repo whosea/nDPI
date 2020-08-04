@@ -75,6 +75,14 @@ void ndpi_free_data_analysis(struct ndpi_analyze_struct *d) {
 
 /* ********************************************************************************* */
 
+void ndpi_reset_data_analysis(struct ndpi_analyze_struct *d) {
+  memset(d, 0, sizeof(struct ndpi_analyze_struct));
+  memset(d->values, 0, sizeof(u_int32_t)*d->num_values_array_len);
+  d->num_data_entries = 0;
+}
+
+/* ********************************************************************************* */
+
 /*
   Add a new point to analyze
  */
@@ -112,6 +120,16 @@ float ndpi_data_average(struct ndpi_analyze_struct *s) {
 
 /* ********************************************************************************* */
 
+u_int32_t ndpi_data_last(struct ndpi_analyze_struct *s) {
+  if((s->num_data_entries == 0) || (s->sum_total == 0))
+    return(0);
+
+  if(s->next_value_insert_index == 0)
+    return(s->values[s->num_values_array_len-1]);
+  else
+    return(s->values[s->next_value_insert_index-1]);
+}
+
 /* Return min/max on all values */
 u_int32_t ndpi_data_min(struct ndpi_analyze_struct *s) { return(s->min_val); }
 u_int32_t ndpi_data_max(struct ndpi_analyze_struct *s) { return(s->max_val); }
@@ -144,6 +162,9 @@ float ndpi_data_window_average(struct ndpi_analyze_struct *s) {
     float   sum = 0.0;
     u_int16_t i, n = ndpi_min(s->num_data_entries, s->num_values_array_len);
 
+    if(n == 0)
+      return(0);
+
     for(i=0; i<n; i++)
       sum += s->values[i];
 
@@ -153,6 +174,32 @@ float ndpi_data_window_average(struct ndpi_analyze_struct *s) {
 }
 
 /* ********************************************************************************* */
+
+/* Compute the variance only on the sliding window */
+float ndpi_data_window_variance(struct ndpi_analyze_struct *s) {
+  if(s->num_values_array_len) {
+    float   sum = 0.0, avg = ndpi_data_window_average(s);
+    u_int16_t i, n = ndpi_min(s->num_data_entries, s->num_values_array_len);
+
+    if(n == 0)
+      return(0);
+
+    for(i=0; i<n; i++)
+      sum += pow(s->values[i]-avg, 2);
+
+    return((float)sum / (float)n);
+  } else
+    return(0);
+}
+
+/* ********************************************************************************* */
+
+/* Compute the variance only on the sliding window */
+float ndpi_data_window_stddev(struct ndpi_analyze_struct *s) {
+  return(sqrt(ndpi_data_window_variance(s)));
+}
+
+  /* ********************************************************************************* */
 
 /*
   Compute entropy on the last sliding window values
@@ -226,6 +273,10 @@ int ndpi_hll_init(struct ndpi_hll *hll, u_int8_t bits) {
 
 void ndpi_hll_destroy(struct ndpi_hll *hll) {
   hll_destroy(hll);
+}
+
+void ndpi_hll_reset(struct ndpi_hll *hll) {
+  hll_reset(hll);
 }
 
 void ndpi_hll_add(struct ndpi_hll *hll, const char *data, size_t data_len) {
@@ -342,7 +393,7 @@ void ndpi_set_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val) {
 
 void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val) {
   b->is_empty = 0;
-  
+
   if(slot_id >= b->num_bins) slot_id = 0;
 
   switch(b->family) {
@@ -405,7 +456,7 @@ void ndpi_normalize_bin(struct ndpi_bin *b) {
   u_int32_t tot = 0;
 
   if(b->is_empty) return;
-  
+
   switch(b->family) {
   case ndpi_bin_family8:
     for(i=0; i<b->num_bins; i++) tot += b->u.bins8[i];
@@ -516,10 +567,10 @@ float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t nor
     for(i=0; i<b1->num_bins; i++) {
       u_int32_t a = ndpi_get_bin_value(b1, i);
       u_int32_t b = ndpi_get_bin_value(b2, i);
-      
+
       sumxx += a*a, sumyy += b*b, sumxy += a*b;
     }
-    
+
     if((sumxx == 0) || (sumyy == 0))
       return(0);
     else
@@ -532,10 +583,13 @@ float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t nor
     for(i=0; i<b1->num_bins; i++) {
       u_int32_t a = ndpi_get_bin_value(b1, i);
       u_int32_t b = ndpi_get_bin_value(b2, i);
+      u_int32_t diff = (a > b) ? (a - b) : (b - a);
+      
+      if(a != b) sum += pow(diff, 2);
 
-      sum += pow(a-b, 2);
+      // printf("[a: %u][b: %u][sum: %u]\n", a, b, sum);
     }
-    
+
     /* The lower the more similar */
     return(sqrt(sum));
   }
@@ -543,6 +597,8 @@ float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t nor
 }
 
 /* ********************************************************************************* */
+
+#define MAX_NUM_CLUSTERS  128
 
 /*
   Clusters bins into 'num_clusters'
@@ -559,18 +615,27 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
   u_int16_t i, j, max_iterations = 25, num_iterations, num_moves;
   u_int8_t verbose = 0, alloc_centroids = 0;
   char out_buf[256];
+  float *bin_score;
+  u_int16_t num_cluster_elems[MAX_NUM_CLUSTERS] = { 0 };
 
-  if(num_clusters > num_bins) num_clusters = num_bins;
+  srand(time(NULL));
+
+  if(num_clusters > num_bins)         num_clusters = num_bins;
+  if(num_clusters > MAX_NUM_CLUSTERS) num_clusters = MAX_NUM_CLUSTERS;
 
   if(verbose)
     printf("Distributing %u bins over %u clusters\n", num_bins, num_clusters);
 
+  if((bin_score = (float*)ndpi_calloc(num_bins, sizeof(float))) == NULL)
+    return(-2);
+
   if(centroids == NULL) {
     alloc_centroids = 1;
 
-    if((centroids = (struct ndpi_bin*)ndpi_malloc(sizeof(struct ndpi_bin)*num_clusters)) == NULL)
+    if((centroids = (struct ndpi_bin*)ndpi_malloc(sizeof(struct ndpi_bin)*num_clusters)) == NULL) {
+      ndpi_free(bin_score);
       return(-2);
-    else {
+    } else {
       for(i=0; i<num_clusters; i++)
 	ndpi_init_bin(&centroids[i], ndpi_bin_family32 /* Use 32 bit to avoid overlaps */, bins[0].num_bins);
     }
@@ -580,52 +645,33 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
   memset(cluster_ids, 0, sizeof(u_int16_t) * num_bins);
 
   /* Randomly pick a cluster id */
-  for(i=0; i<num_clusters; i++) {
-    cluster_ids[i] = i;
-
-    if(verbose)
-      printf("Initializing cluster %u: %s\n", i,
-	     ndpi_print_bin(&bins[i], 0, out_buf, sizeof(out_buf)));
-
-  }
-
-  /* Assign the remaining bins to the nearest cluster */
-  for(i=num_clusters; i<num_bins; i++) {
-    u_int16_t j;
-    float best_similarity;
-    u_int8_t cluster_id = 0;
-
-#ifdef COSINE_SIMILARITY
-    best_similarity = -1;
-#else
-    best_similarity = 99999999999;
-#endif
-
-    for(j=0; j<num_clusters; j++) {
-      float similarity = ndpi_bin_similarity(&bins[i], &bins[j], 0);
-
-#ifdef COSINE_SIMILARITY
-      if(similarity > best_similarity)
-#else
-	if(similarity < best_similarity)
-#endif
-	cluster_id = j, best_similarity = similarity;
-    }
-
-    if(verbose)
-      printf("Assigned bin to cluster %u: %s [score: %f]\n", cluster_id,
-	     ndpi_print_bin(&bins[i], 0, out_buf, sizeof(out_buf)), best_similarity);
+  for(i=0; i<num_bins; i++) {
+    u_int cluster_id = rand() % num_clusters;
 
     cluster_ids[i] = cluster_id;
+
+    if(verbose)
+      printf("Initializing cluster %u for bin %u: %s\n",
+	     cluster_id, i,
+	     ndpi_print_bin(&bins[i], 0, out_buf, sizeof(out_buf)));
+
+    num_cluster_elems[cluster_id]++;
   }
 
   num_iterations = 0;
 
   /* Now let's try to find a better arrangement */
   while(num_iterations++ < max_iterations) {
-    /* Find the center of each cluster */
 
-    if(verbose) printf("Iteration %u\n", num_iterations);
+    /* Compute the centroids for each cluster */
+    memset(bin_score, 0, num_bins*sizeof(float));
+
+    if(verbose) {
+      printf("\nIteration %u\n", num_iterations);
+
+      for(j=0; j<num_clusters; j++)
+	printf("Cluster %u: %u bins\n", j, num_cluster_elems[j]);
+    }
 
     for(i=0; i<num_clusters; i++)
       ndpi_reset_bin(&centroids[i]);
@@ -649,37 +695,60 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 
     for(i=0; i<num_bins; i++) {
       u_int16_t j;
-      float best_similarity;
+      float best_similarity, current_similarity = 0;
       u_int8_t cluster_id = 0;
 
+      if(verbose)
+	printf("Analysing bin %u [cluster: %u]\n",
+	       i, cluster_ids[i]);
+
 #ifdef COSINE_SIMILARITY
-    best_similarity = -1;
+      best_similarity = -1;
 #else
-    best_similarity = 99999999999;
+      best_similarity = 99999999999;
 #endif
 
       for(j=0; j<num_clusters; j++) {
 	float similarity;
 
 	if(centroids[j].is_empty) continue;
-	
+
 	similarity = ndpi_bin_similarity(&bins[i], &centroids[j], 0);
 
+	if(j == cluster_ids[i])
+	  current_similarity = similarity;
+	
 	if(verbose)
 	  printf("Bin %u / centroid %u [similarity: %f]\n", i, j, similarity);
 
 #ifdef COSINE_SIMILARITY
-      if(similarity > best_similarity)
-#else
-	if(similarity < best_similarity)
-#endif 	  
+	if(similarity > best_similarity) {
 	  cluster_id = j, best_similarity = similarity;
+	}
+#else
+	if(similarity < best_similarity) {
+	  cluster_id = j, best_similarity = similarity;
+	}
+#endif
       }
 
-      if(/* (best_similarity > 0) && */ (cluster_ids[i] != cluster_id)) {
+      if((best_similarity == current_similarity) && (num_cluster_elems[cluster_ids[i]] > 1)) {
+	/*
+          In case of identical similarity let's leave things as they are
+          this unless this is a cluster with only one element
+	*/
+	cluster_id = cluster_ids[i];
+      }
+      
+      bin_score[i] = best_similarity;
+
+      if(cluster_ids[i] != cluster_id) {
 	if(verbose)
 	  printf("Moved bin %u from cluster %u -> %u [similarity: %f]\n",
 		 i, cluster_ids[i], cluster_id, best_similarity);
+
+	num_cluster_elems[cluster_ids[i]]--;
+	num_cluster_elems[cluster_id]++;
 
 	cluster_ids[i] = cluster_id;
 	num_moves++;
@@ -688,7 +757,48 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 
     if(num_moves == 0)
       break;
-  }
+
+    if(verbose) {
+      for(j=0; j<num_clusters; j++)
+	printf("Cluster %u: %u bins\n", j, num_cluster_elems[j]);
+    }
+
+#if 0
+    for(j=0; j<num_clusters; j++) {
+      if(num_cluster_elems[j] == 0) {
+	u_int16_t candidate;
+	float score;
+
+	if(verbose)
+	  printf("\nCluster %u is empty: need to rebalance\n", j);
+
+#ifdef COSINE_SIMILARITY
+	score = 99999999999;
+
+	for(i=0; i<num_bins; i++) {
+	  if((cluster_ids[i] != j) && (bin_score[i] < score) && (num_cluster_elems[cluster_ids[i]] > 1))
+	    score = bin_score[i], candidate = i;
+	}
+#else
+	score = 0;
+
+	for(i=0; i<num_bins; i++) {
+	  if((cluster_ids[i] != j) && (bin_score[i] > score) && (num_cluster_elems[cluster_ids[i]] > 1))
+	    score = bin_score[i], candidate = i;
+	}
+#endif
+
+	if(verbose)
+	  printf("Rebalance: moving bin %u from cluster %u -> %u [similarity: %f]\n",
+		 candidate, cluster_ids[candidate], j, score);
+
+	num_cluster_elems[cluster_ids[candidate]]--;
+	num_cluster_elems[j]++;
+	cluster_ids[candidate] = j;
+      }
+    }
+#endif
+  } /* while(...) */
 
   if(alloc_centroids) {
     for(i=0; i<num_clusters; i++)
@@ -696,6 +806,8 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 
     ndpi_free(centroids);
   }
+
+  ndpi_free(bin_score);
 
   return(0);
 }

@@ -47,6 +47,26 @@ static __inline u_int8_t _hll_rank(u_int32_t hash, u_int8_t bits) {
   return i;
 }
 
+/*
+  IMPORTANT: memory usage notes
+  
+  [i: 4] 16 bytes
+  [i: 5] 32 bytes
+  [i: 6] 64 bytes
+  [i: 7] 128 bytes
+  [i: 8] 256 bytes
+  [i: 9] 512 bytes
+  [i: 10] 1024 bytes
+  [i: 11] 2048 bytes
+  [i: 12] 4096 bytes
+  [i: 13] 8192 bytes
+  [i: 14] 16384 bytes
+  [i: 15] 32768 bytes
+  [i: 16] 65536 bytes
+  [i: 17] 131072 bytes
+  [i: 18] 262144 bytes
+  [i: 19] 524288 bytes
+*/
 int hll_init(struct ndpi_hll *hll, u_int8_t bits) {
   if(bits < 4 || bits > 20) {
     errno = ERANGE;
@@ -62,17 +82,26 @@ int hll_init(struct ndpi_hll *hll, u_int8_t bits) {
 }
 
 void hll_destroy(struct ndpi_hll *hll) {
-  ndpi_free(hll->registers);
+  if(hll->registers) {
+    ndpi_free(hll->registers);
+    
+    hll->registers = NULL;
+  }
+}
 
-  hll->registers = NULL;
+void hll_reset(struct ndpi_hll *hll) {
+  if(hll->registers)
+    memset(hll->registers, 0, hll->size);
 }
 
 static __inline void _hll_add_hash(struct ndpi_hll *hll, u_int32_t hash) {
-  u_int32_t index = hash >> (32 - hll->bits);
-  u_int8_t rank = _hll_rank(hash, hll->bits);
-
-  if(rank > hll->registers[index]) {
-    hll->registers[index] = rank;
+  if(hll->registers) {
+    u_int32_t index = hash >> (32 - hll->bits);
+    u_int8_t rank = _hll_rank(hash, hll->bits);
+    
+    if(rank > hll->registers[index]) {
+      hll->registers[index] = rank;
+    }
   }
 }
 
@@ -83,46 +112,48 @@ void hll_add(struct ndpi_hll *hll, const void *buf, size_t size) {
 }
 
 double hll_count(const struct ndpi_hll *hll) {
-  double alpha_mm;
-  u_int32_t i;
+  if(hll->registers) {
+    double alpha_mm, sum, estimate;
+    u_int32_t i;
 
-  switch (hll->bits) {
-  case 4:
-    alpha_mm = 0.673;
-    break;
-  case 5:
-    alpha_mm = 0.697;
-    break;
-  case 6:
-    alpha_mm = 0.709;
-    break;
-  default:
-    alpha_mm = 0.7213 / (1.0 + 1.079 / (double)hll->size);
-    break;
-  }
+    switch(hll->bits) {
+    case 4:
+      alpha_mm = 0.673;
+      break;
+    case 5:
+      alpha_mm = 0.697;
+      break;
+    case 6:
+      alpha_mm = 0.709;
+      break;
+    default:
+      alpha_mm = 0.7213 / (1.0 + 1.079 / (double)hll->size);
+      break;
+    }
 
-  alpha_mm *= ((double)hll->size * (double)hll->size);
+    alpha_mm *= ((double)hll->size * (double)hll->size);
 
-  double sum = 0;
-  for(i = 0; i < hll->size; i++) {
-    sum += 1.0 / (1 << hll->registers[i]);
-  }
-
-  double estimate = alpha_mm / sum;
-
-  if (estimate <= 5.0 / 2.0 * (double)hll->size) {
-    int zeros = 0;
-
+    sum = 0;
     for(i = 0; i < hll->size; i++)
-      zeros += (hll->registers[i] == 0);
+      sum += 1.0 / (1 << hll->registers[i]);    
 
-    if(zeros)
-      estimate = (double)hll->size * log((double)hll->size / zeros);
+    estimate = alpha_mm / sum;
 
-  } else if (estimate > (1.0 / 30.0) * 4294967296.0) {
-    estimate = -4294967296.0 * log(1.0 - (estimate / 4294967296.0));
-  }
+    if(estimate <= (5.0 / 2.0 * (double)hll->size)) {
+      int zeros = 0;
 
-  return estimate;
+      for(i = 0; i < hll->size; i++)
+	zeros += (hll->registers[i] == 0);
+
+      if(zeros)
+	estimate = (double)hll->size * log((double)hll->size / zeros);
+
+    } else if(estimate > ((1.0 / 30.0) * 4294967296.0)) {
+      estimate = -4294967296.0 * log(1.0 - (estimate / 4294967296.0));
+    }
+
+    return estimate;
+  } else
+    return(0.);
 }
 

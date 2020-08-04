@@ -1974,6 +1974,10 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
 
   ndpi_finalize_initalization(ndpi_thread_info[thread_id].workflow->ndpi_struct);
   set_ndpi_debug_function(ndpi_thread_info[thread_id].workflow->ndpi_struct, debug_printf);
+
+#ifdef USE_TLS_LEN
+  ndpi_set_detection_preferences(ndpi_thread_info[thread_id].workflow->ndpi_struct, ndpi_pref_enable_tls_block_dissection, 1);
+#endif
 }
 
 /* *********************************************** */
@@ -2485,7 +2489,7 @@ static void printFlowsStats() {
     if(verbose > 1) {
 #ifndef DIRECTION_BINS
       struct ndpi_bin *bins = (struct ndpi_bin*)ndpi_malloc(sizeof(struct ndpi_bin)*num_flows);
-      u_int16_t *cluster_ids = (u_int16_t*)ndpi_malloc(sizeof(u_int16_t)*num_flows);;
+      u_int16_t *cluster_ids = (u_int16_t*)ndpi_malloc(sizeof(u_int16_t)*num_flows);
 #endif
 
       for(i=0; i<num_flows; i++) {
@@ -2528,17 +2532,22 @@ static void printFlowsStats() {
 		printf("]\n");
 	      }
 
-	      printf("\t%-10s\t%s:%u <-> %s:%u\t[",
-		     // cluster_ids[i],
+	      printf("\t%u\t%-10s\t%s:%u <-> %s:%u\t[",
+		     i,
 		     ndpi_protocol2name(ndpi_thread_info[0].workflow->ndpi_struct,
 					all_flows[i].flow->detected_protocol, buf, sizeof(buf)),
 		     all_flows[i].flow->src_name,
 		     ntohs(all_flows[i].flow->src_port),
-		     all_flows[i].flow->src_name,
+		     all_flows[i].flow->dst_name,
 		     ntohs(all_flows[i].flow->dst_port));
 
 	      print_bin(out, NULL, &bins[i]);
-	      printf("][score: %f]\n", ndpi_bin_similarity(&centroids[j], &bins[i], 0));
+	      printf("][similarity: %f]", ndpi_bin_similarity(&centroids[j], &bins[i], 0));
+
+	      if(all_flows[i].flow->ssh_tls.client_requested_server_name[0] != '\0')
+		fprintf(out, "[%s]", all_flows[i].flow->ssh_tls.client_requested_server_name);
+	      
+	      printf("\n");
 	      num_printed++;
 	    }
 
@@ -2549,11 +2558,12 @@ static void printFlowsStats() {
 	    ndpi_free_bin(&centroids[i]);
 	  
 	  ndpi_free(centroids);
-	  
-	  ndpi_free(bins);
-	  ndpi_free(cluster_ids);
 	}
       }
+      if(bins)
+        ndpi_free(bins);
+      if(cluster_ids)
+        ndpi_free(cluster_ids);
 #endif
     }
 
