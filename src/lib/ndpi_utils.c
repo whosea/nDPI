@@ -881,6 +881,7 @@ u_char* ndpi_base64_decode(const u_char *src, size_t len, size_t *out_len) {
 
 /* ********************************** */
 
+/* NOTE: caller MUST free returned pointer */
 char* ndpi_base64_encode(unsigned char const* bytes_to_encode, size_t in_len) {
   size_t len = 0, ret_size;
   char *ret;
@@ -1543,7 +1544,10 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     
   case NDPI_SMB_INSECURE_VERSION:
     return("SMB Insecure Version");
-    
+
+  case NDPI_TLS_SUSPICIOUS_ESNI_USAGE:
+    return("TLS Suspicious ESNI Usage");
+
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
     return(buf);

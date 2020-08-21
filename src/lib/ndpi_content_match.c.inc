@@ -9139,6 +9139,13 @@ ndpi_protocol_match host_match[] =
 
    { ".net.anydesk.com",              "AnyDesk",        NDPI_PROTOCOL_ANYDESK, NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS, NDPI_PROTOCOL_ACCEPTABLE },
 
+   { "discordapp.com",               "Discord",        NDPI_PROTOCOL_DISCORD, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
+   { "discordapp.net",               "Discord",        NDPI_PROTOCOL_DISCORD, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
+   { "discord.com",                  "Discord",        NDPI_PROTOCOL_DISCORD, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
+   { "discord.gg",                   "Discord",        NDPI_PROTOCOL_DISCORD, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
+   { "discord.media",                "Discord",        NDPI_PROTOCOL_DISCORD, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
+   
+
    { NULL, NULL, NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_SAFE }
   };
 
@@ -9175,6 +9182,21 @@ static ndpi_category_match category_match[] = {
    { "skyq.sky.com",                     NDPI_PROTOCOL_CATEGORY_STREAMING },
    { "iptv.sky.",                        NDPI_PROTOCOL_CATEGORY_STREAMING },
    { "pcdn.skycdn.",                     NDPI_PROTOCOL_CATEGORY_STREAMING },
+
+   /* https://success.tanaza.com/s/article/How-Automatic-Detection-of-Captive-Portal-works */
+   { "captive.apple.com",                NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "thinkdifferent.us",                NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "airport.us",                       NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "gsp1.apple.com",                   NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "msftconnecttest.com",              NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "testconnectivity.microsoft.com",   NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "msftncsi.com",                     NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "msftncsi.com.edgesuite.net",       NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "teredo.ipv6.microsoft.com",        NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "teredo.ipv6.microsoft.com.nsatc.net",   NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "detectportal.firefox.com",         NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "connectivitycheck.android.com",    NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
+   { "connectivitycheck.gstatic.com",    NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK },
 
    /* Hulu Streaming services AS23286 */
    { "8.28.124.0/24",                   NDPI_PROTOCOL_CATEGORY_STREAMING },
@@ -9327,7 +9349,7 @@ static const char *ndpi_en_popular_bigrams[] = {
 static const char *ndpi_en_impossible_bigrams[] = {
   "bk", "bq", "bx", "cb", "cf", "cg", "cj", "cp", "cv", "cw", "cx", "dx", "fk", "fq", "fv", "fx", /* "ee", removed it can be found in 'meeting' */
   "fz", "gq", "gv", "gx", "hh", "hk", "hv", "hx", "hz", "iy", "jb", /* "jc", jcrew.com */ "jd", "jf", "jg", "jh", "jk",
-  "jl", "jm", "jn", "jp", "jq", /* "jr",*/  /* "js", */ "jt", "jv", "jw", "jx", "jy", "jz", "kg", "kq", "kv", "kx",
+  "jl", "jm", "jn", "jp", "jq", /* "jr",*/  /* "js", */ "jt", "jv", "jw", "jx", "jy", "jz", /* "kg", */ "kq", "kv", "kx",
   "kz", "lq", "lx", /* "mg" tamgrt.com , */ "mj", /* "mq", mqtt */  "mx", "mz", "pq", "pv", "px", "qb", "qc", "qd", "qe", "qf", "ii",
   "qg", "qh", "qj", "qk", "ql", "qm", "qn", "qo", "qp", "qr", "qs", "qt", "qv", "qw", "qx", "qy", "uu",
   "qz", "sx", "sz", "tq", "tx", "vb", "vc", "vd", "vf", "vg", "vh", "vj", "vm", "vn", /* "vp", Removed for vpbank.com */ "bw", /* "vk", "zr" Removed for kavkazr */

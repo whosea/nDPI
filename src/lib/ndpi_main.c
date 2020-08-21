@@ -953,8 +953,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "Sopcast", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE_58, 0 /* can_have_a_subprotocol */,
-			  no_master, no_master, "Free58", NDPI_PROTOCOL_CATEGORY_VIDEO,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_DISCORD, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "Discord", NDPI_PROTOCOL_CATEGORY_COLLABORATIVE,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_TVUPLAYER, 0 /* can_have_a_subprotocol */,
@@ -1532,6 +1532,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, "AnyDesk", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SOAP, 1 /* no subprotocol */,
+              no_master, no_master, "SOAP", NDPI_PROTOCOL_CATEGORY_RPC,
+              ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+              ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -1924,7 +1928,7 @@ static const char *categories[] = {
 				   "Shopping",
 				   "Productivity",
 				   "FileSharing",
-				   "",
+				   "ConnectivityCheck",
 				   "",
 				   "",
 				   "",
@@ -2623,79 +2627,85 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
     }
   }
 
-    if (def == NULL) {
-        if (!do_add) {
-            /* We need to remove a rule */
-            NDPI_LOG_ERR(ndpi_str, "Unable to find protocol '%s': skipping rule '%s'\n", proto, rule);
-            return (-3);
-        } else {
-            ndpi_port_range ports_a[MAX_DEFAULT_PORTS], ports_b[MAX_DEFAULT_PORTS];
-            u_int16_t no_master[2] = {NDPI_PROTOCOL_NO_MASTER_PROTO, NDPI_PROTOCOL_NO_MASTER_PROTO};
+  if(def == NULL) {
+    if(!do_add) {
+      /* We need to remove a rule */
+      NDPI_LOG_ERR(ndpi_str, "Unable to find protocol '%s': skipping rule '%s'\n", proto, rule);
+      return(-3);
+    } else {
+      ndpi_port_range ports_a[MAX_DEFAULT_PORTS], ports_b[MAX_DEFAULT_PORTS];
+      u_int16_t no_master[2] = {NDPI_PROTOCOL_NO_MASTER_PROTO, NDPI_PROTOCOL_NO_MASTER_PROTO};
 
-            if (ndpi_str->ndpi_num_custom_protocols >= (NDPI_MAX_NUM_CUSTOM_PROTOCOLS - 1)) {
-                NDPI_LOG_ERR(ndpi_str, "Too many protocols defined (%u): skipping protocol %s\n",
-                             ndpi_str->ndpi_num_custom_protocols, proto);
-                return (-2);
-            }
+      if(ndpi_str->ndpi_num_custom_protocols >= (NDPI_MAX_NUM_CUSTOM_PROTOCOLS - 1)) {
+	NDPI_LOG_ERR(ndpi_str, "Too many protocols defined (%u): skipping protocol %s\n",
+		     ndpi_str->ndpi_num_custom_protocols, proto);
+	return(-2);
+      }
 
-            ndpi_set_proto_defaults(
-                ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, ndpi_str->ndpi_num_supported_protocols,
-                0 /* can_have_a_subprotocol */, no_master, no_master, proto,
-                NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, /* TODO add protocol category support in rules */
-                ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
-                ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-            def = &ndpi_str->proto_defaults[ndpi_str->ndpi_num_supported_protocols];
-            subprotocol_id = ndpi_str->ndpi_num_supported_protocols;
-            ndpi_str->ndpi_num_supported_protocols++, ndpi_str->ndpi_num_custom_protocols++;
-        }
+      ndpi_set_proto_defaults(
+			      ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, ndpi_str->ndpi_num_supported_protocols,
+			      0 /* can_have_a_subprotocol */, no_master, no_master, proto,
+			      NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, /* TODO add protocol category support in rules */
+			      ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			      ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+      def = &ndpi_str->proto_defaults[ndpi_str->ndpi_num_supported_protocols];
+      subprotocol_id = ndpi_str->ndpi_num_supported_protocols;
+      ndpi_str->ndpi_num_supported_protocols++, ndpi_str->ndpi_num_custom_protocols++;
+    }
+  }
+
+  while ((elem = strsep(&rule, ",")) != NULL) {
+    char *attr = elem, *value = NULL;
+    ndpi_port_range range;
+    int is_tcp = 0, is_udp = 0, is_ip = 0;
+
+    if(strncmp(attr, "tcp:", 4) == 0)
+      is_tcp = 1, value = &attr[4];
+    else if(strncmp(attr, "udp:", 4) == 0)
+      is_udp = 1, value = &attr[4];
+    else if(strncmp(attr, "ip:", 3) == 0)
+      is_ip = 1, value = &attr[3];
+    else if(strncmp(attr, "host:", 5) == 0) {
+      /* host:"<value>",host:"<value>",.....@<subproto> */
+      u_int i, max_len;
+      
+      value = &attr[5];
+      if(value[0] == '"')
+	value++; /* remove leading " */
+
+      max_len = strlen(value) - 1;
+      if(value[max_len] == '"')
+	value[max_len] = '\0'; /* remove trailing " */
+
+      for(i=0; i<max_len; i++) value[i] = tolower(value[i]);
     }
 
-    while ((elem = strsep(&rule, ",")) != NULL) {
-        char *attr = elem, *value = NULL;
-        ndpi_port_range range;
-        int is_tcp = 0, is_udp = 0, is_ip = 0;
+    if (is_tcp || is_udp) {
+        u_int p_low, p_high;
 
-        if (strncmp(attr, "tcp:", 4) == 0)
-            is_tcp = 1, value = &attr[4];
-        else if (strncmp(attr, "udp:", 4) == 0)
-            is_udp = 1, value = &attr[4];
-        else if (strncmp(attr, "ip:", 3) == 0)
-            is_ip = 1, value = &attr[3];
-        else if (strncmp(attr, "host:", 5) == 0) {
-            /* host:"<value>",host:"<value>",.....@<subproto> */
-            value = &attr[5];
-            if (value[0] == '"')
-                value++; /* remove leading " */
-            if (value[strlen(value) - 1] == '"')
-                value[strlen(value) - 1] = '\0'; /* remove trailing " */
-        }
+        if (sscanf(value, "%u-%u", &p_low, &p_high) == 2)
+            range.port_low = p_low, range.port_high = p_high;
+        else
+            range.port_low = range.port_high = atoi(&elem[4]);
 
-        if (is_tcp || is_udp) {
-            u_int p_low, p_high;
-
-            if (sscanf(value, "%u-%u", &p_low, &p_high) == 2)
-                range.port_low = p_low, range.port_high = p_high;
-            else
-                range.port_low = range.port_high = atoi(&elem[4]);
-
-            if (do_add)
-                addDefaultPort(ndpi_str, &range, def, 1 /* Custom user proto */,
-                               is_tcp ? &ndpi_str->tcpRoot : &ndpi_str->udpRoot, __FUNCTION__, __LINE__);
-            else
-                removeDefaultPort(&range, def, is_tcp ? &ndpi_str->tcpRoot : &ndpi_str->udpRoot);
-        } else if (is_ip) {
-            /* NDPI_PROTOCOL_TOR */
-            ndpi_add_host_ip_subprotocol(ndpi_str, value, subprotocol_id);
-        } else if(value) {
-            if (do_add)
-                ndpi_add_host_url_subprotocol(ndpi_str, value, subprotocol_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED,
-                                              NDPI_PROTOCOL_ACCEPTABLE);
-            else
-                ndpi_remove_host_url_subprotocol(ndpi_str, value, subprotocol_id);
-        }
+        if (do_add)
+            addDefaultPort(ndpi_str, &range, def, 1 /* Custom user proto */,
+                           is_tcp ? &ndpi_str->tcpRoot : &ndpi_str->udpRoot, __FUNCTION__, __LINE__);
+        else
+            removeDefaultPort(&range, def, is_tcp ? &ndpi_str->tcpRoot : &ndpi_str->udpRoot);
+    } else if (is_ip) {
+        /* NDPI_PROTOCOL_TOR */
+        ndpi_add_host_ip_subprotocol(ndpi_str, value, subprotocol_id);
+    } else if(value) {
+        if (do_add)
+            ndpi_add_host_url_subprotocol(ndpi_str, value, subprotocol_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED,
+                                          NDPI_PROTOCOL_ACCEPTABLE);
+        else
+            ndpi_remove_host_url_subprotocol(ndpi_str, value, subprotocol_id);
     }
+  }
 
-    return(0);
+  return(0);
 }
 
 /* ******************************************************************** */
@@ -3381,6 +3391,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* WEBSOCKET */
   init_websocket_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* SOAP */
+  init_soap_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
@@ -4836,21 +4849,34 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 
     if(found
        && (found->proto->protoId != NDPI_PROTOCOL_UNKNOWN)
-       && (found->proto->protoId != ret.master_protocol)) {
+       && (found->proto->protoId != ret.master_protocol)
+       && (found->proto->protoId != ret.app_protocol)
+       ) {
       // printf("******** %u / %u\n", found->proto->protoId, ret.master_protocol);
 
       if(!ndpi_check_protocol_port_mismatch_exceptions(ndpi_str, flow, found, &ret))
 	NDPI_SET_BIT(flow->risk, NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT);
     } else if(default_ports && (default_ports[0] != 0)) {
-      u_int8_t found = 0, i;
+      u_int8_t found = 0, i, num_loops = 0;
 
+    check_default_ports:
       for(i=0; (i<MAX_DEFAULT_PORTS) && (default_ports[i] != 0); i++) {
 	if((default_ports[i] == sport) || (default_ports[i] == dport)) {
 	  found = 1;
 	  break;
-	}
+	}	
       } /* for */
 
+      if((num_loops == 0) && (!found)) {
+	if(flow->packet.udp)
+	  default_ports = ndpi_str->proto_defaults[ret.app_protocol].udp_default_ports;
+	else
+	  default_ports = ndpi_str->proto_defaults[ret.app_protocol].tcp_default_ports;
+	
+	num_loops = 1;
+	goto check_default_ports;
+      }
+      
       if(!found) {
 	// printf("******** Invalid default port\n");
 	NDPI_SET_BIT(flow->risk, NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT);
@@ -6228,7 +6254,7 @@ u_int16_t ndpi_match_host_subprotocol(struct ndpi_detection_module_struct *ndpi_
 int ndpi_match_hostname_protocol(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow,
                                  u_int16_t master_protocol, char *name, u_int name_len) {
   ndpi_protocol_match_result ret_match;
-  u_int16_t subproto, what_len;
+  u_int16_t subproto, what_len, i;
   char *what;
 
   if((name_len > 2) && (name[0] == '*') && (name[1] == '.'))
@@ -6236,6 +6262,9 @@ int ndpi_match_hostname_protocol(struct ndpi_detection_module_struct *ndpi_struc
   else
     what = name, what_len = name_len;
 
+  /* Convert it first to lowercase: we assume meory is writable as in nDPI dissctors */
+  for(i=0; i<name_len; i++) what[i] = tolower(what[i]);
+  
   subproto = ndpi_match_host_subprotocol(ndpi_struct, flow, what, what_len, &ret_match, master_protocol);
 
   if(subproto != NDPI_PROTOCOL_UNKNOWN) {
@@ -6700,7 +6729,7 @@ static int enough(int a, int b) {
 
 /* ******************************************************************** */
 
-// #define DGA_DEBUG 1
+/* #define DGA_DEBUG 1 */
 
 int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 			struct ndpi_flow_struct *flow,
@@ -6777,18 +6806,16 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	printf("-> Checking %c%c\n", word[i], word[i+1]);
 #endif
 
-	if(ndpi_match_bigram(ndpi_str, &ndpi_str->bigrams_automa, &word[i])) {
-	  num_found++;
-	} else {
-	  if(ndpi_match_bigram(ndpi_str,
-			       &ndpi_str->impossible_bigrams_automa,
-			       &word[i])) {
+	if(ndpi_match_bigram(ndpi_str,
+			     &ndpi_str->impossible_bigrams_automa,
+			     &word[i])) {
 #ifdef DGA_DEBUG
-	    printf("IMPOSSIBLE %s\n", &word[i]);
+	  printf("IMPOSSIBLE %s\n", &word[i]);
 #endif
-	    num_impossible++;
-	  }
-	}
+	  num_impossible++;
+	} else if(ndpi_match_bigram(ndpi_str, &ndpi_str->bigrams_automa, &word[i])) {
+	  num_found++;
+	}	      
       } /* for */
     } /* for */
 

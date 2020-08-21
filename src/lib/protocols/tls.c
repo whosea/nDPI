@@ -326,7 +326,9 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 	printf("[TLS] %s() IssuerDN [%s]\n", __FUNCTION__, rdnSeqBuf);
 #endif
 
-	if(rdn_len) flow->protos.stun_ssl.ssl.issuerDN = ndpi_strdup(rdnSeqBuf);
+	if(rdn_len && (flow->protos.stun_ssl.ssl.issuerDN == NULL))
+	  flow->protos.stun_ssl.ssl.issuerDN = ndpi_strdup(rdnSeqBuf);
+	
 	rdn_len = 0; /* Reset buffer */
       }
 
@@ -1442,6 +1444,13 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	    if((flow->protos.stun_ssl.ssl.ssl_version >= 0x0303) /* >= TLSv1.2 */
 	       && (flow->protos.stun_ssl.ssl.alpn == NULL) /* No ALPN */) {
 	      NDPI_SET_BIT(flow->risk, NDPI_TLS_NOT_CARRYING_HTTPS);
+	    }
+
+	    /* Suspicious Domain Fronting:
+	       https://github.com/SixGenInc/Noctilucent/blob/master/docs/ */
+	    if(flow->protos.stun_ssl.ssl.encrypted_sni.esni &&
+	       flow->protos.stun_ssl.ssl.client_requested_server_name[0] != '\0') {
+	      NDPI_SET_BIT(flow->risk, NDPI_TLS_SUSPICIOUS_ESNI_USAGE);
 	    }
 
 	    return(2 /* Client Certificate */);

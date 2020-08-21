@@ -87,7 +87,7 @@ typedef enum {
   NDPI_PROTOCOL_ZATTOO                = 55,
   NDPI_PROTOCOL_SHOUTCAST             = 56,
   NDPI_PROTOCOL_SOPCAST               = 57,
-  NDPI_PROTOCOL_FREE_58               = 58, /* Free */
+  NDPI_PROTOCOL_DISCORD               = 58,
   NDPI_PROTOCOL_TVUPLAYER             = 59,
   NDPI_PROTOCOL_HTTP_DOWNLOAD         = 60,
   NDPI_PROTOCOL_QQLIVE                = 61,
@@ -282,6 +282,7 @@ typedef enum {
   NDPI_PROTOCOL_MSTEAMS               = 250,
   NDPI_PROTOCOL_WEBSOCKET             = 251, /* Leonn Paiva <leonn.paiva@gmail.com> */
   NDPI_PROTOCOL_ANYDESK               = 252, /* Toni Uhlig <matzeton@googlemail.com> */
+  NDPI_PROTOCOL_SOAP                  = 253, /* Toni Uhlig <matzeton@googlemail.com> */
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_protocol_ids.h"
