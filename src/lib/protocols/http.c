@@ -197,7 +197,7 @@ static void ndpi_int_http_add_connection(struct ndpi_detection_module_struct *nd
   if((flow->guessed_host_protocol_id == NDPI_PROTOCOL_UNKNOWN) || (http_protocol != NDPI_PROTOCOL_HTTP))
     flow->guessed_host_protocol_id = http_protocol;
 
-  ndpi_int_reset_protocol(flow);
+  // ndpi_int_reset_protocol(flow);
   ndpi_set_detected_protocol(ndpi_struct, flow, flow->guessed_host_protocol_id, NDPI_PROTOCOL_HTTP);
 
   /* This is necessary to inform the core to call this dissector again */
@@ -265,11 +265,10 @@ static void ndpi_check_user_agent(struct ndpi_detection_module_struct *ndpi_stru
 
   // printf("***** [%s:%d] ==> '%s'\n", __FILE__, __LINE__, ua);
   // printf("***** %u\n", ndpi_check_dga_name(ndpi_struct, NULL, "uclient-fetch]"));
-    
+
   if((strlen(ua) < 4)
      || (!strncmp(ua, "test", 4))
      || (!strncmp(ua, "<?", 2))
-     || strchr(ua, ';')
      || strchr(ua, '{')
      || strchr(ua, '}')
      || ndpi_check_dga_name(ndpi_struct, NULL, ua)
@@ -345,32 +344,14 @@ static void check_content_type_and_change_protocol(struct ndpi_detection_module_
 	ndpi_check_http_url(ndpi_struct, flow, &flow->http.url[packet->host_line.len]);
       }
 
-      if(flow->packet.http_method.len < 3)
-        flow->http.method = NDPI_HTTP_METHOD_UNKNOWN;
-      else {
-        switch(flow->packet.http_method.ptr[0]) {
-        case 'O':  flow->http.method = NDPI_HTTP_METHOD_OPTIONS; break;
-        case 'G':  flow->http.method = NDPI_HTTP_METHOD_GET; break;
-        case 'H':  flow->http.method = NDPI_HTTP_METHOD_HEAD; break;
-
-        case 'P':
-          switch(flow->packet.http_method.ptr[1]) {
-          case 'A': flow->http.method = NDPI_HTTP_METHOD_PATCH; break;
-          case 'O': flow->http.method = NDPI_HTTP_METHOD_POST; break;
-          case 'U': flow->http.method = NDPI_HTTP_METHOD_PUT; break;
-          }
-          break;
-
-        case 'D':   flow->http.method = NDPI_HTTP_METHOD_DELETE; break;
-        case 'T':   flow->http.method = NDPI_HTTP_METHOD_TRACE; break;
-        case 'C':   flow->http.method = NDPI_HTTP_METHOD_CONNECT; break;
-        default:
-          flow->http.method = NDPI_HTTP_METHOD_UNKNOWN;
-          break;
-        }
-      }
+      flow->http.method = ndpi_http_str2method((const char*)flow->packet.http_method.ptr, flow->packet.http_method.len);
     }
 
+  if(packet->server_line.ptr != NULL && (packet->server_line.len > 7)) {
+    if(strncmp((const char *)packet->server_line.ptr, "ntopng ", 7) == 0)
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_NTOP, NDPI_PROTOCOL_HTTP);
+  }
+  
   if(packet->user_agent_line.ptr != NULL && packet->user_agent_line.len != 0) {
     /**
        Format examples:
@@ -621,7 +602,7 @@ static u_int16_t http_request_url_offset(struct ndpi_detection_module_struct *nd
   /* Check first char */
   if(!packet->payload_packet_len || !strchr(http_fs,packet->payload[0]))
     return 0;
-  
+
   /**
      FIRST PAYLOAD PACKET FROM CLIENT
   **/

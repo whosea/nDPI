@@ -44,21 +44,27 @@
 #include "libahocorasick.h"
 #include "libcache.h"
 
+#ifdef __KERNEL__
+  #undef HAVE_LIBGCRYPT
+  #include "ndpi_kernel_compat.c"
+  #ifdef HAVE_HYPERSCAN
+    #error HYPERSCAN
+  #endif
+  #undef MATCH_DEBUG
+#else
+  #ifdef HAVE_LIBGCRYPT
+  #include <gcrypt.h>
+  #endif
+#endif
+
 #include "ndpi_network_list.c.inc"
+
 #include "ndpi_content_match.c.inc"
 #include "third_party/include/ndpi_patricia.h"
 #include "third_party/include/ht_hash.h"
 #include "third_party/include/ndpi_md5.h"
 
 /* #define MATCH_DEBUG 1 */
-
-#ifdef __KERNEL__
-  #include "ndpi_kernel_compat.c"
-  #ifdef HAVE_HYPERSCAN
-    #error HYPERSCAN
-  #endif
-  #undef MATCH_DEBUG
-#endif
 
 int ndpi_debug_print_level = 0;
 
@@ -70,6 +76,9 @@ int ndpi_debug_print_level = 0;
 extern u_int32_t get_stun_lru_key(struct ndpi_flow_struct *flow, u_int8_t rev);
 
 static int _ndpi_debug_callbacks = 0;
+
+/* #define DGA_DEBUG 1 */
+/* #define MATCH_DEBUG 1 */
 
 /* ****************************************** */
 
@@ -839,7 +848,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "eDonkey", NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_UNSAFE, NDPI_PROTOCOL_BITTORRENT, 0 /* can_have_a_subprotocol */,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_BITTORRENT, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "BitTorrent", NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
 			  ndpi_build_default_ports(ports_a, 51413, 53646, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 6771, 51413, 0, 0, 0) /* UDP */);
@@ -881,7 +890,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_a, 11095, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_MODBUS, 1 /* no subprotocol */, no_master,
-			  no_master, "Modbus", NDPI_PROTOCOL_CATEGORY_NETWORK, /* Perhaps IoT in the future */
+			  no_master, "Modbus", NDPI_PROTOCOL_CATEGORY_IOT_SCADA,
 			  ndpi_build_default_ports(ports_a, 502, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_WHATSAPP_CALL,
@@ -1337,6 +1346,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "TeamSpeak", NDPI_PROTOCOL_CATEGORY_VOIP,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_POTENTIALLY_DANGEROUS, NDPI_PROTOCOL_TOR, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "Tor", NDPI_PROTOCOL_CATEGORY_VPN,
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SKINNY, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "CiscoSkinny", NDPI_PROTOCOL_CATEGORY_VOIP,
 			  ndpi_build_default_ports(ports_a, 2000, 0, 0, 0, 0) /* TCP */,
@@ -1491,12 +1504,12 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  NDPI_PROTOCOL_CATEGORY_CLOUD, ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DNP3, 1 /* no subprotocol */, no_master,
-			  no_master, "DNP3", NDPI_PROTOCOL_CATEGORY_NETWORK,
+			  no_master, "DNP3", NDPI_PROTOCOL_CATEGORY_IOT_SCADA,
 			  ndpi_build_default_ports(ports_a, 20000, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_IEC60870, 1 /* no subprotocol */,
 			  no_master, no_master, "IEC60870",
-			  NDPI_PROTOCOL_CATEGORY_NETWORK, /* Perhaps IoT in the future */
+			  NDPI_PROTOCOL_CATEGORY_IOT_SCADA,
 			  ndpi_build_default_ports(ports_a, 2404, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_BLOOMBERG, 1 /* no subprotocol */,
@@ -1929,7 +1942,7 @@ static const char *categories[] = {
 				   "Productivity",
 				   "FileSharing",
 				   "ConnectivityCheck",
-				   "",
+				   "IoT-Scada",
 				   "",
 				   "",
 				   "",
@@ -2027,6 +2040,24 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   set_ndpi_debug_function(ndpi_str, (ndpi_debug_function_ptr) ndpi_debug_printf);
   NDPI_BITMASK_RESET(ndpi_str->debug_bitmask);
 #endif /* NDPI_ENABLE_DEBUG_MESSAGES */
+#endif
+
+#ifdef HAVE_LIBGCRYPT
+  if(!(prefs & ndpi_dont_init_libgcrypt)) {
+    if(!gcry_control (GCRYCTL_INITIALIZATION_FINISHED_P)) {
+      const char *gcrypt_ver = gcry_check_version(NULL);
+      if (!gcrypt_ver) {
+        NDPI_LOG_ERR(ndpi_str, "Error initializing libgcrypt\n");
+        ndpi_free(ndpi_str);
+        return NULL;
+      }
+      NDPI_LOG_DBG(ndpi_str, "Libgcrypt %s\n", gcrypt_ver);
+      /* Tell Libgcrypt that initialization has completed. */
+      gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+    }
+  } else {
+    NDPI_LOG_DBG(ndpi_str, "Libgcrypt initialization skipped\n");
+  }
 #endif
 
   if((ndpi_str->protocols_ptree = ndpi_New_Patricia(32 /* IPv4 */)) != NULL)
@@ -2668,7 +2699,7 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
     else if(strncmp(attr, "host:", 5) == 0) {
       /* host:"<value>",host:"<value>",.....@<subproto> */
       u_int i, max_len;
-      
+
       value = &attr[5];
       if(value[0] == '"')
 	value++; /* remove leading " */
@@ -4540,7 +4571,6 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
      Skype for a host doing MS Teams means MS Teams
      (MS Teams uses Skype as transport protocol for voice/video)
   */
-
   if(flow) {
     /* Do not go for DNS when there is an application protocol. Example DNS.Apple */
     if((flow->detected_protocol_stack[1] != NDPI_PROTOCOL_UNKNOWN)
@@ -4587,6 +4617,20 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
     }
     break;
   } /* switch */
+
+  if(flow) {
+    switch(ndpi_get_proto_breed(ndpi_str, ret->app_protocol)) {
+    case NDPI_PROTOCOL_UNSAFE:
+    case NDPI_PROTOCOL_POTENTIALLY_DANGEROUS:
+    case NDPI_PROTOCOL_DANGEROUS:
+      NDPI_SET_BIT(flow->risk, NDPI_UNSAFE_PROTOCOL);
+      break;
+    default:
+      /* Nothign to do */
+      break;
+    }
+  }
+
 }
 
 /* ********************************************************************************* */
@@ -4864,7 +4908,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 	if((default_ports[i] == sport) || (default_ports[i] == dport)) {
 	  found = 1;
 	  break;
-	}	
+	}
       } /* for */
 
       if((num_loops == 0) && (!found)) {
@@ -4872,11 +4916,11 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 	  default_ports = ndpi_str->proto_defaults[ret.app_protocol].udp_default_ports;
 	else
 	  default_ports = ndpi_str->proto_defaults[ret.app_protocol].tcp_default_ports;
-	
+
 	num_loops = 1;
 	goto check_default_ports;
       }
-      
+
       if(!found) {
 	// printf("******** Invalid default port\n");
 	NDPI_SET_BIT(flow->risk, NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT);
@@ -6264,7 +6308,7 @@ int ndpi_match_hostname_protocol(struct ndpi_detection_module_struct *ndpi_struc
 
   /* Convert it first to lowercase: we assume meory is writable as in nDPI dissctors */
   for(i=0; i<name_len; i++) what[i] = tolower(what[i]);
-  
+
   subproto = ndpi_match_host_subprotocol(ndpi_struct, flow, what, what_len, &ret_match, master_protocol);
 
   if(subproto != NDPI_PROTOCOL_UNKNOWN) {
@@ -6327,7 +6371,8 @@ void ndpi_free_flow(struct ndpi_flow_struct *flow) {
     if(flow->kerberos_buf.pktbuf)
       ndpi_free(flow->kerberos_buf.pktbuf);
 
-    if(flow_is_proto(flow, NDPI_PROTOCOL_TLS)) {
+    if(flow_is_proto(flow, NDPI_PROTOCOL_TLS) ||
+       flow_is_proto(flow, NDPI_PROTOCOL_QUIC)) {
       if(flow->protos.stun_ssl.ssl.server_names)
 	ndpi_free(flow->protos.stun_ssl.ssl.server_names);
 
@@ -6438,6 +6483,13 @@ void NDPI_DUMP_BITMASK(NDPI_PROTOCOL_BITMASK a)
 u_int16_t ndpi_get_api_version(void)
 {
   return(NDPI_API_VERSION);
+}
+
+const char *ndpi_get_gcrypt_version(void) {
+#ifdef HAVE_LIBGCRYPT
+  return gcry_check_version(NULL);
+#endif
+  return NULL;
 }
 
 ndpi_proto_defaults_t *ndpi_get_proto_defaults(struct ndpi_detection_module_struct *ndpi_str) {
@@ -6729,12 +6781,12 @@ static int enough(int a, int b) {
 
 /* ******************************************************************** */
 
-/* #define DGA_DEBUG 1 */
-
 int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 			struct ndpi_flow_struct *flow,
 			char *name) {
   int len, rc = 0;
+  u_int8_t max_num_char_repetitions = 0, last_char = 0, num_char_repetitions = 0;
+  u_int8_t max_domain_element_len = 0, curr_domain_element_len = 0;
 
   len = strlen(name);
 
@@ -6743,10 +6795,80 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
     char tmp[128], *word, *tok_tmp;
 
     len = snprintf(tmp, sizeof(tmp)-1, "%s", name);
-    if(len < 0) return(0);
+    if(len < 0) {
+#ifdef DGA_DEBUG
+      printf("[DGA] Too short");
+#endif
+      return(0);
+    }
 
     for(i=0, j=0; (i<len) && (j<(sizeof(tmp)-1)); i++) {
-	tmp[j++] = tolower(name[i]);
+	tmp[j] = tolower(name[i]);
+
+	if(last_char == tmp[j]) {
+	  if(++num_char_repetitions > max_num_char_repetitions)
+	    max_num_char_repetitions = num_char_repetitions;
+	} else
+	  num_char_repetitions = 1, last_char = tmp[j];
+
+	switch(tmp[j]) {
+	case '.':
+	case '-':
+	case '_':
+	case '/':
+	case ')':
+	case '(':
+	case ';':
+	case ':':
+	case '[':
+	case ']':
+	case ' ':
+	  /*
+	    Domain/word separator chars
+
+	    NOTE:
+	    this function is used also to detect other type of issues
+	    such as invalid/suspiciuous user agent
+	   */
+	  if(curr_domain_element_len > max_domain_element_len)
+	    max_domain_element_len = curr_domain_element_len;
+
+	  curr_domain_element_len = 0;
+	break;
+
+	default:
+	  curr_domain_element_len++;
+	  break;
+	}
+
+	j++;
+    }
+
+    if(curr_domain_element_len > max_domain_element_len)
+      max_domain_element_len = curr_domain_element_len;
+
+#ifdef DGA_DEBUG
+    printf("[DGA] [max_num_char_repetitions: %u][max_domain_element_len: %u]\n",
+	   max_num_char_repetitions, max_domain_element_len);
+#endif
+
+    if(
+       (max_num_char_repetitions > 5 /* num or consecutive repeated chars */)
+       /*
+	 In case of a name with too many consecutive chars an alert is triggered
+	 This is the case for instance of the wildcard DNS query used by NetBIOS
+	 (ckaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) and that can be exploited
+	 for reflection attacks
+	 - https://www.akamai.com/uk/en/multimedia/documents/state-of-the-internet/ddos-reflection-netbios-name-server-rpc-portmap-sentinel-udp-threat-advisory.pdf
+	 - http://ubiqx.org/cifs/NetBIOS.html
+       */
+       || (max_domain_element_len >= 19 /* word too long. Example bbcbedxhgjmdobdprmen.com */)
+       ) {
+      if(flow) NDPI_SET_BIT(flow->risk, NDPI_SUSPICIOUS_DGA_DOMAIN);
+#ifdef DGA_DEBUG
+      printf("[DGA] Found!");
+#endif
+      return(1);
     }
 
     tmp[j] = '\0';
@@ -6815,7 +6937,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	  num_impossible++;
 	} else if(ndpi_match_bigram(ndpi_str, &ndpi_str->bigrams_automa, &word[i])) {
 	  num_found++;
-	}	      
+	}
       } /* for */
     } /* for */
 
@@ -6837,6 +6959,10 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	     name, num_found, num_impossible);
 #endif
   }
+
+#ifdef DGA_DEBUG
+  printf("[DGA] Result: %u", rc);
+#endif
 
   return(rc);
 }

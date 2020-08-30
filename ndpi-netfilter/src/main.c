@@ -2503,7 +2503,7 @@ static int __net_init ndpi_net_init(struct net *net)
 		n->mark[i].mark = n->mark[i].mask = 0;
         }
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
-	pr_info("ndpi_lib_trace %s\n",ndpi_lib_trace ? "Enabled":"Disabled");
+//	pr_info("ndpi_lib_trace %s\n",ndpi_lib_trace ? "Enabled":"Disabled");
 	n->ndpi_struct->ndpi_log_level = ndpi_lib_trace;
 	set_ndpi_debug_function(n->ndpi_struct, ndpi_lib_trace ? debug_printf:NULL);
 #endif

@@ -86,13 +86,13 @@ typedef enum {
   NDPI_SSH_OBSOLETE_SERVER_VERSION_OR_CIPHER,
   NDPI_SMB_INSECURE_VERSION,
   NDPI_TLS_SUSPICIOUS_ESNI_USAGE,
-  NDPI_BLACKLISTED_HOST,
+  NDPI_UNSAFE_PROTOCOL,
   
   /* Leave this as last member */
-  NDPI_MAX_RISK
+  NDPI_MAX_RISK /* must be <= 31 due to (**) */
 } ndpi_risk_enum;
 
-typedef u_int32_t ndpi_risk;
+typedef u_int32_t ndpi_risk; /* (**) */
 
 /* NDPI_VISIT */
 typedef enum {
@@ -501,6 +501,10 @@ PACK_ON struct tinc_cache_entry {
   u_int16_t dst_port;
 } PACK_OFF;
 
+/* 
+   In case the typedef below is modified, please update 
+   ndpi_http_method2str (ndpi_utils.c)
+*/
 typedef enum {
 	      NDPI_HTTP_METHOD_UNKNOWN = 0,
 	      NDPI_HTTP_METHOD_OPTIONS,
@@ -971,6 +975,7 @@ typedef enum {
 		 to test connectivity
 	       */
 	      NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK,
+	      NDPI_PROTOCOL_CATEGORY_IOT_SCADA,
 
 	      /* Some custom categories */
 	      CUSTOM_CATEGORY_MINING           = 99,
@@ -1471,6 +1476,7 @@ typedef enum
   {
    ndpi_no_prefs = 0,
    ndpi_dont_load_tor_hosts,
+   ndpi_dont_init_libgcrypt,
   } ndpi_prefs;
 
 typedef struct {
@@ -1558,11 +1564,10 @@ typedef struct {
 struct ndpi_analyze_struct {
   u_int32_t *values;
   u_int32_t min_val, max_val, sum_total, num_data_entries, next_value_insert_index;
-  u_int16_t num_values_array_len /* lenght of the values array */;
+  u_int16_t num_values_array_len /* length of the values array */;
 
   struct {
-    /* https://www.johndcook.com/blog/standard_deviation/ */
-    float mu, q;
+    u_int64_t sum_square_total;
   } stddev;
 };
 

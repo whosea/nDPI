@@ -43,11 +43,21 @@
 #include "ndpi_api.h"
 // FIXME #include "ndpi_config.h"
 
+/* ********************************** */
+
+u_int64_t ndpi_ntohll(u_int64_t v) {
+  union { u_int32_t lv[2]; u_int64_t llv; } u;
+  
+  u.llv = v;
+  
+  return((u_int64_t)ntohl(u.lv[0]) << 32) | (u_int64_t)ntohl(u.lv[1]);
+}
+
 #ifndef __KERNEL__
 
 /* ********************************** */
 
-static u_int64_t ndpi_htonll(u_int64_t v) {
+u_int64_t ndpi_htonll(u_int64_t v) {
   union { u_int32_t lv[2]; u_int64_t llv; } u;
   
   u.lv[0] = htonl(v >> 32);
@@ -56,15 +66,6 @@ static u_int64_t ndpi_htonll(u_int64_t v) {
   return(u.llv);
 }
 
-/* ********************************** */
-
-static u_int64_t ndpi_ntohll(u_int64_t v) {
-  union { u_int32_t lv[2]; u_int64_t llv; } u;
-  
-  u.llv = v;
-  
-  return((u_int64_t)ntohl(u.lv[0]) << 32) | (u_int64_t)ntohl(u.lv[1]);
-}
 
 /* ********************************** */
 
