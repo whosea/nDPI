@@ -1071,6 +1071,11 @@ struct pcre_struct {
 };
 #endif
 
+typedef enum {
+  ndpi_stun_cache,
+  ndpi_hangout_cache
+} ndpi_lru_cache_type;
+
 struct ndpi_detection_module_struct {
   NDPI_PROTOCOL_BITMASK detection_bitmask;
   NDPI_PROTOCOL_BITMASK generic_http_packet_bitmask;
@@ -1186,9 +1191,10 @@ struct ndpi_detection_module_struct {
 
   ndpi_proto_defaults_t proto_defaults[NDPI_MAX_SUPPORTED_PROTOCOLS+NDPI_MAX_NUM_CUSTOM_PROTOCOLS];
 
-  u_int8_t direction_detect_disable:1, /* disable internal detection of packet direction */
-    _pad:7;
+  u_int8_t direction_detect_disable:1, /* disable internal detection of packet direction */ _pad:7;
 
+  void (*ndpi_notify_lru_add_handler_ptr)(ndpi_lru_cache_type cache_type, u_int32_t proto, u_int32_t app_proto);
+  
 #ifdef CUSTOM_NDPI_PROTOCOLS
   #include "../../../nDPI-custom/custom_ndpi_typedefs.h"
 #endif
@@ -1492,8 +1498,9 @@ typedef enum {
   ndpi_serialization_format_csv
 } ndpi_serialization_format;
 
-/* Note: key supports string and uint32 (compressed to uint8/uint16) only,
- * this is also enforced by the API */
+/* Note: 
+ * - up to 16 types (TLV encoding: "4 bit key type" << 4 | "4 bit value type")
+ * - key supports string and uint32 (compressed to uint8/uint16) only, this is also enforced by the API */
 typedef enum {
   ndpi_serialization_unknown = 0,
   ndpi_serialization_end_of_record,
@@ -1506,7 +1513,9 @@ typedef enum {
   ndpi_serialization_int32,
   ndpi_serialization_int64,
   ndpi_serialization_float,
-  ndpi_serialization_string
+  ndpi_serialization_string,
+  ndpi_serialization_start_of_block,
+  ndpi_serialization_end_of_block
 } ndpi_serialization_type;
 
 #define NDPI_SERIALIZER_DEFAULT_HEADER_SIZE 1024
@@ -1605,6 +1614,5 @@ struct ndpi_bin {
     u_int32_t *bins32; /* num_bins bins */
   } u;
 };
-
 
 #endif /* __NDPI_TYPEDEFS_H__ */

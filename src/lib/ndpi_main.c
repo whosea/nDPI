@@ -2021,6 +2021,15 @@ static const char *categories[] = {
 
 /* ******************************************************************** */
 
+#ifdef TEST_LRU_HANDLER
+void test_lru_handler(ndpi_lru_cache_type cache_type, u_int32_t proto, u_int32_t app_proto) {
+
+  printf("[test_lru_handler] %u / %u / %u\n", cache_type, proto, app_proto);
+}
+#endif
+
+/* ******************************************************************** */
+
 struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs prefs) {
   struct ndpi_detection_module_struct *ndpi_str = ndpi_malloc(sizeof(struct ndpi_detection_module_struct));
   int i;
@@ -2036,6 +2045,9 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   memset(ndpi_str, 0, sizeof(struct ndpi_detection_module_struct));
 
 #ifndef __KERNEL__
+#ifdef TEST_LRU_HANDLER
+  ndpi_str->ndpi_notify_lru_add_handler_ptr = test_lru_handler;
+#endif
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
   set_ndpi_debug_function(ndpi_str, (ndpi_debug_function_ptr) ndpi_debug_printf);
   NDPI_BITMASK_RESET(ndpi_str->debug_bitmask);
@@ -3425,6 +3437,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* SOAP */
   init_soap_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* DNScrypt */
+  init_dnscrypt_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
@@ -6781,67 +6796,99 @@ static int enough(int a, int b) {
 
 /* ******************************************************************** */
 
+static u_int8_t endsWith(char *str, char *ends, u_int8_t ends_len) {
+  u_int str_len = str ? strlen(str) : 0;
+  u_int8_t rc;
+  
+  if(str_len < ends_len) return(0);
+
+  rc = (strncmp(&str[str_len-ends_len], ends, ends_len) != 0) ? 0 : 1;
+
+#ifdef DGA_DEBUG
+  printf("[DGA] %s / %s [rc: %u]\n", str, ends, rc);
+#endif
+  
+  return(rc);
+}
+
+/* ******************************************************************** */
+
 int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 			struct ndpi_flow_struct *flow,
-			char *name) {
+			char *name, u_int8_t is_hostname) {
   int len, rc = 0;
-  u_int8_t max_num_char_repetitions = 0, last_char = 0, num_char_repetitions = 0;
-  u_int8_t max_domain_element_len = 0, curr_domain_element_len = 0;
+  u_int8_t max_num_char_repetitions = 0, last_char = 0, num_char_repetitions = 0, num_dots = 0;
+  u_int8_t max_domain_element_len = 0, curr_domain_element_len = 0, first_element_is_numeric = 1;
 
+  if(!name) return(0);
+
+#ifdef DGA_DEBUG
+  printf("[DGA] %s\n", name);
+#endif
+  
   len = strlen(name);
 
   if(len >= 5) {
     int i, j, num_found = 0, num_impossible = 0, num_bigram_checks = 0, num_digits = 0, num_vowels = 0, num_words = 0;
     char tmp[128], *word, *tok_tmp;
-
-    len = snprintf(tmp, sizeof(tmp)-1, "%s", name);
+    u_int max_tmp_len = sizeof(tmp)-1;
+  
+    len = snprintf(tmp, max_tmp_len, "%s", name);
     if(len < 0) {
 #ifdef DGA_DEBUG
       printf("[DGA] Too short");
 #endif
       return(0);
-    }
+    } else
+      tmp[len < max_tmp_len ? len : max_tmp_len] = '\0';
 
-    for(i=0, j=0; (i<len) && (j<(sizeof(tmp)-1)); i++) {
-	tmp[j] = tolower(name[i]);
+    for(i=0, j=0; (i<len) && (j<max_tmp_len); i++) {
+      tmp[j] = tolower(name[i]);
 
-	if(last_char == tmp[j]) {
-	  if(++num_char_repetitions > max_num_char_repetitions)
-	    max_num_char_repetitions = num_char_repetitions;
-	} else
-	  num_char_repetitions = 1, last_char = tmp[j];
+      if(tmp[j] == '.')
+	num_dots++;
+      else if(num_dots == 0) {
+	if(!isdigit(tmp[j]))
+	  first_element_is_numeric = 0;
+      }
+	
+      if(last_char == tmp[j]) {
+	if(++num_char_repetitions > max_num_char_repetitions)
+	  max_num_char_repetitions = num_char_repetitions;
+      } else
+	num_char_repetitions = 1, last_char = tmp[j];
 
-	switch(tmp[j]) {
-	case '.':
-	case '-':
-	case '_':
-	case '/':
-	case ')':
-	case '(':
-	case ';':
-	case ':':
-	case '[':
-	case ']':
-	case ' ':
-	  /*
-	    Domain/word separator chars
+      switch(tmp[j]) {
+      case '.':
+      case '-':
+      case '_':
+      case '/':
+      case ')':
+      case '(':
+      case ';':
+      case ':':
+      case '[':
+      case ']':
+      case ' ':
+	/*
+	  Domain/word separator chars
 
-	    NOTE:
-	    this function is used also to detect other type of issues
-	    such as invalid/suspiciuous user agent
-	   */
-	  if(curr_domain_element_len > max_domain_element_len)
-	    max_domain_element_len = curr_domain_element_len;
+	  NOTE:
+	  this function is used also to detect other type of issues
+	  such as invalid/suspiciuous user agent
+	*/
+	if(curr_domain_element_len > max_domain_element_len)
+	  max_domain_element_len = curr_domain_element_len;
 
-	  curr_domain_element_len = 0;
+	curr_domain_element_len = 0;
 	break;
 
-	default:
-	  curr_domain_element_len++;
-	  break;
-	}
+      default:
+	curr_domain_element_len++;
+	break;
+      }
 
-	j++;
+      j++;
     }
 
     if(curr_domain_element_len > max_domain_element_len)
@@ -6853,7 +6900,12 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 #endif
 
     if(
-       (max_num_char_repetitions > 5 /* num or consecutive repeated chars */)
+       (is_hostname
+	&& (num_dots > 5)
+	&& (!first_element_is_numeric)
+	&& (!endsWith(tmp, "in-addr.arpa", 12))
+	)
+       || (max_num_char_repetitions > 5 /* num or consecutive repeated chars */)
        /*
 	 In case of a name with too many consecutive chars an alert is triggered
 	 This is the case for instance of the wildcard DNS query used by NetBIOS
