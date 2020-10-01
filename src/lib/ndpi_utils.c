@@ -240,7 +240,7 @@ u_int8_t ndpi_ips_match(u_int32_t src, u_int32_t dst,
 
 /* ****************************************** */
 
-#ifdef WIN32
+#if defined(WIN32) && !defined(__MINGW32__)
 /* http://opensource.apple.com/source/Libc/Libc-186/string.subproj/strcasecmp.c */
 
 /*
@@ -1181,7 +1181,7 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
 
   case NDPI_PROTOCOL_MDNS:
     ndpi_serialize_start_of_block(serializer, "mdns");
-    ndpi_serialize_string_string(serializer, "answer", flow->protos.mdns.answer);
+    ndpi_serialize_string_string(serializer, "answer", (const char*)flow->host_server_name);
     ndpi_serialize_end_of_block(serializer);
     break;
 
@@ -1278,12 +1278,12 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
 	  ndpi_serialize_string_string(serializer, "server_names", flow->protos.stun_ssl.ssl.server_names);
 
 	if(before) {
-          strftime(notBefore, sizeof(notBefore), "%F %T", before);
+          strftime(notBefore, sizeof(notBefore), "%Y-%m-%d %H:%M:%S", before);
           ndpi_serialize_string_string(serializer, "notbefore", notBefore);
         }
 
 	if(after) {
-	  strftime(notAfter, sizeof(notAfter), "%F %T", after);
+	  strftime(notAfter, sizeof(notAfter), "%Y-%m-%d %H:%M:%S", after);
           ndpi_serialize_string_string(serializer, "notafter", notAfter);
         }
 	ndpi_serialize_string_string(serializer, "ja3", flow->protos.stun_ssl.ssl.ja3_client);
@@ -1718,6 +1718,12 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
   case NDPI_UNSAFE_PROTOCOL:
     return("Unsafe Protocol");
 
+  case NDPI_DNS_SUSPICIOUS_TRAFFIC:
+    return("Suspicious DNS traffic"); /* Exfiltration ? */
+    
+  case NDPI_TLS_MISSING_SNI:
+    return("SNI TLS extension was missing");
+    
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
     return(buf);

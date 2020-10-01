@@ -1445,6 +1445,7 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 					 NDPI_PROTOCOL_UNKNOWN);
 	return;
       }
+
       NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
       return;
   bittorrent_found:

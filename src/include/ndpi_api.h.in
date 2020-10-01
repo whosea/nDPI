@@ -346,12 +346,14 @@ extern "C" {
    * @par    ndpi_struct              = the detection module
    * @par    flow                     = the flow given for the detection module
    * @par    ndpi_selection_bitmask   = the protocol selected bitmask
+   * @return number of protocol dissector that have been tried (0 = no more dissectors)
    *
    */
-  void ndpi_check_flow_func(struct ndpi_detection_module_struct *ndpi_struct,
-			    struct ndpi_flow_struct *flow,
-			    NDPI_SELECTION_BITMASK_PROTOCOL_SIZE *ndpi_selection_packet);
+  u_int32_t ndpi_check_flow_func(struct ndpi_detection_module_struct *ndpi_struct,
+				 struct ndpi_flow_struct *flow,
+				 NDPI_SELECTION_BITMASK_PROTOCOL_SIZE *ndpi_selection_packet);
 
+  
   /**
    * Query the pointer to the layer 4 packet
    *

@@ -37,6 +37,7 @@
 #endif
 
 // #define DEBUG_CRYPT
+// #define QUIC_DEBUG
 
 /* This dissector handles GQUIC and IETF-QUIC both.
    Main references:
@@ -49,7 +50,10 @@
    */
 
 extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
-                                    struct ndpi_flow_struct *flow, int is_quic);
+                                    struct ndpi_flow_struct *flow, uint32_t quic_version);
+extern int http_process_user_agent(struct ndpi_detection_module_struct *ndpi_struct,
+                                   struct ndpi_flow_struct *flow,
+                                   const u_int8_t *ua_ptr, u_int16_t ua_ptr_len);
 
 /* Versions */
 #define V_Q024		0x51303234
@@ -67,6 +71,7 @@ extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_st
 #define V_T051		0x54303531
 #define V_MVFST_22	0xfaceb001
 #define V_MVFST_27	0xfaceb002
+#define V_MVFST_EXP	0xfaceb00e
 
 #define QUIC_MAX_CID_LENGTH  20
 
@@ -134,6 +139,7 @@ static int is_version_supported(uint32_t version)
           version == V_T051 ||
 	  version == V_MVFST_22 ||
 	  version == V_MVFST_27 ||
+	  version == V_MVFST_EXP ||
           is_quic_ver_greater_than(version, 23));
 }
 static int is_version_with_encrypted_header(uint32_t version)
@@ -147,9 +153,13 @@ static int is_version_with_tls(uint32_t version)
   return is_version_quic(version) ||
     ((version & 0xFFFFFF00) == 0x54303500) /* T05X */;
 }
+int is_version_with_var_int_transport_params(uint32_t version)
+{
+  return (is_version_quic(version) && is_quic_ver_greater_than(version, 27)) ||
+    (version == V_T051);
+}
 
-
-static int quic_len(const uint8_t *buf, uint64_t *value)
+int quic_len(const uint8_t *buf, uint64_t *value)
 {
   *value = buf[0];
   switch((*value) >> 6) {
@@ -169,6 +179,22 @@ static int quic_len(const uint8_t *buf, uint64_t *value)
     return 0;
   }
 }
+int quic_len_buffer_still_required(uint8_t value)
+{
+  switch(value >> 6) {
+  case 0:
+    return 0;
+  case 1:
+    return 1;
+  case 2:
+    return 3;
+  case 3:
+    return 7;
+  default: /* No Possible */
+    return 0;
+  }
+}
+
 
 static uint16_t gquic_get_u16(const uint8_t *buf, uint32_t version)
 {
@@ -768,7 +794,8 @@ static int quic_derive_initial_secrets(uint32_t version,
 		       sizeof(handshake_salt_draft_22),
                        cid, cid_len, secret);
   } else if(is_quic_ver_less_than(version, 28) ||
-	    version == V_MVFST_27) {
+	    version == V_MVFST_27 ||
+	    version == V_MVFST_EXP) {
     err = hkdf_extract(GCRY_MD_SHA256, handshake_salt_draft_23,
 		       sizeof(handshake_salt_draft_23),
                        cid, cid_len, secret);
@@ -877,7 +904,7 @@ static const uint8_t *get_crypto_data(struct ndpi_detection_module_struct *ndpi_
   const u_int8_t *crypto_data;
   uint32_t counter;
   uint8_t first_nonzero_payload_byte, offset_len;
-  uint64_t unused;
+  uint64_t unused, offset;
 
   counter = 0;
   while(counter < clear_payload_len && clear_payload[counter] == 0)
@@ -908,7 +935,9 @@ static const uint8_t *get_crypto_data(struct ndpi_detection_module_struct *ndpi_
     if(counter + 2 + offset_len + 2 /*gquic_get_u16 reads 2 bytes */  > clear_payload_len)
       return NULL;
     if(clear_payload[counter + 1] != 0x01) {
+#ifdef QUIC_DEBUG
       NDPI_LOG_ERR(ndpi_struct, "Unexpected stream ID version 0x%x\n", version);
+#endif
       return NULL;
     }
     counter += 2 + offset_len;
@@ -941,27 +970,34 @@ static const uint8_t *get_crypto_data(struct ndpi_detection_module_struct *ndpi_
     if(first_nonzero_payload_byte != 0x06) {
       if(first_nonzero_payload_byte != 0x02 &&
          first_nonzero_payload_byte != 0x1C) {
+#ifdef QUIC_DEBUG
         NDPI_LOG_ERR(ndpi_struct, "Unexpected frame 0x%x\n", first_nonzero_payload_byte);
+#endif
       } else {
         NDPI_LOG_DBG(ndpi_struct, "Unexpected ACK/CC frame\n");
       }
       return NULL;
     }
-    if(counter + 2 + 8 >= clear_payload_len) /* quic_len reads 8 bytes, at most */
+    counter += 1;
+    if(counter + 8 + 8 >= clear_payload_len) /* quic_len reads 8 bytes, at most */
       return NULL;
-    if(clear_payload[counter + 1] != 0x00) {
+    counter += quic_len(&clear_payload[counter], &offset);
+    if(offset != 0) {
+#ifdef QUIC_DEBUG
       NDPI_LOG_ERR(ndpi_struct, "Unexpected crypto stream offset 0x%x\n",
-		   clear_payload[counter + 1]);
+		   offset);
+#endif
       return NULL;
     }
-    counter += 2;
     counter += quic_len(&clear_payload[counter], crypto_data_len);
     crypto_data = &clear_payload[counter];
   }
 
   if(*crypto_data_len + counter > clear_payload_len) {
+#ifdef QUIC_DEBUG
     NDPI_LOG_ERR(ndpi_struct, "Invalid length %lu + %d > %d version 0x%x\n",
 		 (unsigned long)*crypto_data_len, counter, clear_payload_len, version);
+#endif
     return NULL;
   }
   return crypto_data;
@@ -1020,7 +1056,8 @@ static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_stru
 }
 static void process_tls(struct ndpi_detection_module_struct *ndpi_struct,
 			struct ndpi_flow_struct *flow,
-			const u_int8_t *crypto_data, uint32_t crypto_data_len)
+			const u_int8_t *crypto_data, uint32_t crypto_data_len,
+			uint32_t version)
 {
   struct ndpi_packet_struct *packet = &flow->packet;
 
@@ -1032,7 +1069,7 @@ static void process_tls(struct ndpi_detection_module_struct *ndpi_struct,
   packet->payload = crypto_data;
   packet->payload_packet_len = crypto_data_len;
 
-  processClientServerHello(ndpi_struct, flow, 1);
+  processClientServerHello(ndpi_struct, flow, version);
 
   /* Restore */
   packet->payload = p;
@@ -1059,11 +1096,14 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
   uint32_t prev_offset;
   uint32_t tag_offset_start, offset, len, sni_len;
   ndpi_protocol_match_result ret_match;
+  int sni_found = 0, ua_found = 0;
 
   if(crypto_data_len < 6)
     return;
   if(memcmp(crypto_data, "CHLO", 4) != 0) {
+#ifdef QUIC_DEBUG
     NDPI_LOG_ERR(ndpi_struct, "Unexpected handshake message");
+#endif
     return;
   }
   num_tags = (*(uint16_t *)&crypto_data[4]);
@@ -1096,7 +1136,23 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
                                   (char *)flow->host_server_name,
                                   strlen((const char*)flow->host_server_name),
                                   &ret_match, NDPI_PROTOCOL_QUIC);
-      return;
+      sni_found = 1;
+      if (ua_found)
+        return;
+    }
+
+    if(memcmp(tag, "UAID", 4) == 0) {
+      u_int uaid_offset = tag_offset_start + prev_offset;
+            
+      if((uaid_offset + len) < crypto_data_len) {      
+	NDPI_LOG_DBG2(ndpi_struct, "UA: [%.*s]\n", len, &crypto_data[uaid_offset]);
+	
+	http_process_user_agent(ndpi_struct, flow, &crypto_data[uaid_offset], len); /* http.c */
+	ua_found = 1;
+	
+	if (sni_found)
+	  return;
+      }
     }
 
     prev_offset = offset;
@@ -1147,13 +1203,16 @@ static int may_be_initial_pkt(struct ndpi_detection_module_struct *ndpi_struct,
 
   if(is_gquic_ver_less_than(*version, 43) &&
      (!pub_bit5 || pub_bit3 != 0 || pub_bit4 != 0)) {
-    NDPI_LOG_ERR(ndpi_struct, "Version 0x%x invalid flags 0x%x\n",
-		 *version, first_byte);
+#ifdef QUIC_DEBUG
+    NDPI_LOG_ERR(ndpi_struct, "Version 0x%x invalid flags 0x%x\n", *version, first_byte);
+#endif
     return 0;
   }
   if((*version == V_Q046) &&
      (pub_bit7 != 1 || pub_bit8 != 1)) {
+#ifdef QUIC_DEBUG
     NDPI_LOG_ERR(ndpi_struct, "Q46 invalid flag 0x%x\n", first_byte);
+#endif
     return 0;
   }
   if((is_version_quic(*version) || (*version == V_Q046) || (*version == V_Q050)) &&
@@ -1211,8 +1270,10 @@ void ndpi_search_quic(struct ndpi_detection_module_struct *ndpi_struct,
    */
 
   if(!is_version_supported(version)) {
-    NDPI_LOG_ERR(ndpi_struct, "Unsupported version 0x%x\n", version)
-      NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+#ifdef QUIC_DEBUG
+    NDPI_LOG_ERR(ndpi_struct, "Unsupported version 0x%x\n", version);
+#endif
+    NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
   }
 
@@ -1245,7 +1306,7 @@ void ndpi_search_quic(struct ndpi_detection_module_struct *ndpi_struct,
   if(!is_version_with_tls(version)) {
     process_chlo(ndpi_struct, flow, crypto_data, crypto_data_len);
   } else {
-    process_tls(ndpi_struct, flow, crypto_data, crypto_data_len);
+    process_tls(ndpi_struct, flow, crypto_data, crypto_data_len, version);
   }
   if(is_version_with_encrypted_header(version)) {
     ndpi_free(clear_payload);
