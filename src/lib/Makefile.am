@@ -95,7 +95,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/mail_pop.c \
 		     protocols/mail_smtp.c \
 		     protocols/maplestory.c \
-		     protocols/mdns_proto.c \
 		     protocols/megaco.c \
 		     protocols/memcached.c \
 		     protocols/mining.c \
@@ -118,9 +117,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/openvpn.c \
 		     protocols/ookla.c \
 		     protocols/oracle.c \
-		     protocols/pando.c \
 		     protocols/postgres.c \
-		     protocols/pplive.c \
 		     protocols/ppstream.c \
 		     protocols/pptp.c \
 		     protocols/qq.c \

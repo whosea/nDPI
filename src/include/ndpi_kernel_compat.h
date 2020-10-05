@@ -11,6 +11,10 @@
 #include <linux/time.h>
 #define UINT32_MAX	U32_MAX
 
+#ifndef MIN
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
+#endif
+
 typedef size_t socklen_t;
 const char *
 inet_ntop (int af, const void *src, char *dst, socklen_t size);

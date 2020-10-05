@@ -157,6 +157,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 					   const u_int8_t * payload,
 					   const u_int16_t payload_length) {
   u_int16_t msg_type, msg_len;
+  struct ndpi_packet_struct *packet;
   int rc;
   
   /* No need to do ntohl() with 0xFFFFFFFF */
