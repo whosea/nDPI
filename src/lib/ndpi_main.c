@@ -635,7 +635,12 @@ int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_str
     break;
 
   case ndpi_pref_enable_tls_block_dissection:
+    /*
+      If this option is enabled only the TLS Application data blocks past the
+      certificate negotiation are considered
+    */
     ndpi_str->num_tls_blocks_to_follow = NDPI_MAX_NUM_TLS_APPL_BLOCKS;
+    ndpi_str->skip_tls_blocks_until_change_cipher = 1;
     break;
 
   default:
@@ -942,10 +947,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "IceCast", NDPI_PROTOCOL_CATEGORY_MEDIA,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE_53, 0 /* can_have_a_subprotocol */,
-			  no_master, no_master, "FREE53", NDPI_PROTOCOL_CATEGORY_MEDIA,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_CPHA, 0 /* can_have_a_subprotocol */,
+			  no_master, no_master, "CPHA", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+			  ndpi_build_default_ports(ports_b, 8116, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_PPSTREAM, 0 /* can_have_a_subprotocol */,
 			  no_master, no_master, "PPStream", NDPI_PROTOCOL_CATEGORY_MEDIA,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
@@ -970,8 +975,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "TVUplayer", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_HTTP_DOWNLOAD,
-			  1 /* can_have_a_subprotocol */, no_master, no_master, "HTTP_Download",
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE60,
+			  1 /* can_have_a_subprotocol */, no_master, no_master, "FREE60",
 			  NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
@@ -1184,8 +1189,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  no_master, no_master, "Guildwars", NDPI_PROTOCOL_CATEGORY_GAME,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_HTTP_ACTIVESYNC,
-			  1 /* can_have_a_subprotocol */, no_master, no_master, "HTTP_ActiveSync",
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE110,
+			  1 /* can_have_a_subprotocol */, no_master, no_master, "FREE110",
 			  NDPI_PROTOCOL_CATEGORY_CLOUD, ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_KERBEROS, 0 /* can_have_a_subprotocol */,
@@ -2048,6 +2053,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 #ifdef TEST_LRU_HANDLER
   ndpi_str->ndpi_notify_lru_add_handler_ptr = test_lru_handler;
 #endif
+
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
   set_ndpi_debug_function(ndpi_str, (ndpi_debug_function_ptr) ndpi_debug_printf);
   NDPI_BITMASK_RESET(ndpi_str->debug_bitmask);
@@ -2930,7 +2936,7 @@ void ndpi_set_bitmask_protocol_detection(char *label, struct ndpi_detection_modu
     ndpi_str->proto_defaults[ndpi_protocol_id].protoIdx = idx;
     ndpi_str->proto_defaults[ndpi_protocol_id].func = ndpi_str->callback_buffer[idx].func = func;
     ndpi_str->callback_buffer[idx].ndpi_protocol_id = ndpi_protocol_id;
-    
+
     /*
       Set ndpi_selection_bitmask for protocol
     */
@@ -3094,9 +3100,6 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* XBOX */
   init_xbox_dissector(ndpi_str, &a, detection_bitmask);
-
-  /* HTTP_APPLICATION_ACTIVESYNC */
-  init_http_activesync_dissector(ndpi_str, &a, detection_bitmask);
 
   /* SMB */
   init_smb_dissector(ndpi_str, &a, detection_bitmask);
@@ -3526,25 +3529,25 @@ int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi
     if(*nxt_hdr == 59) {
       return(1);
     }
-    
+
     // fragment extension header has fixed size of 8 bytes and the first byte is the next header type
     if(*nxt_hdr == 44) {
       if(*l4len < 8) {
 	return(1);
       }
-      
+
       *nxt_hdr = (*l4ptr)[0];
       *l4len -= 8;
       (*l4ptr) += 8;
       continue;
     }
-    
+
     // the other extension headers have one byte for the next header type
     // and one byte for the extension header length in 8 byte steps minus the first 8 bytes
     if(*l4len < 2) {
       return(1);
     }
-    
+
     ehdr_len = (*l4ptr)[1];
     ehdr_len *= 8;
     ehdr_len += 8;
@@ -3552,16 +3555,16 @@ int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi
     if(*l4len < ehdr_len) {
       return(1);
     }
-    
+
     *nxt_hdr = (*l4ptr)[0];
 
     if(*l4len < ehdr_len)
       return(1);
-    
+
     *l4len -= ehdr_len;
     (*l4ptr) += ehdr_len;
   }
-  
+
   return(0);
 }
 #endif /* NDPI_DETECTION_SUPPORT_IPV6 */
@@ -4040,7 +4043,7 @@ static u_int32_t check_ndpi_udp_flow_func(struct ndpi_detection_module_struct *n
 		 proto_id, ndpi_protocol2name(ndpi_str, proto, buf, sizeof(buf)));
 	}
 #endif
-	
+
 	if(flow->detected_protocol_stack[0] != NDPI_PROTOCOL_UNKNOWN)
 	  break; /* Stop after detecting the first protocol */
       } else if(_ndpi_debug_callbacks)
@@ -4064,7 +4067,7 @@ static u_int32_t check_ndpi_tcp_flow_func(struct ndpi_detection_module_struct *n
   NDPI_PROTOCOL_BITMASK detection_bitmask;
 
   NDPI_SAVE_AS_BITMASK(detection_bitmask, flow->packet.detected_protocol_stack[0]);
-   
+
   if(flow->packet.payload_packet_len != 0) {
     if((proto_id != NDPI_PROTOCOL_UNKNOWN) &&
        NDPI_BITMASK_COMPARE(flow->excluded_protocol_bitmask,
@@ -4092,7 +4095,7 @@ static u_int32_t check_ndpi_tcp_flow_func(struct ndpi_detection_module_struct *n
 	    break; /* Stop after detecting the first protocol */
 	}
       }
-    }      
+    }
   } else {
     /* no payload */
 
@@ -4705,6 +4708,11 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
   ret.category = flow->category;
 #endif
 
+  if(flow->fail_with_unknown) {
+    // printf("%s(): FAIL_WITH_UNKNOWN\n", __FUNCTION__);
+    return(ret);
+  }
+
   flow->num_processed_pkts++;
 
   if(flow->server_id == NULL)
@@ -4868,7 +4876,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
   }
 
   num_calls = ndpi_check_flow_func(ndpi_str, flow, &ndpi_selection_packet);
-  
+
   a = flow->packet.detected_protocol_stack[0];
   if(NDPI_COMPARE_PROTOCOL_TO_BITMASK(ndpi_str->detection_bitmask, a) == 0)
     a = NDPI_PROTOCOL_UNKNOWN;
@@ -4985,7 +4993,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 
   if(num_calls == 0)
     flow->fail_with_unknown = 1;
-  
+
  invalidate_ptr:
   /*
     Invalidate packet memory to avoid accessing the pointers below
@@ -6672,6 +6680,11 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
     if(!flow->protos.telnet.password_detected)
       return(1);
     break;
+
+  case NDPI_PROTOCOL_SKYPE:
+    if (flow->extra_packets_func)
+      return(1);
+    break;
   }
 
   return(0);
@@ -6839,7 +6852,7 @@ static int enough(int a, int b) {
 static u_int8_t endsWith(char *str, char *ends, u_int8_t ends_len) {
   u_int str_len = str ? strlen(str) : 0;
   u_int8_t rc;
-  
+
   if(str_len < ends_len) return(0);
 
   rc = (strncmp(&str[str_len-ends_len], ends, ends_len) != 0) ? 0 : 1;
@@ -6847,7 +6860,7 @@ static u_int8_t endsWith(char *str, char *ends, u_int8_t ends_len) {
 #ifdef DGA_DEBUG
   printf("[DGA] %s / %s [rc: %u]\n", str, ends, rc);
 #endif
-  
+
   return(rc);
 }
 
@@ -6865,14 +6878,14 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 #ifdef DGA_DEBUG
   printf("[DGA] %s\n", name);
 #endif
-  
+
   len = strlen(name);
 
   if(len >= 5) {
     int i, j, num_found = 0, num_impossible = 0, num_bigram_checks = 0, num_digits = 0, num_vowels = 0, num_words = 0;
     char tmp[128], *word, *tok_tmp;
     u_int max_tmp_len = sizeof(tmp)-1;
-  
+
     len = snprintf(tmp, max_tmp_len, "%s", name);
     if(len < 0) {
 #ifdef DGA_DEBUG
@@ -6891,7 +6904,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	if(!isdigit(tmp[j]))
 	  first_element_is_numeric = 0;
       }
-	
+
       if(last_char == tmp[j]) {
 	if(++num_char_repetitions > max_num_char_repetitions)
 	  max_num_char_repetitions = num_char_repetitions;

@@ -799,6 +799,7 @@ struct ndpi_flow_udp_struct {
 
   /* NDPI_PROTOCOL_SKYPE */
   u_int8_t skype_packet_id;
+  u_int8_t skype_crc[4];
 
   /* NDPI_PROTOCOL_TEAMVIEWER */
   u_int8_t teamviewer_stage;
@@ -1013,7 +1014,7 @@ typedef enum {
 
 typedef enum {
    ndpi_pref_direction_detect_disable = 0,
-   ndpi_pref_enable_tls_block_dissection
+   ndpi_pref_enable_tls_block_dissection /* nDPI considers only those blocks past the certificate exchange */
 } ndpi_detection_preference;
 
 /* ntop extensions */
@@ -1086,6 +1087,7 @@ struct ndpi_detection_module_struct {
   u_int32_t current_ts;
   u_int32_t ticks_per_second;
   u_int16_t num_tls_blocks_to_follow;
+  u_int8_t skip_tls_blocks_until_change_cipher:1, _notused:7;
   
   char custom_category_labels[NUM_CUSTOM_CATEGORIES][CUSTOM_CATEGORY_LABEL_LEN];
   /* callback function buffer */
