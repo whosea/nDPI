@@ -37,9 +37,10 @@ static int ndpi_check_skype_udp_again(struct ndpi_detection_module_struct *ndpi_
 
   if ((payload_len >= id_flags_iv_crc_len) && (packet->payload[2] == 0x02 /* Payload flag */ )) {
     u_int8_t detected = 1;
+    int i;
 
     /* Check if both packets have the same CRC */
-    for (int i = 0; i < crc_len && detected; i++) {
+    for (i = 0; i < crc_len && detected; i++) {
       if (packet->payload[crc_offset + i] != flow->l4.udp.skype_crc[i])
         detected = 0;
     }

@@ -76,7 +76,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/hangout.c \
 		     protocols/h323.c \
 		     protocols/halflife2_and_mods.c \
-		     protocols/http_activesync.c \
 		     protocols/http.c \
 		     protocols/iax.c \
 		     protocols/icecast.c \
