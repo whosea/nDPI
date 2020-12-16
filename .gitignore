@@ -62,4 +62,4 @@ stamp-h1
 /fuzz/Makefile
 /python/Makefile
 /tests/unit/Makefile
-
+/tests/unit/unit

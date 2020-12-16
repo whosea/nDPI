@@ -86,7 +86,8 @@ static int is_version_gquic(uint32_t version)
 static int is_version_quic(uint32_t version)
 {
   return ((version & 0xFFFFFF00) == 0xFF000000) /* IETF */ ||
-    ((version & 0xFFFFF000) == 0xfaceb000) /* Facebook */;
+    ((version & 0xFFFFF000) == 0xfaceb000) /* Facebook */ ||
+    ((version & 0x0F0F0F0F) == 0x0a0a0a0a) /* Forcing Version Negotiation */;
 }
 static int is_version_valid(uint32_t version)
 {
@@ -96,6 +97,14 @@ static uint8_t get_u8_quic_ver(uint32_t version)
 {
   if((version >> 8) == 0xff0000)
     return (uint8_t)version;
+  /* "Versions that follow the pattern 0x?a?a?a?a are reserved for use in
+     forcing version negotiation to be exercised".
+     It is tricky to return a correct draft version: such number is primarly
+     used to select a proper salt (which depends on the version itself), but
+     we don't have a real version here! Let's hope that we need to handle
+     only latest drafts... */
+  if ((version & 0x0F0F0F0F) == 0x0a0a0a0a)
+    return 29;
   return 0;
 }
 #ifdef HAVE_LIBGCRYPT
@@ -157,6 +166,13 @@ int is_version_with_var_int_transport_params(uint32_t version)
 {
   return (is_version_quic(version) && is_quic_ver_greater_than(version, 27)) ||
     (version == V_T051);
+}
+int is_version_with_ietf_long_header(uint32_t version)
+{
+  /* At least draft-ietf-quic-invariants-06, or newer*/
+  return is_version_quic(version) ||
+    ((version & 0xFFFFFF00) == 0x51303500) /* Q05X */ ||
+    ((version & 0xFFFFFF00) == 0x54303500) /* T05X */;
 }
 
 int quic_len(const uint8_t *buf, uint64_t *value)
@@ -268,11 +284,18 @@ typedef struct _StringInfo {
 } StringInfo;
 
 /* QUIC decryption context. */
-typedef struct quic_cipher {
+
+typedef struct quic_hp_cipher {
   gcry_cipher_hd_t hp_cipher;  /* Header protection cipher. */
+} quic_hp_cipher;
+typedef struct quic_pp_cipher {
   gcry_cipher_hd_t pp_cipher;  /* Packet protection cipher. */
   uint8_t pp_iv[TLS13_AEAD_NONCE_LENGTH];
-} quic_cipher;
+} quic_pp_cipher;
+typedef struct quic_ciphers {
+  quic_hp_cipher hp_cipher;
+  quic_pp_cipher pp_cipher;
+} quic_ciphers;
 
 typedef struct quic_decrypt_result {
   uint8_t *data; /* Decrypted result on success (file-scoped). */
@@ -476,23 +499,45 @@ static int quic_hkdf_expand_label(int hash_algo, uint8_t *secret, uint32_t secre
   }
   return 0;
 }
-static void quic_cipher_reset(quic_cipher *cipher)
+static void quic_hp_cipher_reset(quic_hp_cipher *hp_cipher)
 {
-  gcry_cipher_close(cipher->hp_cipher);
-  gcry_cipher_close(cipher->pp_cipher);
+  gcry_cipher_close(hp_cipher->hp_cipher);
 #if 0
-  memset(cipher, 0, sizeof(*cipher));
+  memset(hp_cipher, 0, sizeof(*hp_cipher));
 #endif
+}
+static void quic_pp_cipher_reset(quic_pp_cipher *pp_cipher)
+{
+  gcry_cipher_close(pp_cipher->pp_cipher);
+#if 0
+  memset(pp_cipher, 0, sizeof(*pp_cipher));
+#endif
+}
+static void quic_ciphers_reset(quic_ciphers *ciphers)
+{
+  quic_hp_cipher_reset(&ciphers->hp_cipher);
+  quic_pp_cipher_reset(&ciphers->pp_cipher);
 }
 /**
  * Expands the secret (length MUST be the same as the "hash_algo" digest size)
  * and initialize cipher with the new key.
  */
-static int quic_cipher_init(quic_cipher *cipher, int hash_algo,
-			    uint8_t key_length, uint8_t *secret)
+static int quic_hp_cipher_init(quic_hp_cipher *hp_cipher, int hash_algo,
+			       uint8_t key_length, uint8_t *secret)
 {
-  uint8_t write_key[256/8];   /* Maximum key size is for AES256 cipher. */
-  uint8_t hp_key[256/8];
+  uint8_t hp_key[256/8]; /* Maximum key size is for AES256 cipher. */
+  uint32_t hash_len = gcry_md_get_algo_dlen(hash_algo);
+
+  if(!quic_hkdf_expand_label(hash_algo, secret, hash_len, "quic hp", hp_key, key_length)) {
+    return 0;
+  }
+
+  return gcry_cipher_setkey(hp_cipher->hp_cipher, hp_key, key_length) == 0;
+}
+static int quic_pp_cipher_init(quic_pp_cipher *pp_cipher, int hash_algo,
+			       uint8_t key_length, uint8_t *secret)
+{
+  uint8_t write_key[256/8]; /* Maximum key size is for AES256 cipher. */
   uint32_t hash_len = gcry_md_get_algo_dlen(hash_algo);
 
   if(key_length > sizeof(write_key)) {
@@ -500,13 +545,11 @@ static int quic_cipher_init(quic_cipher *cipher, int hash_algo,
   }
 
   if(!quic_hkdf_expand_label(hash_algo, secret, hash_len, "quic key", write_key, key_length) ||
-     !quic_hkdf_expand_label(hash_algo, secret, hash_len, "quic iv", cipher->pp_iv, sizeof(cipher->pp_iv)) ||
-     !quic_hkdf_expand_label(hash_algo, secret, hash_len, "quic hp", hp_key, key_length)) {
-    return 1;
+     !quic_hkdf_expand_label(hash_algo, secret, hash_len, "quic iv", pp_cipher->pp_iv, sizeof(pp_cipher->pp_iv))) {
+    return 0;
   }
 
-  return gcry_cipher_setkey(cipher->hp_cipher, hp_key, key_length) == 0 &&
-    gcry_cipher_setkey(cipher->pp_cipher, write_key, key_length) == 0;
+  return gcry_cipher_setkey(pp_cipher->pp_cipher, write_key, key_length) == 0;
 }
 /**
  * Maps a Packet Protection cipher to the Packet Number protection cipher.
@@ -528,12 +571,11 @@ static int quic_get_pn_cipher_algo(int cipher_algo, int *hp_cipher_mode)
  * If the optional base secret is given, then its length MUST match the hash
  * algorithm output.
  */
-static int quic_cipher_prepare(quic_cipher *cipher, int hash_algo, int cipher_algo,
-			       int cipher_mode, uint8_t *secret)
+static int quic_hp_cipher_prepare(quic_hp_cipher *hp_cipher, int hash_algo, int cipher_algo, uint8_t *secret)
 {
 #if 0
   /* Clear previous state (if any). */
-  quic_cipher_reset(cipher);
+  quic_hp_cipher_reset(hp_cipher);
 #endif
 
   int hp_cipher_mode;
@@ -544,21 +586,20 @@ static int quic_cipher_prepare(quic_cipher *cipher, int hash_algo, int cipher_al
     return 0;
   }
 
-  if(gcry_cipher_open(&cipher->hp_cipher, cipher_algo, hp_cipher_mode, 0) ||
-     gcry_cipher_open(&cipher->pp_cipher, cipher_algo, cipher_mode, 0)) {
-    quic_cipher_reset(cipher);
+  if(gcry_cipher_open(&hp_cipher->hp_cipher, cipher_algo, hp_cipher_mode, 0)) {
+    quic_hp_cipher_reset(hp_cipher);
 #ifdef DEBUG_CRYPT
-    printf("Failed to create ciphers\n");
+    printf("Failed to create HP cipher\n");
 #endif
     return 0;
   }
 
   if(secret) {
     uint32_t cipher_keylen = (uint8_t)gcry_cipher_get_algo_keylen(cipher_algo);
-    if(!quic_cipher_init(cipher, hash_algo, cipher_keylen, secret)) {
-      quic_cipher_reset(cipher);
+    if(!quic_hp_cipher_init(hp_cipher, hash_algo, cipher_keylen, secret)) {
+      quic_hp_cipher_reset(hp_cipher);
 #ifdef DEBUG_CRYPT
-      printf("Failed to derive key material for cipher\n");
+      printf("Failed to derive key material for HP cipher\n");
 #endif
       return 0;
     }
@@ -566,19 +607,55 @@ static int quic_cipher_prepare(quic_cipher *cipher, int hash_algo, int cipher_al
 
   return 1;
 }
+static int quic_pp_cipher_prepare(quic_pp_cipher *pp_cipher, int hash_algo, int cipher_algo, int cipher_mode, uint8_t *secret)
+{
+#if 0
+  /* Clear previous state (if any). */
+  quic_pp_cipher_reset(pp_cipher);
+#endif
+
+  if(gcry_cipher_open(&pp_cipher->pp_cipher, cipher_algo, cipher_mode, 0)) {
+    quic_pp_cipher_reset(pp_cipher);
+#ifdef DEBUG_CRYPT
+    printf("Failed to create PP cipher\n");
+#endif
+    return 0;
+  }
+
+  if(secret) {
+    uint32_t cipher_keylen = (uint8_t)gcry_cipher_get_algo_keylen(cipher_algo);
+    if(!quic_pp_cipher_init(pp_cipher, hash_algo, cipher_keylen, secret)) {
+      quic_pp_cipher_reset(pp_cipher);
+#ifdef DEBUG_CRYPT
+      printf("Failed to derive key material for PP cipher\n");
+#endif
+      return 0;
+    }
+  }
+
+  return 1;
+}
+static int quic_ciphers_prepare(quic_ciphers *ciphers, int hash_algo, int cipher_algo, int cipher_mode, uint8_t *secret)
+{
+  return quic_hp_cipher_prepare(&ciphers->hp_cipher, hash_algo, cipher_algo, secret) &&
+         quic_pp_cipher_prepare(&ciphers->pp_cipher, hash_algo, cipher_algo, cipher_mode, secret);
+}
 /**
  * Given a header protection cipher, a buffer and the packet number offset,
  * return the unmasked first byte and packet number.
+ * If the loss bits feature is enabled, the protected bits in the first byte
+ * are fewer than usual: 3 instead of 5 (on short headers only)
  */
 static int quic_decrypt_header(const uint8_t *packet_payload,
-			       uint32_t pn_offset, gcry_cipher_hd_t hp_cipher,
-			       int hp_cipher_algo, uint8_t *first_byte, uint32_t *pn)
+			       uint32_t pn_offset, quic_hp_cipher *hp_cipher,
+			       int hp_cipher_algo, uint8_t *first_byte, uint32_t *pn,
+			       int loss_bits_negotiated)
 {
-  gcry_cipher_hd_t h = hp_cipher;
-  if(!hp_cipher) {
+  if(!hp_cipher->hp_cipher) {
     /* Need to know the cipher */
     return 0;
   }
+  gcry_cipher_hd_t h = hp_cipher->hp_cipher;
 
   /* Sample is always 16 bytes and starts after PKN (assuming length 4).
      https://tools.ietf.org/html/draft-ietf-quic-tls-22#section-5.4.2 */
@@ -605,8 +682,14 @@ static int quic_decrypt_header(const uint8_t *packet_payload,
     /* Long header: 4 bits masked */
     packet0 ^= mask[0] & 0x0f;
   } else {
-    /* Short header: 5 bits masked */
-    packet0 ^= mask[0] & 0x1f;
+    /* Short header */
+    if(loss_bits_negotiated == 0) {
+      /* Standard mask: 5 bits masked */
+      packet0 ^= mask[0] & 0x1F;
+    } else {
+      /* https://tools.ietf.org/html/draft-ferrieuxhamchaoui-quic-lossbits-03#section-5.3 */
+      packet0 ^= mask[0] & 0x07;
+    }
   }
   uint32_t pkn_len = (packet0 & 0x03) + 1;
   /* printf("packet0 0x%x pkn_len %d\n", packet0, pkn_len); */
@@ -630,7 +713,7 @@ static int quic_decrypt_header(const uint8_t *packet_payload,
  * The actual packet number must be constructed according to
  * https://tools.ietf.org/html/draft-ietf-quic-transport-22#section-12.3
  */
-static void quic_decrypt_message(quic_cipher *cipher, const uint8_t *packet_payload, uint32_t packet_payload_len,
+static void quic_decrypt_message(quic_pp_cipher *pp_cipher, const uint8_t *packet_payload, uint32_t packet_payload_len,
 				 uint32_t header_length, uint8_t first_byte, uint32_t pkn_len,
 				 uint64_t packet_number, quic_decrypt_result_t *result)
 {
@@ -644,8 +727,8 @@ static void quic_decrypt_message(quic_cipher *cipher, const uint8_t *packet_payl
   char buferr[128];
 #endif
 
-  if(!(cipher != NULL) ||
-     !(cipher->pp_cipher != NULL) ||
+  if(!(pp_cipher != NULL) ||
+     !(pp_cipher->pp_cipher != NULL) ||
      !(pkn_len < header_length) ||
      !(1 <= pkn_len && pkn_len <= 4)) {
 #ifdef DEBUG_CRYPT
@@ -678,12 +761,12 @@ static void quic_decrypt_message(quic_cipher *cipher, const uint8_t *packet_payl
   }
   memcpy(atag, packet_payload + header_length + buffer_length, 16);
 
-  memcpy(nonce, cipher->pp_iv, TLS13_AEAD_NONCE_LENGTH);
+  memcpy(nonce, pp_cipher->pp_iv, TLS13_AEAD_NONCE_LENGTH);
   /* Packet number is left-padded with zeroes and XORed with write_iv */
   phton64(nonce + sizeof(nonce) - 8, pntoh64(nonce + sizeof(nonce) - 8) ^ packet_number);
 
-  gcry_cipher_reset(cipher->pp_cipher);
-  err = gcry_cipher_setiv(cipher->pp_cipher, nonce, TLS13_AEAD_NONCE_LENGTH);
+  gcry_cipher_reset(pp_cipher->pp_cipher);
+  err = gcry_cipher_setiv(pp_cipher->pp_cipher, nonce, TLS13_AEAD_NONCE_LENGTH);
   if(err) {
 #ifdef DEBUG_CRYPT
     printf("Decryption (setiv) failed: %s\n", __gcry_err(err, buferr, sizeof(buferr)));
@@ -694,7 +777,7 @@ static void quic_decrypt_message(quic_cipher *cipher, const uint8_t *packet_payl
   }
 
   /* associated data (A) is the contents of QUIC header */
-  err = gcry_cipher_authenticate(cipher->pp_cipher, header, header_length);
+  err = gcry_cipher_authenticate(pp_cipher->pp_cipher, header, header_length);
   if(err) {
 #ifdef DEBUG_CRYPT
     printf("Decryption (authenticate) failed: %s\n", __gcry_err(err, buferr, sizeof(buferr)));
@@ -707,7 +790,7 @@ static void quic_decrypt_message(quic_cipher *cipher, const uint8_t *packet_payl
   ndpi_free(header);
 
   /* Output ciphertext (C) */
-  err = gcry_cipher_decrypt(cipher->pp_cipher, buffer, buffer_length, NULL, 0);
+  err = gcry_cipher_decrypt(pp_cipher->pp_cipher, buffer, buffer_length, NULL, 0);
   if(err) {
 #ifdef DEBUG_CRYPT
     printf("Decryption (decrypt) failed: %s\n", __gcry_err(err, buferr, sizeof(buferr)));
@@ -716,7 +799,7 @@ static void quic_decrypt_message(quic_cipher *cipher, const uint8_t *packet_payl
     return;
   }
 
-  err = gcry_cipher_checktag(cipher->pp_cipher, atag, 16);
+  err = gcry_cipher_checktag(pp_cipher->pp_cipher, atag, 16);
   if(err) {
 #ifdef DEBUG_CRYPT
     printf("Decryption (checktag) failed: %s\n", __gcry_err(err, buferr, sizeof(buferr)));
@@ -837,10 +920,11 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
   struct ndpi_packet_struct *packet = &flow->packet;
   uint8_t first_byte;
   uint32_t pkn32, pn_offset, pkn_len, offset;
-  quic_cipher cipher = {0}; /* Client initial cipher */
+  quic_ciphers ciphers; /* Client initial ciphers */
   quic_decrypt_result_t decryption = {0};
   uint8_t client_secret[HASH_SHA2_256_LENGTH];
 
+  memset(&ciphers, '\0', sizeof(ciphers));
   if(quic_derive_initial_secrets(version, dest_conn_id, dest_conn_id_len,
 				 client_secret) != 0) {
     NDPI_LOG_DBG(ndpi_struct, "Error quic_derive_initial_secrets\n");
@@ -849,9 +933,9 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
 
   /* Packet numbers are protected with AES128-CTR,
      Initial packets are protected with AEAD_AES_128_GCM. */
-  if(!quic_cipher_prepare(&cipher, GCRY_MD_SHA256,
-                          GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_GCM,
-			  client_secret)) {
+  if(!quic_ciphers_prepare(&ciphers, GCRY_MD_SHA256,
+                           GCRY_CIPHER_AES128, GCRY_CIPHER_MODE_GCM,
+                           client_secret)) {
     NDPI_LOG_DBG(ndpi_struct, "Error quic_cipher_prepare\n");
     return NULL;
   }
@@ -861,16 +945,25 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
   pn_offset += quic_len(&packet->payload[pn_offset], &token_length);
   pn_offset += token_length;
   /* Checks: quic_len reads 8 bytes, at most; quic_decrypt_header reads other 20 bytes */
-  if(pn_offset + 8 + (4 + 16) >= packet->payload_packet_len)
+  if(pn_offset + 8 + (4 + 16) >= packet->payload_packet_len) {
+    quic_ciphers_reset(&ciphers);
     return NULL;
+  }
   pn_offset += quic_len(&packet->payload[pn_offset], &payload_length);
 
   NDPI_LOG_DBG2(ndpi_struct, "pn_offset %d token_length %d payload_length %d\n",
 		pn_offset, token_length, payload_length);
 
-  if(!quic_decrypt_header(&packet->payload[0], pn_offset, cipher.hp_cipher,
-			  GCRY_CIPHER_AES128, &first_byte, &pkn32)) {
-    quic_cipher_reset(&cipher);
+  if (pn_offset + payload_length > packet->payload_packet_len) {
+    NDPI_LOG_DBG(ndpi_struct, "Too short %d %d\n", pn_offset + payload_length,
+                 packet->payload_packet_len);
+    quic_ciphers_reset(&ciphers);
+    return NULL;
+  }
+
+  if(!quic_decrypt_header(&packet->payload[0], pn_offset, &ciphers.hp_cipher,
+			  GCRY_CIPHER_AES128, &first_byte, &pkn32, 0)) {
+    quic_ciphers_reset(&ciphers);
     return NULL;
   }
   NDPI_LOG_DBG2(ndpi_struct, "first_byte 0x%x pkn32 0x%x\n", first_byte, pkn32);
@@ -880,10 +973,10 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
   packet_number = pkn32;
 
   offset = pn_offset + pkn_len;
-  quic_decrypt_message(&cipher, &packet->payload[0], packet->payload_packet_len,
+  quic_decrypt_message(&ciphers.pp_cipher, &packet->payload[0], pn_offset + payload_length,
 		       offset, first_byte, pkn_len, packet_number, &decryption);
 
-  quic_cipher_reset(&cipher);
+  quic_ciphers_reset(&ciphers);
 
   if(decryption.data_len) {
     *clear_payload_len = decryption.data_len;
@@ -1009,7 +1102,10 @@ static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_stru
 {
   struct ndpi_packet_struct *packet = &flow->packet;
   u_int8_t *clear_payload;
-  u_int8_t dest_conn_id_len, source_conn_id_len;
+  u_int8_t dest_conn_id_len;
+#ifdef HAVE_LIBGCRYPT
+  u_int8_t source_conn_id_len;
+#endif
 
   if(is_gquic_ver_less_than(version, 43)) {
     clear_payload = (uint8_t *)&packet->payload[26];
@@ -1028,20 +1124,16 @@ static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_stru
     clear_payload = (uint8_t *)&packet->payload[30];
     *clear_payload_len = packet->payload_packet_len - 30;
   } else {
+    /* Upper limit of CIDs length has been already validated. If dest_conn_id_len is 0,
+       this is probably the Initial Packet from the server */
     dest_conn_id_len = packet->payload[5];
-    if(dest_conn_id_len == 0 ||
-       dest_conn_id_len > QUIC_MAX_CID_LENGTH) {
+    if(dest_conn_id_len == 0) {
       NDPI_LOG_DBG(ndpi_struct, "Packet 0x%x with dest_conn_id_len %d\n",
 		   version, dest_conn_id_len);
       return NULL;
     }
-    source_conn_id_len = packet->payload[6 + dest_conn_id_len];
-    if(source_conn_id_len > QUIC_MAX_CID_LENGTH) {
-      NDPI_LOG_DBG(ndpi_struct, "Packet 0x%x with source_conn_id_len %d\n",
-		   version, source_conn_id_len);
-      return NULL;
-    }
 #ifdef HAVE_LIBGCRYPT
+    source_conn_id_len = packet->payload[6 + dest_conn_id_len];
     const u_int8_t *dest_conn_id = &packet->payload[6];
     clear_payload = decrypt_initial_packet(ndpi_struct, flow,
 					   dest_conn_id, dest_conn_id_len,
@@ -1169,6 +1261,7 @@ static int may_be_initial_pkt(struct ndpi_detection_module_struct *ndpi_struct,
   struct ndpi_packet_struct *packet = &flow->packet;
   u_int8_t first_byte;
   u_int8_t pub_bit1, pub_bit2, pub_bit3, pub_bit4, pub_bit5, pub_bit7, pub_bit8;
+  u_int8_t dest_conn_id_len, source_conn_id_len;
 
   /* According to draft-ietf-quic-transport-29: "Clients MUST ensure that UDP
      datagrams containing Initial packets have UDP payloads of at least 1200
@@ -1219,6 +1312,33 @@ static int may_be_initial_pkt(struct ndpi_detection_module_struct *ndpi_struct,
      (pub_bit3 != 0 || pub_bit4 != 0)) {
     NDPI_LOG_DBG2(ndpi_struct, "Version 0x%x not Initial Packet\n", *version);
     return 0;
+  }
+
+  /* Forcing Version Negotiation packets are QUIC Initial Packets (i.e.
+     Long Header). It should also be quite rare that a client sends this kind
+     of traffic with the QUIC bit greased i.e. having a server token.
+     Accordind to https://tools.ietf.org/html/draft-thomson-quic-bit-grease-00#section-3.1
+     "A client MAY also clear the QUIC Bit in Initial packets that are sent
+      to establish a new connection.  A client can only clear the QUIC Bit
+      if the packet includes a token provided by the server in a NEW_TOKEN
+      frame on a connection where the server also included the
+      grease_quic_bit transport parameter." */
+  if((*version & 0x0F0F0F0F) == 0x0a0a0a0a &&
+     !(pub_bit1 == 1 && pub_bit2 == 1)) {
+    NDPI_LOG_DBG2(ndpi_struct, "Version 0x%x with first byte 0x%x\n", first_byte);
+    return 0;
+  }
+
+  /* Check that CIDs lengths are valid: QUIC limits the CID length to 20 */
+  if(is_version_with_ietf_long_header(*version)) {
+    dest_conn_id_len = packet->payload[5];
+    source_conn_id_len = packet->payload[5 + 1 + dest_conn_id_len];
+    if (dest_conn_id_len > QUIC_MAX_CID_LENGTH ||
+        source_conn_id_len > QUIC_MAX_CID_LENGTH) {
+      NDPI_LOG_DBG2(ndpi_struct, "Version 0x%x invalid CIDs length %u %u",
+		     *version, dest_conn_id_len, source_conn_id_len);
+      return 0;
+    }
   }
 
   /* TODO: add some other checks to avoid false positives */

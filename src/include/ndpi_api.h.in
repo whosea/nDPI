@@ -1454,6 +1454,9 @@ extern "C" {
 
   extern int ndpi_stun_cache_enable;
 
+  /* ******************************* */
+  
+  ndpi_rules* ndpi_parse_rules(struct ndpi_detection_module_struct *ndpi_str, char *path);  
 #ifdef __cplusplus
 }
 #endif

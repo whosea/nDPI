@@ -383,7 +383,6 @@ struct ndpi_dns_packet_header {
 typedef union
 {
   u_int32_t ipv4;
-  u_int8_t ipv4_u_int8_t[4];
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
   struct ndpi_in6_addr ipv6;
 #endif
@@ -563,7 +562,7 @@ struct ndpi_id_struct {
   /* NDPI_PROTOCOL_ZATTOO */
   u_int32_t zattoo_ts;
 
-  /* NDPI_PROTOCOL_UNENCRYPTED_JABBER */
+  /* NDPI_PROTOCOL_JABBER */
   u_int32_t jabber_stun_or_ft_ts;
 
   /* NDPI_PROTOCOL_DIRECTCONNECT */
@@ -582,7 +581,7 @@ struct ndpi_id_struct {
   u_int16_t bt_port_t[NDPI_BT_PORTS];
   u_int16_t bt_port_u[NDPI_BT_PORTS];
 
-  /* NDPI_PROTOCOL_UNENCRYPTED_JABBER */
+  /* NDPI_PROTOCOL_JABBER */
 #define JABBER_MAX_STUN_PORTS 6
   u_int16_t jabber_voice_stun_port[JABBER_MAX_STUN_PORTS];
   u_int16_t jabber_file_transfer_port[2];
@@ -600,7 +599,7 @@ struct ndpi_id_struct {
   /* NDPI_PROTOCOL_IRC */
   u_int8_t irc_number_of_port;
 
-  /* NDPI_PROTOCOL_UNENCRYPTED_JABBER */
+  /* NDPI_PROTOCOL_JABBER */
   u_int8_t jabber_voice_stun_used_ports;
 
   /* NDPI_PROTOCOL_SIP */
@@ -980,6 +979,10 @@ typedef enum {
 	       */
 	      NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK,
 	      NDPI_PROTOCOL_CATEGORY_IOT_SCADA,
+	      /*
+		 The category below is used for vocal assistance services.
+	       */
+	      NDPI_PROTOCOL_CATEGORY_VIRTUAL_ASSISTANT,
 
 	      /* Some custom categories */
 	      CUSTOM_CATEGORY_MINING           = 99,
@@ -1005,11 +1008,12 @@ typedef enum {
 		in ndpi_main.c
 	      */
 
-	      NDPI_PROTOCOL_NUM_CATEGORIES /*
+	      NDPI_PROTOCOL_NUM_CATEGORIES, /*
 					     NOTE: Keep this as last member
 					     Unused as value but useful to getting the number of elements
 					     in this datastructure
 					   */
+              NDPI_PROTOCOL_ANY_CATEGORY /* Used to handle wildcards */
 } ndpi_protocol_category_t;
 
 typedef enum {
@@ -1064,7 +1068,10 @@ typedef struct ndpi_proto {
 #ifdef NDPI_LIB_COMPILATION
 
 /* Needed to have access to HAVE_* defines */
+#ifndef _NDPI_CONFIG_H_
 #include "ndpi_config.h"
+#define _NDPI_CONFIG_H_
+#endif
 
 #ifdef HAVE_PCRE
 #include <pcre.h>
@@ -1608,5 +1615,53 @@ struct ndpi_bin {
     u_int32_t *bins32; /* num_bins bins */
   } u;
 };
+
+/* **************************** */
+
+typedef struct {
+  ndpi_ip_addr_t ip;
+  u_int8_t cidr;
+  u_int8_t ip_v6:1, _notused:7;
+  u_int16_t l4_port;
+} ndpi_rule_peer;
+
+typedef enum {
+  rule_pass,
+  rule_drop
+} ndpi_rule_action;
+  
+typedef struct _ndpi_rule {
+  /* Ancillary information */
+  u_int16_t id;
+  char *description;
+
+  /* Keys */
+  u_int8_t l4_proto;
+  ndpi_rule_peer client, server; /* Network byte order */
+  u_int16_t l7_proto;
+  u_int8_t reverseable_rule:1 /* src <-> dst */, _not_used:7;
+  
+  /* Rule actions */
+  ndpi_rule_action action;
+  
+  /* Internal use */
+  struct _ndpi_rule *list_next; /* Linked list of rules */
+  
+} ndpi_rule;
+
+/*
+  Matching order
+  - L7 protocol
+  - match client/server
+
+ */
+typedef struct {
+  u_int32_t num_rules;
+  ndpi_rule *root;
+
+  ndpi_rule *l7_rules[NDPI_LAST_IMPLEMENTED_PROTOCOL], *l7_any;
+
+  
+} ndpi_rules;
 
 #endif /* __NDPI_TYPEDEFS_H__ */

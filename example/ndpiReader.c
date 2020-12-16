@@ -71,6 +71,7 @@ static u_int8_t live_capture = 0;
 static u_int8_t undetected_flows_deleted = 0;
 FILE *csv_fp                 = NULL; /**< for CSV export */
 static char* domain_to_check = NULL;
+static u_int8_t ignore_vlanid = 0;
 /** User preferences **/
 u_int8_t enable_protocol_guess = 1, enable_payload_analyzer = 0, num_bin_clusters = 0;
 u_int8_t verbose = 0, enable_joy_stats = 0;
@@ -485,6 +486,7 @@ static void help(u_int long_help) {
 	 "  -U <num>                  | Max number of UDP processed packets before giving up [default: %u]\n"
 	 "  -D                        | Enable DoH traffic analysis based on content (no DPI)\n"
 	 "  -x <domain>               | Check domain name [Test only]\n"
+	 "  -I                        | Ignore VLAN id for flow hash calculation\n"
 	 ,
 	 human_readeable_string_len,
 	 min_pattern_len, max_pattern_len, max_num_packets_per_flow, max_packet_payload_dissection,
@@ -542,6 +544,7 @@ static struct option longopts[] = {
   { "cpu-bind", required_argument, NULL, 'g'},
   { "loops", required_argument, NULL, 'l'},
   { "num-threads", required_argument, NULL, 'n'},
+  { "ignore-vlanid", no_argument, NULL, 'I'},
 
   { "protos", required_argument, NULL, 'p'},
   { "capture-duration", required_argument, NULL, 's'},
@@ -765,7 +768,7 @@ static void parseOptions(int argc, char **argv) {
   }
 #endif
 
-  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:hp:P:l:s:tu:v:V:n:Jrp:x:w:q0123:456:7:89:m:T:U:",
+  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:Ihp:P:l:s:tu:v:V:n:Jrp:x:w:q0123:456:7:89:m:T:U:",
 			   longopts, &option_idx)) != EOF) {
 #ifdef DEBUG_TRACE
     if(trace) fprintf(trace, " #### -%c [%s] #### \n", opt, optarg ? optarg : "");
@@ -792,6 +795,10 @@ static void parseOptions(int argc, char **argv) {
     case 'i':
     case '3':
       _pcap_file[0] = optarg;
+      break;
+
+    case 'I':
+      ignore_vlanid = 1;
       break;
 
     case 'm':
@@ -2040,6 +2047,7 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
   prefs.num_roots = NUM_ROOTS;
   prefs.max_ndpi_flows = MAX_NDPI_FLOWS;
   prefs.quiet_mode = quiet_mode;
+  prefs.ignore_vlanid = ignore_vlanid;
 
   memset(&ndpi_thread_info[thread_id], 0, sizeof(ndpi_thread_info[thread_id]));
   ndpi_thread_info[thread_id].workflow = ndpi_workflow_init(&prefs, pcap_handle);
@@ -3694,6 +3702,16 @@ void analysisUnitTest() {
 
 /* *********************************************** */
 
+void rulesUnitTest() {
+#ifdef HAVE_JSON_H
+#ifdef DEBUG_RULES
+  ndpi_parse_rules(ndpi_info_mod, "../rules/sample_rules.txt");
+#endif
+#endif
+}
+
+/* *********************************************** */
+
 /**
    @brief MAIN FUNCTION
 **/
@@ -3723,6 +3741,7 @@ int orginal_main(int argc, char **argv) {
     analyzeUnitTest();
     ndpi_self_check_host_match();
     analysisUnitTest();
+    rulesUnitTest();
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     if(getenv("REP_MINI"))
 	    rep_mini = 1;

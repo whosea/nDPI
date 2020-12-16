@@ -785,7 +785,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
   flow.protocol = iph->protocol, flow.vlan_id = vlan_id;
   flow.src_ip = iph->saddr, flow.dst_ip = iph->daddr;
   flow.src_port = htons(*sport), flow.dst_port = htons(*dport);
-  flow.hashval = hashval = flow.protocol + flow.vlan_id + flow.src_ip + flow.dst_ip + flow.src_port + flow.dst_port;
+  flow.hashval = hashval = flow.protocol + flow.src_ip + flow.dst_ip + flow.src_port + flow.dst_port;
 
 #if 0
   printf("hashval=%u [%u][%u][%u:%u][%u:%u]\n", hashval, flow.protocol, flow.vlan_id,
@@ -1325,6 +1325,9 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
   u_int8_t begin_or_end_tcp = 0;
   struct ndpi_proto nproto = NDPI_PROTOCOL_NULL;
 
+  if(workflow->prefs.ignore_vlanid)
+    vlan_id = 0;  
+
   if(iph)
     flow = get_ndpi_flow_info(workflow, IPVERSION, vlan_id,
 			      tunnel_type, iph, NULL,
@@ -1657,7 +1660,7 @@ static const u_char *parse_nflog_packet(const struct pcap_pkthdr *h, const u_cha
 struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 					       const struct pcap_pkthdr *header_o,
 					       const u_char *packet,
-                           FILE * csv_fp) {
+					       FILE * csv_fp) {
   struct pcap_pkthdr *header,header_c;
   /*
    * Declare pointers to packet headers
@@ -1736,7 +1739,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   h_len = header->len;
 
  datalink_check:
-  if(h_caplen < eth_offset + 40)
+  // 20 for min iph and 8 for min UDP
+  if(h_caplen < eth_offset + 28)
     return(nproto); /* Too short */
 
   switch(datalink_type) {
@@ -1767,6 +1771,16 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       ip_offset = 2;
       type = ntohs(*((u_int16_t*)&packet[eth_offset]));
     }
+    break;
+
+  case DLT_IPV4:
+    type = ETH_P_IP;
+    ip_offset = 0;
+    break;
+
+  case DLT_IPV6:
+    type = ETH_P_IPV6;
+    ip_offset = 0;
     break;
 
     /* IEEE 802.3 Ethernet - 1 */
@@ -1958,6 +1972,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   } else if(iph->version == 6) {
     if (h_caplen < ip_offset + sizeof(struct ndpi_ipv6hdr))
       return(nproto); /* Too short for IPv6 header*/
+    
     iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
     proto = iph6->ip6_hdr.ip6_un1_nxt;
     ip_len = ntohs(iph6->ip6_hdr.ip6_un1_plen);
@@ -1965,9 +1980,11 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       return(nproto); /* Too short for IPv6 payload*/
 
     const u_int8_t *l4ptr = (((const u_int8_t *) iph6) + sizeof(struct ndpi_ipv6hdr));
+
     if(ndpi_handle_ipv6_extension_headers(NULL, &l4ptr, &ip_len, &proto) != 0) {
       return(nproto);
     }
+
     if(proto == IPPROTO_IPV6 || proto == IPPROTO_IPIP) {
       if(l4ptr > packet) { /* Better safe than sorry */
         ip_offset = (l4ptr - packet);

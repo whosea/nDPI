@@ -30,6 +30,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/afp.c \
 		     protocols/ajp.c \
 		     protocols/aimini.c \
+		     protocols/among_us.c \
 		     protocols/amazon_video.c \
 		     protocols/applejuice.c \
 		     protocols/apple_push.c \
@@ -99,6 +100,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/mining.c \
 		     protocols/mgcp.c \
 		     protocols/modbus.c \
+		     protocols/mongodb.c \
 		     protocols/mpegts.c \
 		     protocols/mqtt.c \
 		     protocols/mssql_tds.c \

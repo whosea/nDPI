@@ -393,7 +393,7 @@ static void ndpi_check_numeric_ip(struct ndpi_detection_module_struct *ndpi_stru
   s = ip;
   e = s + ip_len;
   if(*s < '0' || *s > '9') return;
-  for(a = 0, i=0; s < e && *s; s++) {
+  for(a = 0, i=0; s < e && *s && *s != ':'; s++) {
 	if(*s == '.') {
 		if(a < 0 || a > 255 || i > 3) return;
 		a = 0; i++;
