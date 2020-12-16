@@ -42,7 +42,8 @@ compile
 *.[o]
 *.obj
 *o.cmd
-*o.cmd
+.Module.symvers.cmd
+.modules.order.cmd
 .project
 .settings
 /src/include/Makefile
@@ -60,3 +61,5 @@ stamp-h1
 /src/lib/ndpi_network_list.c.inc
 /fuzz/Makefile
 /python/Makefile
+/tests/unit/Makefile
+
