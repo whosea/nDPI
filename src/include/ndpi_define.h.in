@@ -176,6 +176,10 @@
 /* misc definitions */
 #define NDPI_DEFAULT_MAX_TCP_RETRANSMISSION_WINDOW_SIZE 0x10000
 
+/* exact match host names */
+#define NDPI_HOST_MATCH_START 0x8000
+#define NDPI_HOST_MATCH_END 0x4000
+#define NDPI_HOST_MATCH_ALL (NDPI_HOST_MATCH_END | NDPI_HOST_MATCH_START)
 
 /* TODO: rebuild all memory areas to have a more aligned memory block here */
 

@@ -10,6 +10,7 @@
 #undef HAVE_HYPERSCAN
 #include "ndpi_main.h"
 
+#include "ndpi_main_common.h"
 #include "ndpi_strcol.h"
 #include "ndpi_main_netfilter.h"
 #include "ndpi_proc_parsers.h"
@@ -98,7 +99,7 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 		ac_pattern.astring    = cstr;
 		ac_pattern.length     = sml;
 		ac_pattern.rep.number = protocol_id;
-		r = n->host_ac ? ac_automata_add(n->host_ac, &ac_pattern) : ACERR_ERROR;
+		r = n->host_ac ? ac_automata_add_exact(n->host_ac, &ac_pattern) : ACERR_ERROR;
 		if(r != ACERR_SUCCESS) {
 			str_collect_del(n->hosts_tmp->p[protocol_id],host_match,sml);
 			if(r != ACERR_DUPLICATE_PATTERN) {

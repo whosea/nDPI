@@ -1907,6 +1907,21 @@ return  family == AF_INET6 ?
 	      :	snprintf(lbuf,bufsize-1, "%pI4n:%d",ip,htons(port));
 }
 
+AC_ERROR_t ac_automata_add_exact(AC_AUTOMATA_t *thiz, AC_PATTERN_t *ac_pattern) {
+
+	if( ac_pattern->astring[0] == '|') {
+		ac_pattern->astring++;
+		ac_pattern->length --;
+		ac_pattern->rep.number |= NDPI_HOST_MATCH_START;
+	}	
+	if( ac_pattern->length > 4 &&
+	    ac_pattern->astring[ac_pattern->length-1] == '|') {
+		ac_pattern->length --;
+		ac_pattern->rep.number |= NDPI_HOST_MATCH_END;
+	}
+	return ac_automata_add(thiz,ac_pattern);
+}
+
 static int ninfo_proc_open(struct inode *inode, struct file *file)
 {
         return 0;
@@ -2640,7 +2655,7 @@ static int __net_init ndpi_net_init(struct net *net)
 				ac_pattern.astring    = cstr;
 				ac_pattern.length     = sml;
 				ac_pattern.rep.number = i;
-				r = ac_automata_add(n->host_ac, &ac_pattern);
+				r = ac_automata_add_exact(n->host_ac, &ac_pattern);
 				if(r != ACERR_SUCCESS) {
 					str_collect_del(n->hosts_tmp->p[i],cstr,sml);
 					if(r != ACERR_DUPLICATE_PATTERN) {

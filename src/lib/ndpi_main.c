@@ -495,11 +495,23 @@ static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str, 
     ac_pattern.length = 0;
   else
     ac_pattern.length = strlen(ac_pattern.astring);
-
+  if(automa == &ndpi_str->host_automa) {
+     if( *value == '|' ) {
+	  ac_pattern.length--;
+	  ac_pattern.astring++;
+	  ac_pattern.rep.number |= NDPI_HOST_MATCH_START;
+	  printf("Add %d:%.*s match from start\n",ac_pattern.length,ac_pattern.length,ac_pattern.astring);
+     }
+     if (ac_pattern.length > 4 && ac_pattern.astring[ac_pattern.length-1] == '|') {
+	  ac_pattern.length--;
+	  ac_pattern.rep.number |= NDPI_HOST_MATCH_END;
+	  printf("Add %d:%.*s match from end\n",ac_pattern.length,ac_pattern.length,ac_pattern.astring);
+     }
+  }
   r = ac_automata_add(((AC_AUTOMATA_t*)automa->ac_automa), &ac_pattern);
   if(r == ACERR_DUPLICATE_PATTERN && 
-	(automa == ndpi_str->host_automa.ac_automa ||
-	 automa == ndpi_str->content_automa.ac_automa)) {
+	(automa == &ndpi_str->host_automa ||
+	 automa == &ndpi_str->content_automa)) {
 	  char *tproto = ndpi_get_proto_by_id(ndpi_str, protocol_id);
 	  if(protocol_id == ac_pattern.rep.number) {
 		  NDPI_LOG_ERR(ndpi_str, "[NDPI] Duplicate '%s' proto %s\n",
@@ -1587,7 +1599,7 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
 
 #ifdef MATCH_DEBUG
   printf("Searching [to search: %s/%u][pattern: %s/%u] [len: %d][match_num: %u][%s]\n", buf,
-	 (unigned int) txt->length, m->patterns->astring, (unigned int) m->patterns->length, min_len, m->match_num,
+	 (unsigned int) txt->length, m->patterns->astring, (unsigned int) m->patterns->length, min_len, m->match_num,
 	 m->patterns->astring);
 #endif
 
@@ -6260,6 +6272,21 @@ int ndpi_match_string_subprotocol(struct ndpi_detection_module_struct *ndpi_str,
 
   if(is_host_match)
   	  spin_unlock_bh(&ndpi_str->host_automa_lock);
+
+  if((match.number & NDPI_HOST_MATCH_ALL) == NDPI_HOST_MATCH_ALL) {
+        match.number ^= NDPI_HOST_MATCH_ALL;
+        if(ac_match.patterns->length != ac_input_text.length)
+      	    match.number = 0;
+  } else if(match.number & NDPI_HOST_MATCH_START) {
+      	  match.number ^= NDPI_HOST_MATCH_START;
+      	  if(ac_match.position - ac_match.patterns->length != 0)
+      	       match.number = 0;
+    } else if(match.number & NDPI_HOST_MATCH_END) {
+      	    match.number ^= NDPI_HOST_MATCH_END;
+      	    if(ac_match.position != ac_input_text.length)
+      		 match.number = 0;
+    }
+
   /*
     As ac_automata_search can detect partial matches and continue the search process
     in case rc == 0 (i.e. no match), we need to check if there is a partial match

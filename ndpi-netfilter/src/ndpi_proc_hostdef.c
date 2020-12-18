@@ -63,7 +63,7 @@ do {
 				ac_pattern.astring = host;
 				ac_pattern.length = strlen(host);
 				ac_pattern.rep.number = np;
-				r = ac_automata_add(n->host_ac, &ac_pattern);
+				r = ac_automata_add_exact(n->host_ac, &ac_pattern);
 				if(r != ACERR_SUCCESS) {
 					pr_err("%s:%s host add '%s' : %s : skipped\n",
 						__func__,n->ns_name,host,acerr2txt(r));
