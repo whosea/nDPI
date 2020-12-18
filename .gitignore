@@ -63,3 +63,4 @@ stamp-h1
 /python/Makefile
 /tests/unit/Makefile
 /tests/unit/unit
+/tests/dga
