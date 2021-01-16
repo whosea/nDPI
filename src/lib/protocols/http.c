@@ -110,12 +110,6 @@ static void ndpi_http_check_human_redeable_content(struct ndpi_detection_module_
 						   struct ndpi_flow_struct *flow,
 						   const u_int8_t *content, u_int16_t content_len) {
   if(content_len >= 4) {
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-    printf(" [len: %u] [%02X %02X %02X %02X][%c%c%c%c]", content_len,
-	   content[0], content[1], content[2], content[3],
-	   content[0], content[1], content[2], content[3]
-	   );
-#endif
 
     if(ndpi_http_is_print(content[0]) && ndpi_http_is_print(content[1])
        && ndpi_http_is_print(content[2]) && ndpi_http_is_print(content[3])) {
@@ -141,11 +135,6 @@ static void ndpi_validate_http_content(struct ndpi_detection_module_struct *ndpi
   struct ndpi_packet_struct *packet = &flow->packet;
   const u_int8_t *double_ret = (const u_int8_t *)ndpi_strnstr((const char *)packet->payload, "\r\n\r\n", packet->payload_packet_len);
 
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-  printf("==>>> [len: %u] ", packet->payload_packet_len);
-  printf("->> %.*s\n", packet->content_line.len, (const char *)packet->content_line.ptr);
-#endif
-  
   if(double_ret) {
     u_int len;
 
@@ -165,10 +154,6 @@ static void ndpi_validate_http_content(struct ndpi_detection_module_struct *ndpi
 	ndpi_http_check_human_redeable_content(ndpi_struct, flow, double_ret, len);
       }
     }
-
-#ifdef NDPI_ENABLE_DEBUG_MESSAGES
-    printf("\n");
-#endif
   }
 }
 
