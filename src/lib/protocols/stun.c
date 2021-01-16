@@ -1,7 +1,7 @@
 /*
  * stun.c
  *
- * Copyright (C) 2011-20 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -160,8 +160,9 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   struct ndpi_packet_struct *packet;
   int rc;
   
-  /* No need to do ntohl() with 0xFFFFFFFF */
-  if(flow->packet.iph && (flow->packet.iph->daddr == 0xFFFFFFFF /* 255.255.255.255 */)) {
+  if(flow->packet.iph &&
+     ((flow->packet.iph->daddr == 0xFFFFFFFF /* 255.255.255.255 */) ||
+     ((ntohl(flow->packet.iph->daddr) & 0xF0000000) == 0xE0000000 /* A multicast address */))) {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return(NDPI_IS_NOT_STUN);
   }
@@ -541,12 +542,13 @@ void ndpi_search_stun(struct ndpi_detection_module_struct *ndpi_struct, struct n
     return;
   }
 
+  if(flow->protos.stun_ssl.stun.num_udp_pkts >= MAX_NUM_STUN_PKTS)
+    NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+
   if(flow->packet_counter > 0) {
     /* This might be a RTP stream: let's make sure we check it */
     NDPI_CLR(&flow->excluded_protocol_bitmask, NDPI_PROTOCOL_RTP);
   }
-
-  NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
 }
 
 

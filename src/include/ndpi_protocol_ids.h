@@ -1,7 +1,7 @@
 /*
  * ndpi_protocol_ids.h
  *
- * Copyright (C) 2011-20 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -59,7 +59,7 @@ typedef enum {
   NDPI_PROTOCOL_COAP                  = 27,
   NDPI_PROTOCOL_VMWARE                = 28,
   NDPI_PROTOCOL_MAIL_SMTPS            = 29,
-  NDPI_PROTOCOL_FBZERO                = 30,
+  NDPI_PROTOCOL_FREE_30               = 30, /* Free */
   NDPI_PROTOCOL_UBNTAC2               = 31, /* Ubiquity UBNT AirControl = 2 - Thomas Fjellstrom <thomas+ndpi@fjellstrom.ca> */
   NDPI_PROTOCOL_KONTIKI               = 32,
   NDPI_PROTOCOL_OPENFT                = 33,
@@ -225,7 +225,7 @@ typedef enum {
   NDPI_PROTOCOL_KAKAOTALK             = 193, /* KakaoTalk Chat (no voice call) */
   NDPI_PROTOCOL_KAKAOTALK_VOICE       = 194, /* KakaoTalk Voice */
   NDPI_PROTOCOL_TWITCH                = 195, /* Edoardo Dominici <edoaramis@gmail.com> */
-  NDPI_PROTOCOL_DOH_DOT               = 196, /* DoH (DNS over HTTPS), DoT (DNS over TLS) */
+  NDPI_PROTOCOL_DOH_DOT               = 196, /* DoH (DNS over HTTPS), DoT (DNS over TLS), DoQ (DNS over QUIC). TODO: rename in NDPI_PROTOCOL_DOH_DOT_DOQ? */
   NDPI_PROTOCOL_WECHAT                = 197,
   NDPI_PROTOCOL_MPEGTS                = 198,
   NDPI_PROTOCOL_SNAPCHAT              = 199,

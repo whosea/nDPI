@@ -1,7 +1,7 @@
 /*
  * reader_util.c
  *
- * Copyright (C) 2011-20 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -1040,7 +1040,7 @@ u_int8_t plen2slot(u_int16_t plen) {
 /* ****************************************************** */
 
 void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_flow_info *flow, FILE * csv_fp) {
-  u_int i;
+  u_int i, is_quic = 0;
 
   if(!flow->ndpi_flow) return;
 
@@ -1126,6 +1126,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       snprintf(flow->http.url, sizeof(flow->http.url), "%s", flow->ndpi_flow->http.url);
       flow->http.response_status_code = flow->ndpi_flow->http.response_status_code;
       snprintf(flow->http.content_type, sizeof(flow->http.content_type), "%s", flow->ndpi_flow->http.content_type ? flow->ndpi_flow->http.content_type : "");
+      snprintf(flow->http.request_content_type, sizeof(flow->http.request_content_type), "%s", flow->ndpi_flow->http.request_content_type ? flow->ndpi_flow->http.request_content_type : "");
       snprintf(flow->http.user_agent, sizeof(flow->http.user_agent), "%s", flow->ndpi_flow->http.user_agent ? flow->ndpi_flow->http.user_agent : "");
     }
   } else if(is_ndpi_proto(flow, NDPI_PROTOCOL_TELNET)) {
@@ -1144,7 +1145,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
   }
   /* TLS */
   else if((is_ndpi_proto(flow, NDPI_PROTOCOL_TLS))
-	  || ((is_ndpi_proto(flow, NDPI_PROTOCOL_QUIC)))
+	  || ((is_quic = is_ndpi_proto(flow, NDPI_PROTOCOL_QUIC)))
 	  || (flow->detected_protocol.master_protocol == NDPI_PROTOCOL_TLS)
 	  || (flow->ndpi_flow->protos.stun_ssl.ssl.ja3_client[0] != '\0')
 	  ) {
@@ -1157,6 +1158,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 
     if(flow->ndpi_flow->protos.stun_ssl.ssl.server_names_len > 0 && flow->ndpi_flow->protos.stun_ssl.ssl.server_names)
       flow->ssh_tls.server_names = ndpi_strdup(flow->ndpi_flow->protos.stun_ssl.ssl.server_names);
+
     flow->ssh_tls.notBefore = flow->ndpi_flow->protos.stun_ssl.ssl.notBefore;
     flow->ssh_tls.notAfter = flow->ndpi_flow->protos.stun_ssl.ssl.notAfter;
     snprintf(flow->ssh_tls.ja3_client, sizeof(flow->ssh_tls.ja3_client), "%s",
@@ -1174,7 +1176,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 
     if(flow->ndpi_flow->protos.stun_ssl.ssl.alpn) {
       if((flow->ssh_tls.tls_alpn = ndpi_strdup(flow->ndpi_flow->protos.stun_ssl.ssl.alpn)) != NULL)
-        correct_csv_data_field(flow->ssh_tls.tls_alpn);
+	correct_csv_data_field(flow->ssh_tls.tls_alpn);
     }
 
     if(flow->ndpi_flow->protos.stun_ssl.ssl.issuerDN)
@@ -1205,8 +1207,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 	snprintf(flow->info, sizeof(flow->info), "ALPN: %s][TLS Supported Versions: %s",
 		 flow->ndpi_flow->protos.stun_ssl.ssl.alpn,
 		 flow->ndpi_flow->protos.stun_ssl.ssl.tls_supported_versions);
-    }
-    else if(flow->ndpi_flow->protos.stun_ssl.ssl.alpn) {
+    } else if(flow->ndpi_flow->protos.stun_ssl.ssl.alpn) {
       correct_csv_data_field(flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
 
       if(csv_fp)
@@ -1216,7 +1217,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 	snprintf(flow->info, sizeof(flow->info), "ALPN: %s",
 		 flow->ndpi_flow->protos.stun_ssl.ssl.alpn);
     }
-
+        
     if(enable_doh_dot_detection) {
       /* For TLS we use TLS block lenght instead of payload lenght */
       ndpi_reset_bin(&flow->payload_len_bin);

@@ -1,7 +1,7 @@
 /*
  * ndpi_utils.c
  *
- * Copyright (C) 2011-20 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -1221,8 +1221,23 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
 
   case NDPI_PROTOCOL_QUIC:
     ndpi_serialize_start_of_block(serializer, "quic");
-    if(flow->host_server_name[0] != '\0')
-      ndpi_serialize_string_string(serializer, "hostname", (const char*)flow->host_server_name);
+    if(flow->protos.stun_ssl.ssl.client_requested_server_name[0] != '\0')
+      ndpi_serialize_string_string(serializer, "client_requested_server_name",
+                                   flow->protos.stun_ssl.ssl.client_requested_server_name);
+    if(flow->http.user_agent)
+      ndpi_serialize_string_string(serializer, "user_agent", flow->http.user_agent);
+    if(flow->protos.stun_ssl.ssl.ssl_version) {
+      u_int8_t unknown_tls_version;
+      char *version = ndpi_ssl_version2str(flow, flow->protos.stun_ssl.ssl.ssl_version, &unknown_tls_version);
+
+      if(!unknown_tls_version)
+	ndpi_serialize_string_string(serializer, "version", version);
+      if(flow->protos.stun_ssl.ssl.alpn)
+        ndpi_serialize_string_string(serializer, "alpn", flow->protos.stun_ssl.ssl.alpn);
+      ndpi_serialize_string_string(serializer, "ja3", flow->protos.stun_ssl.ssl.ja3_client);
+      if(flow->protos.stun_ssl.ssl.tls_supported_versions)
+        ndpi_serialize_string_string(serializer, "tls_supported_versions", flow->protos.stun_ssl.ssl.tls_supported_versions);
+    }
     ndpi_serialize_end_of_block(serializer);
     break;
 
@@ -1731,6 +1746,9 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
   case NDPI_TLS_MISSING_SNI:
     return("SNI TLS extension was missing");
     
+  case NDPI_HTTP_SUSPICIOUS_CONTENT:
+    return("HTTP suspicious content");
+    
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
     return(buf);
@@ -1758,7 +1776,7 @@ const char* ndpi_http_method2str(ndpi_http_method m) {
 
 /* ******************************************************************** */
 
-ndpi_http_method ndpi_http_str2method(const char* method, ssize_t method_len) {
+ndpi_http_method ndpi_http_str2method(const char* method, u_int16_t method_len) {
   if(!method || method_len < 3)
     return(NDPI_HTTP_METHOD_UNKNOWN);
 
@@ -1812,3 +1830,4 @@ u_int32_t ndpi_quick_16_byte_hash(u_int8_t *in_16_bytes_long) {
   return((u_int32_t)a);
 }
 
+/* ******************************************************************** */

@@ -1,7 +1,7 @@
 /*
  * tls.c - SSL/TLS/DTLS dissector
  *
- * Copyright (C) 2016-20 - ntop.org
+ * Copyright (C) 2016-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -120,7 +120,7 @@ void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct
 				struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = &flow->packet;
   u_int avail_bytes;
-
+  
   /* TCP */
 #ifdef DEBUG_TLS_MEMORY
   printf("[TLS Mem] Handling TCP/TLS flow [payload_len: %u][buffer_len: %u][direction: %u]\n",
@@ -143,6 +143,7 @@ void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct
   }
 
   avail_bytes = flow->l4.tcp.tls.message.buffer_len - flow->l4.tcp.tls.message.buffer_used;
+  
   if(avail_bytes < packet->payload_packet_len) {
     void *newbuf;
     u_int new_len = flow->l4.tcp.tls.message.buffer_len + packet->payload_packet_len;
@@ -164,14 +165,37 @@ void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct
   }
 
   if(packet->payload_packet_len > 0 && avail_bytes >= packet->payload_packet_len) {
-    memcpy(&flow->l4.tcp.tls.message.buffer[flow->l4.tcp.tls.message.buffer_used],
-	   packet->payload, packet->payload_packet_len);
+    u_int8_t ok = 0;
+    
+    if(flow->l4.tcp.tls.message.next_seq[packet->packet_direction] != 0) {
+      if(ntohl(packet->tcp->seq) == flow->l4.tcp.tls.message.next_seq[packet->packet_direction])
+	ok = 1;
+    } else
+      ok = 1;
 
-    flow->l4.tcp.tls.message.buffer_used += packet->payload_packet_len;
+    if(ok) {
+      memcpy(&flow->l4.tcp.tls.message.buffer[flow->l4.tcp.tls.message.buffer_used],
+	     packet->payload, packet->payload_packet_len);
+      
+      flow->l4.tcp.tls.message.buffer_used += packet->payload_packet_len;
 #ifdef DEBUG_TLS_MEMORY
-    printf("[TLS Mem] Copied data to buffer [%u/%u bytes]\n",
-	   flow->l4.tcp.tls.message.buffer_used, flow->l4.tcp.tls.message.buffer_len);
+      printf("[TLS Mem] Copied data to buffer [%u/%u bytes][direction: %u][tcp_seq: %u][next: %u]\n",
+	     flow->l4.tcp.tls.message.buffer_used, flow->l4.tcp.tls.message.buffer_len,
+	     packet->packet_direction,
+	     ntohl(packet->tcp->seq), 
+	     ntohl(packet->tcp->seq)+packet->payload_packet_len);
 #endif
+
+      flow->l4.tcp.tls.message.next_seq[packet->packet_direction] = ntohl(packet->tcp->seq)+packet->payload_packet_len;
+    } else {
+#ifdef DEBUG_TLS_MEMORY
+      printf("[TLS Mem] Skipping packet [%u bytes][direction: %u][tcp_seq: %u][expected next: %u]\n",
+	     flow->l4.tcp.tls.message.buffer_len,
+	     packet->packet_direction,
+	     ntohl(packet->tcp->seq), 
+	     ntohl(packet->tcp->seq)+packet->payload_packet_len);
+#endif      
+    }
   }
 }
 
@@ -442,7 +466,8 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
 		  /* The check "len > sizeof(dNSName) - 1" will be always false. If we add it,
 		     the compiler is smart enough to detect it and throws a warning */
-		  if(len == 0 /* Looks something went wrong */)
+		  if((len == 0 /* Looks something went wrong */)
+		     || ((i+len) >  packet->payload_packet_len))
 		    break;
 
 		  strncpy(dNSName, (const char*)&packet->payload[i], len);
@@ -451,7 +476,9 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 		  cleanupServerName(dNSName, len);
 
 #ifdef DEBUG_TLS
-		  printf("[TLS] dNSName %s [%s]\n", dNSName, flow->protos.stun_ssl.ssl.client_requested_server_name);
+		  printf("[TLS] dNSName %s [%s][len: %u][leftover: %d]\n", dNSName,
+			 flow->protos.stun_ssl.ssl.client_requested_server_name, len,
+			 packet->payload_packet_len-i-len);
 #endif
 		  if(matched_name == 0) {
 		    if(flow->protos.stun_ssl.ssl.client_requested_server_name[0] == '\0')
@@ -1418,7 +1445,8 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		    }
 		  }
 		}
-	      } else if(extension_id == 65445 /* QUIC transport parameters */) {
+	      } else if(extension_id == 65445 || /* QUIC transport parameters (drafts version) */
+		        extension_id == 57) { /* QUIC transport parameters (final version) */
 		u_int16_t s_offset = offset+extension_offset;
 		uint16_t final_offset;
 		int using_var_int = is_version_with_var_int_transport_params(quic_version);
@@ -1459,7 +1487,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #ifdef DEBUG_TLS
 		  printf("Client SSL [QUIC TP: Param 0x%x Len %d]\n", (int)param_type, (int)param_len);
 #endif
-		  if(s_offset+param_len >= final_offset)
+		  if(s_offset+param_len > final_offset)
 		    break;
 
 		  if(param_type==0x3129) {

@@ -203,9 +203,17 @@ extern "C" {
   void ndpi_finalize_initalization(struct ndpi_detection_module_struct *ndpi_str);
 
   /**
-   * Frees the memory allocated in the specified flow
+   * Frees the dynamic memory allocated members in the specified flow
    *
-   * @par flow  = the flow to deallocate
+   * @par flow  = the flow struct which dynamic allocated members should be deallocated
+   *
+   */
+  void ndpi_free_flow_data(struct ndpi_flow_struct *flow);
+
+  /**
+   * Frees the dynamic memory allocated members in the specified flow and the flow struct itself
+   *
+   * @par flow  = the flow struct and its dynamic allocated members that should be deallocated
    *
    */
   void ndpi_free_flow(struct ndpi_flow_struct *flow);
@@ -957,12 +965,12 @@ extern "C" {
   void ndpi_md5(const u_char *data, size_t data_len, u_char hash[16]);
 
   const char* ndpi_http_method2str(ndpi_http_method m);
-  ndpi_http_method ndpi_http_str2method(const char* method, ssize_t method_len);
+  ndpi_http_method ndpi_http_str2method(const char* method, u_int16_t method_len);
   
   /* ptree (trie) API */
   ndpi_ptree_t* ndpi_ptree_create(void);
-  int ndpi_ptree_insert(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int8_t bits, u_int32_t user_data);
-  int ndpi_ptree_match_addr(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int32_t *user_data);
+  int ndpi_ptree_insert(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int8_t bits, u_int64_t user_data);
+  int ndpi_ptree_match_addr(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr, u_int64_t *user_data);
   void ndpi_ptree_destroy(ndpi_ptree_t *tree);
 
   /* General purpose utilities */
@@ -1456,7 +1464,6 @@ extern "C" {
 
   /* ******************************* */
   
-  ndpi_rules* ndpi_parse_rules(struct ndpi_detection_module_struct *ndpi_str, char *path);  
 #ifdef __cplusplus
 }
 #endif

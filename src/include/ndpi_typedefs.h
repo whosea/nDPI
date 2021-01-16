@@ -1,7 +1,7 @@
 /*
  * ndpi_typedefs.h
  *
- * Copyright (C) 2011-20 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -89,6 +89,7 @@ typedef enum {
   NDPI_UNSAFE_PROTOCOL,
   NDPI_DNS_SUSPICIOUS_TRAFFIC,
   NDPI_TLS_MISSING_SNI,
+  NDPI_HTTP_SUSPICIOUS_CONTENT,
   
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 31 due to (**) */
@@ -693,6 +694,7 @@ struct ndpi_flow_tcp_struct {
     struct {
       u_int8_t *buffer;
       u_int buffer_len, buffer_used;
+      u_int32_t next_seq[2]; /* Directions */
     } message;
     
     void* srv_cert_fingerprint_ctx; /* SHA-1 */
@@ -901,7 +903,7 @@ struct ndpi_packet_struct {
 
   u_int8_t tls_certificate_detected:4, tls_certificate_num_checks:4;
   u_int8_t packet_lines_parsed_complete:1,
-    packet_direction:1, empty_line_position_set:1, pad:5;
+    packet_direction:1, empty_line_position_set:1, http_check_content:1, pad:4;
 };
 
 struct ndpi_detection_module_struct;
@@ -1278,7 +1280,7 @@ struct ndpi_flow_struct {
   */
   struct {
     ndpi_http_method method;
-    char *url, *content_type, *user_agent;
+    char *url, *content_type /* response */, *request_content_type /* e.g. for POST */, *user_agent;
     u_int8_t num_request_headers, num_response_headers;
     u_int8_t request_version; /* 0=1.0 and 1=1.1. Create an enum for this? */
     u_int16_t response_status_code; /* 200, 404, etc. */
@@ -1315,8 +1317,8 @@ struct ndpi_flow_struct {
       struct {
         char ssl_version_str[12];
 	u_int16_t ssl_version, server_names_len;
-	char client_requested_server_name[64], *server_names,
-	  *alpn, *tls_supported_versions, *issuerDN, *subjectDN;
+	char client_requested_server_name[256], /* SNI hostname length: RFC 4366 */
+	  *server_names, *alpn, *tls_supported_versions, *issuerDN, *subjectDN;
 	u_int32_t notBefore, notAfter;
 	char ja3_client[33], ja3_server[33];
 	u_int16_t server_cipher;
@@ -1615,53 +1617,5 @@ struct ndpi_bin {
     u_int32_t *bins32; /* num_bins bins */
   } u;
 };
-
-/* **************************** */
-
-typedef struct {
-  ndpi_ip_addr_t ip;
-  u_int8_t cidr;
-  u_int8_t ip_v6:1, _notused:7;
-  u_int16_t l4_port;
-} ndpi_rule_peer;
-
-typedef enum {
-  rule_pass,
-  rule_drop
-} ndpi_rule_action;
-  
-typedef struct _ndpi_rule {
-  /* Ancillary information */
-  u_int16_t id;
-  char *description;
-
-  /* Keys */
-  u_int8_t l4_proto;
-  ndpi_rule_peer client, server; /* Network byte order */
-  u_int16_t l7_proto;
-  u_int8_t reverseable_rule:1 /* src <-> dst */, _not_used:7;
-  
-  /* Rule actions */
-  ndpi_rule_action action;
-  
-  /* Internal use */
-  struct _ndpi_rule *list_next; /* Linked list of rules */
-  
-} ndpi_rule;
-
-/*
-  Matching order
-  - L7 protocol
-  - match client/server
-
- */
-typedef struct {
-  u_int32_t num_rules;
-  ndpi_rule *root;
-
-  ndpi_rule *l7_rules[NDPI_LAST_IMPLEMENTED_PROTOCOL], *l7_any;
-
-  
-} ndpi_rules;
 
 #endif /* __NDPI_TYPEDEFS_H__ */

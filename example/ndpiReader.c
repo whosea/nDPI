@@ -1,7 +1,7 @@
 /*
  * ndpiReader.c
  *
- * Copyright (C) 2011-20 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * nDPI is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -1117,7 +1117,6 @@ static char* is_unsafe_cipher(ndpi_cipher_weakness c) {
 
 void print_bin(FILE *fout, const char *label, struct ndpi_bin *b) {
   u_int8_t i;
-  FILE *out = results_file ? results_file : stdout;
   const char *sep = label ? "," : ";";
 
   ndpi_normalize_bin(b);
@@ -1393,6 +1392,9 @@ if(!rep_mini) {
 
     fprintf(out, "[URL: %s][StatusCode: %u]",
 	    flow->http.url, flow->http.response_status_code);
+
+    if(flow->http.request_content_type[0] != '\0')
+      fprintf(out, "[Req Content-Type: %s]", flow->http.request_content_type);
 
     if(flow->http.content_type[0] != '\0')
       fprintf(out, "[Content-Type: %s]", flow->http.content_type);
@@ -3409,9 +3411,9 @@ void test_lib() {
 
 /* *********************************************** */
 
+#if 0
 static void binUnitTest() {
   struct ndpi_bin *bins, b0, b1;
-  u_int8_t versbose = 0;
   u_int8_t num_bins = 32;
   u_int8_t num_points = 24;
   u_int32_t i, j;
@@ -3466,6 +3468,7 @@ static void binUnitTest() {
 
   // exit(0);
 }
+#endif
 
 /* *********************************************** */
 

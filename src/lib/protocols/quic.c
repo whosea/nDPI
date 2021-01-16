@@ -1,7 +1,7 @@
 /*
  * quic.c
  *
- * Copyright (C) 2012-20 - ntop.org
+ * Copyright (C) 2012-21 - ntop.org
  *
  * This module is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -56,6 +56,7 @@ extern int http_process_user_agent(struct ndpi_detection_module_struct *ndpi_str
                                    const u_int8_t *ua_ptr, u_int16_t ua_ptr_len);
 
 /* Versions */
+#define V_1		0x00000001
 #define V_Q024		0x51303234
 #define V_Q025		0x51303235
 #define V_Q030		0x51303330
@@ -85,7 +86,8 @@ static int is_version_gquic(uint32_t version)
 }
 static int is_version_quic(uint32_t version)
 {
-  return ((version & 0xFFFFFF00) == 0xFF000000) /* IETF */ ||
+  return version == V_1 ||
+    ((version & 0xFFFFFF00) == 0xFF000000) /* IETF Drafts*/ ||
     ((version & 0xFFFFF000) == 0xfaceb000) /* Facebook */ ||
     ((version & 0x0F0F0F0F) == 0x0a0a0a0a) /* Forcing Version Negotiation */;
 }
@@ -95,8 +97,19 @@ static int is_version_valid(uint32_t version)
 }
 static uint8_t get_u8_quic_ver(uint32_t version)
 {
+  /* IETF Draft versions */
   if((version >> 8) == 0xff0000)
     return (uint8_t)version;
+  /* QUIC (final?) constants for v1 are defined in draft-33 */
+  if (version == 0x00000001) {
+    return 33;
+  }
+
+  if (version == V_MVFST_22)
+    return 22;
+  if (version == V_MVFST_27 || version == V_MVFST_EXP)
+    return 27;
+
   /* "Versions that follow the pattern 0x?a?a?a?a are reserved for use in
      forcing version negotiation to be exercised".
      It is tricky to return a correct draft version: such number is primarly
@@ -852,7 +865,10 @@ static int quic_derive_initial_secrets(uint32_t version,
 						      0x7a, 0x4e, 0xde, 0xf4, 0xe7, 0xcc, 0xee, 0x5f, 0xa4, 0x50,
 						      0x6c, 0x19, 0x12, 0x4f, 0xc8, 0xcc, 0xda, 0x6e, 0x03, 0x3d
   };
-
+  static const uint8_t handshake_salt_v1[20] = {
+						0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17,
+						0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a
+  };
   gcry_error_t err;
   uint8_t secret[HASH_SHA2_256_LENGTH];
 #ifdef DEBUG_CRYPT
@@ -871,20 +887,21 @@ static int quic_derive_initial_secrets(uint32_t version,
     err = hkdf_extract(GCRY_MD_SHA256, hanshake_salt_draft_t51,
 		       sizeof(hanshake_salt_draft_t51),
                        cid, cid_len, secret);
-  } else if(is_quic_ver_less_than(version, 22) ||
-	    version == V_MVFST_22) {
+  } else if(is_quic_ver_less_than(version, 22)) {
     err = hkdf_extract(GCRY_MD_SHA256, handshake_salt_draft_22,
 		       sizeof(handshake_salt_draft_22),
                        cid, cid_len, secret);
-  } else if(is_quic_ver_less_than(version, 28) ||
-	    version == V_MVFST_27 ||
-	    version == V_MVFST_EXP) {
+  } else if(is_quic_ver_less_than(version, 28)) {
     err = hkdf_extract(GCRY_MD_SHA256, handshake_salt_draft_23,
 		       sizeof(handshake_salt_draft_23),
                        cid, cid_len, secret);
-  } else {
+  } else if(is_quic_ver_less_than(version, 32)) {
     err = hkdf_extract(GCRY_MD_SHA256, handshake_salt_draft_29,
 		       sizeof(handshake_salt_draft_29),
+                       cid, cid_len, secret);
+  } else {
+    err = hkdf_extract(GCRY_MD_SHA256, handshake_salt_v1,
+		       sizeof(handshake_salt_v1),
                        cid, cid_len, secret);
   }
   if(err) {
@@ -973,6 +990,12 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
   packet_number = pkn32;
 
   offset = pn_offset + pkn_len;
+  if (!(pn_offset + payload_length >= offset + 16)) {
+    NDPI_LOG_DBG(ndpi_struct, "No room for Auth Tag %d %d",
+                 pn_offset + payload_length, offset);
+    quic_ciphers_reset(&ciphers);
+    return NULL;
+  }
   quic_decrypt_message(&ciphers.pp_cipher, &packet->payload[0], pn_offset + payload_length,
 		       offset, first_byte, pkn_len, packet_number, &decryption);
 
@@ -1162,6 +1185,7 @@ static void process_tls(struct ndpi_detection_module_struct *ndpi_struct,
   packet->payload_packet_len = crypto_data_len;
 
   processClientServerHello(ndpi_struct, flow, version);
+  flow->l4.tcp.tls.hello_processed = 1; /* Allow matching of custom categories */
 
   /* Restore */
   packet->payload = p;
@@ -1172,6 +1196,13 @@ static void process_tls(struct ndpi_detection_module_struct *ndpi_struct,
      Negotiated version is only present in the ServerHello message too, but
      fortunately, QUIC always uses TLS version 1.3 */
   flow->protos.stun_ssl.ssl.ssl_version = 0x0304;
+
+  /* DNS-over-QUIC: ALPN is "doq" or "doq-XXX" (for drafts versions) */
+  if(flow->protos.stun_ssl.ssl.alpn &&
+     strncmp(flow->protos.stun_ssl.ssl.alpn, "doq", 3) == 0) {
+    NDPI_LOG_DBG(ndpi_struct, "Found DOQ (ALPN: [%s])\n", flow->protos.stun_ssl.ssl.alpn);
+    ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_DOH_DOT, NDPI_PROTOCOL_QUIC);
+  }
 }
 
 #ifndef MIN
@@ -1218,16 +1249,23 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
     if((memcmp(tag, "SNI\0", 4) == 0) &&
        (tag_offset_start + prev_offset + len < crypto_data_len)) {
-      sni_len = MIN(len, sizeof(flow->host_server_name) - 1);
-      memcpy(flow->host_server_name,
+      sni_len = MIN(len, sizeof(flow->protos.stun_ssl.ssl.client_requested_server_name) - 1);
+      memcpy(flow->protos.stun_ssl.ssl.client_requested_server_name,
              &crypto_data[tag_offset_start + prev_offset], sni_len);
+      flow->protos.stun_ssl.ssl.client_requested_server_name[sni_len] = '\0';
 
-      NDPI_LOG_DBG2(ndpi_struct, "SNI: [%s]\n", flow->host_server_name);
+      NDPI_LOG_DBG2(ndpi_struct, "SNI: [%s]\n",
+                    flow->protos.stun_ssl.ssl.client_requested_server_name);
 
       ndpi_match_host_subprotocol(ndpi_struct, flow,
-                                  (char *)flow->host_server_name,
-                                  strlen((const char*)flow->host_server_name),
+                                  (char *)flow->protos.stun_ssl.ssl.client_requested_server_name,
+                                  strlen((const char*)flow->protos.stun_ssl.ssl.client_requested_server_name),
                                   &ret_match, NDPI_PROTOCOL_QUIC);
+      flow->l4.tcp.tls.hello_processed = 1; /* Allow matching of custom categories */
+
+      ndpi_check_dga_name(ndpi_struct, flow,
+                          flow->protos.stun_ssl.ssl.client_requested_server_name, 1);
+
       sni_found = 1;
       if (ua_found)
         return;
@@ -1251,6 +1289,12 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
   }
   if(i != num_tags)
     NDPI_LOG_DBG(ndpi_struct, "Something went wrong in tags iteration\n");
+
+  /* Add check for missing SNI */
+  if(flow->protos.stun_ssl.ssl.client_requested_server_name[0] == '\0') {
+    /* This is a bit suspicious */
+    NDPI_SET_BIT(flow->risk, NDPI_TLS_MISSING_SNI);
+  }
 }
 
 
