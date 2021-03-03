@@ -527,8 +527,8 @@ static void free_wrapper(void *freeable)
 	kvfree(freeable);
 }
 
-static void fill_prefix_any(prefix_t *p, union nf_inet_addr *ip,int family) {
-	memset(p, 0, sizeof(prefix_t));
+static void fill_prefix_any(ndpi_prefix_t *p, union nf_inet_addr *ip,int family) {
+	memset(p, 0, sizeof(ndpi_prefix_t));
 	p->ref_count = 0;
 	if(family == AF_INET) {
 		memcpy(&p->add.sin, ip, 4);
@@ -923,8 +923,8 @@ static void packet_trace(const struct sk_buff *skb,const struct nf_conn * ct, ch
 static int check_known_ipv4_service( struct ndpi_net *n,
 		union nf_inet_addr *ipaddr, uint16_t port, uint8_t protocol) {
 
-	prefix_t ipx;
-	patricia_node_t *node;
+	ndpi_prefix_t ipx;
+	ndpi_patricia_node_t *node;
 	uint16_t app_protocol = NDPI_PROTOCOL_UNKNOWN;
 	fill_prefix_any(&ipx,ipaddr,AF_INET);
 
@@ -1128,10 +1128,10 @@ static void ndpi_host_ssl(struct nf_ct_ext_ndpi *ct_ndpi) {
     if(!ct_ndpi->ssl && (
 		ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_TLS ||
 		ct_ndpi->proto.master_protocol == NDPI_PROTOCOL_TLS)) {
-    	const char *name_s = ct_ndpi->flow->protos.stun_ssl.ssl.server_names;
-    	const char *name_c = ct_ndpi->flow->protos.stun_ssl.ssl.client_requested_server_name;
-	const size_t s_len = ct_ndpi->flow->protos.stun_ssl.ssl.server_names_len;
-	const size_t c_len = sizeof(ct_ndpi->flow->protos.stun_ssl.ssl.client_requested_server_name);
+    	const char *name_s = ct_ndpi->flow->protos.tls_quic_stun.tls_quic.server_names;
+    	const char *name_c = ct_ndpi->flow->protos.tls_quic_stun.tls_quic.client_requested_server_name;
+	const size_t s_len = ct_ndpi->flow->protos.tls_quic_stun.tls_quic.server_names_len;
+	const size_t c_len = sizeof(ct_ndpi->flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
 	if(*name_c) {
 	 	ct_ndpi->ssl = kstrndup(name_c, c_len, GFP_ATOMIC);
 	} else if(name_s) {
@@ -2539,7 +2539,7 @@ static int __net_init ndpi_net_init(struct net *net)
 			bt_hash_size*1024,bt6_hash_size*1024,
 			bt_hash_tmo,bt_log_size);
 
-	ndpi_finalize_initalization(n->ndpi_struct);
+	ndpi_finalize_initialization(n->ndpi_struct);
 	n->n_hash = -1;
 
 	/* Create proc files */

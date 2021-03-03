@@ -92,8 +92,8 @@ if(addr) {
 
 static void free_ptree_data(void *data) { ; };
 
-prefix_t *fill_ipv4_prefix(prefix_t *prefix,struct in_addr *pin, int masklen ) {
-	memset((char *)prefix, 0, sizeof(prefix_t));
+ndpi_prefix_t *fill_ipv4_prefix(ndpi_prefix_t *prefix,struct in_addr *pin, int masklen ) {
+	memset((char *)prefix, 0, sizeof(ndpi_prefix_t));
 	prefix->add.sin.s_addr = pin->s_addr;
 	prefix->family = AF_INET;
 	prefix->bitlen = masklen;
@@ -102,7 +102,7 @@ prefix_t *fill_ipv4_prefix(prefix_t *prefix,struct in_addr *pin, int masklen ) {
 }
 
 
-static char *prefix_str(prefix_t *px, int proto,char *lbuf,size_t bufsize) {
+static char *prefix_str(ndpi_prefix_t *px, int proto,char *lbuf,size_t bufsize) {
 char ibuf[64];
 int k;
 	lbuf[0] = 0;
@@ -120,9 +120,9 @@ int k;
 	return lbuf;
 }
 
-static void list_ptree(patricia_tree_t *pt)
+static void list_ptree(ndpi_patricia_tree_t *pt)
 {
-	patricia_node_t *Xstack[PATRICIA_MAXBITS+1], **Xsp, *node;
+	ndpi_patricia_node_t *Xstack[PATRICIA_MAXBITS+1], **Xsp, *node;
 
 	Xsp = &Xstack[0];
 	node = pt->head;
@@ -217,9 +217,9 @@ void usage(void) {
 int main(int argc,char **argv) {
 
   struct in_addr pin;
-  patricia_node_t *node;
-  patricia_tree_t *ptree;
-  prefix_t prefix,prefix1;
+  ndpi_patricia_node_t *node;
+  ndpi_patricia_tree_t *ptree;
+  ndpi_prefix_t prefix,prefix1;
   int i,line,code,nsp,psp;
   uint16_t protocol;
   char lbuf[128],lbuf2[128];
@@ -243,7 +243,7 @@ int main(int argc,char **argv) {
 	}
   }
 
-  ptree = ndpi_New_Patricia(32);
+  ptree = ndpi_patricia_new(32);
   if(!ptree) {
 	fprintf(stderr,"Out of memory\n");
 	exit(1);
@@ -403,7 +403,7 @@ int main(int argc,char **argv) {
   if(!line) exit(0);
   list_ptree(ptree);
 
-  ndpi_Destroy_Patricia(ptree, free_ptree_data);
+  ndpi_patricia_destroy(ptree, free_ptree_data);
 
   if(youtfile) {
 	yfd = fopen(youtfile,"w");

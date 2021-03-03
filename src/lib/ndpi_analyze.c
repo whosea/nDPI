@@ -68,9 +68,9 @@ struct ndpi_analyze_struct* ndpi_alloc_data_analysis(u_int16_t _max_series_len) 
 
 /* ********************************************************************************* */
 
-void ndpi_free_data_analysis(struct ndpi_analyze_struct *d) {
+void ndpi_free_data_analysis(struct ndpi_analyze_struct *d, u_int8_t free_pointer) {
   if(d->values) ndpi_free(d->values);
-  ndpi_free(d);
+  if(free_pointer) ndpi_free(d);
 }
 
 /* ********************************************************************************* */
@@ -105,7 +105,7 @@ void ndpi_data_add_value(struct ndpi_analyze_struct *s, const u_int32_t value) {
 
   /*
     Optimized stddev calculation
-    
+
     https://www.khanacademy.org/math/probability/data-distributions-a1/summarizing-spread-distributions/a/calculating-standard-deviation-step-by-step
     https://math.stackexchange.com/questions/683297/how-to-calculate-standard-deviation-without-detailed-historical-data
     http://mathcentral.uregina.ca/QQ/database/QQ.09.02/carlos1.html
@@ -140,7 +140,8 @@ u_int32_t ndpi_data_max(struct ndpi_analyze_struct *s) { return(s->max_val); }
 
 /* Compute the variance on all values */
 float ndpi_data_variance(struct ndpi_analyze_struct *s) {
-  return(s->num_data_entries ? ((float)s->stddev.sum_square_total - ((float)s->sum_total * (float)s->sum_total / (float)s->num_data_entries)) / (float)s->num_data_entries : 0.0);  
+  float v = s->num_data_entries ? ((float)s->stddev.sum_square_total - ((float)s->sum_total * (float)s->sum_total / (float)s->num_data_entries)) / (float)s->num_data_entries : 0.0;
+  return((v < 0  /* rounding problem */) ? 0 : v);
 }
 
 /* ********************************************************************************* */
@@ -468,7 +469,7 @@ void ndpi_normalize_bin(struct ndpi_bin *b) {
 	b->u.bins8[i] = (b->u.bins8[i]*100) / tot;
     }
     break;
-    
+
   case ndpi_bin_family16:
     for(i=0; i<b->num_bins; i++) tot += b->u.bins16[i];
 
@@ -588,7 +589,7 @@ float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t nor
       u_int32_t a = ndpi_get_bin_value(b1, i);
       u_int32_t b = ndpi_get_bin_value(b2, i);
       u_int32_t diff = (a > b) ? (a - b) : (b - a);
-      
+
       if(a != b) sum += pow(diff, 2);
 
       // printf("[a: %u][b: %u][sum: %u]\n", a, b, sum);
@@ -721,7 +722,7 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 
 	if(j == cluster_ids[i])
 	  current_similarity = similarity;
-	
+
 	if(verbose)
 	  printf("Bin %u / centroid %u [similarity: %f]\n", i, j, similarity);
 
@@ -743,7 +744,7 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 	*/
 	cluster_id = cluster_ids[i];
       }
-      
+
       bin_score[i] = best_similarity;
 
       if(cluster_ids[i] != cluster_id) {
@@ -817,3 +818,306 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 }
 
 /* ********************************************************************************* */
+
+/*
+   RSI (Relative Strength Index)
+
+   RSI = 100 − [ 100/ (1 + (Average gain/Average loss)) ]
+
+   https://www.investopedia.com/terms/r/rsi.asp
+*/
+
+int ndpi_alloc_rsi(struct ndpi_rsi_struct *s, u_int16_t num_learning_values) {
+  memset(s, 0, sizeof(struct ndpi_rsi_struct));
+
+  s->empty  = 1, s->num_values = num_learning_values;
+  s->gains  = (u_int32_t*)ndpi_calloc(num_learning_values, sizeof(u_int32_t));
+  s->losses = (u_int32_t*)ndpi_calloc(num_learning_values, sizeof(u_int32_t));
+
+  if(s->gains && s->losses) {
+    s->last_value = 0;
+    return(0);
+  } else {
+    if(s->gains)  free(s->gains);
+    if(s->losses) free(s->losses);
+    return(-1);
+  }
+}
+
+/* ************************************* */
+
+void ndpi_free_rsi(struct ndpi_rsi_struct *s) {
+  ndpi_free(s->gains), ndpi_free(s->losses);
+}
+
+/* ************************************* */
+
+/*
+  This function adds a new value and returns the computed RSI, or -1
+  if there are too few points (< num_learning_values)
+
+  RSI < 30 (too many losses)
+  RSI > 70 (too many gains)
+*/
+float ndpi_rsi_add_value(struct ndpi_rsi_struct *s, const u_int32_t value) {
+  float relative_strength;
+
+  if(!s->empty) {
+    u_int32_t val;
+
+    s->total_gains -= s->gains[s->next_index], s->total_losses -= s->losses[s->next_index];
+
+    if(value > s->last_value) {
+      val = value - s->last_value;
+      s->gains[s->next_index] = val, s->losses[s->next_index] = 0;
+      s->total_gains += val;
+#ifdef DEBUG_RSI
+      printf("Gain: %u\n", val);
+#endif
+    } else {
+      val = s->last_value - value;
+      s->losses[s->next_index] = val, s->gains[s->next_index] = 0;
+      s->total_losses += val;
+#ifdef DEBUG_RSI
+      printf("Loss: %u\n", val);
+#endif
+    }
+
+#ifdef DEBUG_RSI
+    printf("[value: %u][total_gains: %u][total_losses: %u][cur_idx: %u]\n", value, s->total_gains, s->total_losses, s->next_index);
+#endif
+  }
+
+  s->last_value = value, s->next_index = (s->next_index + 1) % s->num_values, s->empty = 0;
+  if(s->next_index == 0) s->rsi_ready = 1; /* We have completed one round */
+
+  if(!s->rsi_ready)
+    return(-1); /* Too early */
+  else if(s->total_losses == 0) /* Avoid division by zero (**) */
+    return(100.);
+  else {
+    relative_strength = (float)s->total_gains / (float)s->total_losses; /* (**) */
+#ifdef DEBUG_RSI
+    printf("RSI: %f\n", relative_strength);
+#endif
+    return(100. - (100. / (1. + relative_strength)));
+  }
+}
+
+/* *********************************************************** */
+
+/* https://www.johndcook.com/blog/cpp_phi_inverse/ */
+
+static double ndpi_rational_approximation(double t) {
+  // Abramowitz and Stegun formula 26.2.23.
+  // The absolute value of the error should be less than 4.5 e-4.
+  double c[] = { 2.515517, 0.802853, 0.010328 };
+  double d[] = { 1.432788, 0.189269, 0.001308 };
+
+  return(t - ((c[2]*t + c[1])*t + c[0]) / (((d[2]*t + d[1])*t + d[0])*t + 1.0));
+}
+
+static double ndpi_normal_cdf_inverse(double p) {
+  if(p <= 0.0 || p >= 1.0)
+    return(0); /* Invalid argument: valid range 0 < X < 1 */
+
+  if(p < 0.5) {
+    // F^-1(p) = - G^-1(p)
+    return -ndpi_rational_approximation( sqrt(-2.0*log(p)) );
+  } else {
+    // F^-1(p) = G^-1(1-p)
+    return ndpi_rational_approximation( sqrt(-2.0*log(1-p)) );
+  }
+}
+
+double ndpi_avg_inline(u_int32_t *v, u_int num) {
+  double avg = 0;
+  u_int i;
+
+  for(i=0; i<num; i++)
+    avg += v[i];
+
+  return(avg / (u_int32_t)num);
+}
+
+/* *********************************************************** */
+
+/*
+  Initializes Holt-Winters with Confidence Interval
+
+   Input
+   hw:          Datastructure to initialize and that needs tobe freed with ndpi_hw_free()
+   num_periods  Number of observations of a season, or in ML-parlance the number of points that are required to make the forecast
+   additive     If set to 1 will use the Holt-Winters additive seasonal (should be the default), otherwise the multiplicative seasonal.
+   alpha        Level: specifies the coefficient for the level smoothing. Range 0..1. The higher α, the faster the method forgets old values
+   beta         Trend: specifies the coefficient for the trend smoothing. Range 0..1.
+   gamma        Seasonal: specifies the coefficient for the seasonal smoothing. Range 0..1. With gamma = 0, seaasonal correction is not used.
+
+   significance Significance level for the forecats sed for computing lower and upper bands. Range 0..1. Typical values 0.05 or less.
+                See https://en.wikipedia.org/wiki/Statistical_significance
+
+   NOTE (See https://otexts.com/fpp2/holt-winters.html)
+   The additive method is preferred when the seasonal variations are roughly constant through the series,
+   while the multiplicative method is preferred when the seasonal variations are changing proportional to the level of the series.
+
+   For learning more about timeseries forecasting see
+   https://www.real-statistics.com/time-series-analysis/basic-time-series-forecasting/
+ */
+
+int ndpi_hw_init(struct ndpi_hw_struct *hw,
+		 u_int16_t num_periods, u_int8_t additive_seeasonal,
+		 double alpha, double beta, double gamma, float significance) {
+  memset(hw, 0, sizeof(struct ndpi_hw_struct));
+
+  hw->params.num_season_periods = num_periods;
+  hw->params.alpha      = alpha;
+  hw->params.beta       = beta;
+  hw->params.gamma      = gamma;
+  hw->params.use_hw_additive_seasonal = additive_seeasonal;
+
+  if((significance < 0) || (significance > 1)) significance = 0.05;
+  hw->params.ro         = ndpi_normal_cdf_inverse(1 - (significance / 2.));
+
+  if((hw->y = (u_int32_t*)ndpi_calloc(hw->params.num_season_periods, sizeof(u_int32_t))) == NULL)
+    return(-1);
+
+  if((hw->s = (double*)ndpi_calloc(hw->params.num_season_periods, sizeof(double))) == NULL) {
+    free(hw->y);
+    return(-1);
+  }
+
+  return(0);
+}
+
+/* *********************************************************** */
+
+/* Frees the memory allocated by ndpi_hw_init() */
+void ndpi_hw_free(struct ndpi_hw_struct *hw) {
+  if(hw->y) ndpi_free(hw->y);
+  if(hw->s) ndpi_free(hw->s);
+}
+
+/* *********************************************************** */
+
+/*
+   Returns the forecast and the band (forecast +/- band are the upper and lower values)
+
+   Input
+   hw:          Datastructure previously initialized
+   value        The value to add to the measurement
+
+   Output
+   forecast         The forecasted value
+   confidence_band  The value +/- on which the value should fall is not an anomaly
+
+   Return code
+   0                Too early: we're still in the learning phase. Output values are zero.
+   1                Normal processing: forecast and confidence_band are meaningful
+*/
+int ndpi_hw_add_value(struct ndpi_hw_struct *hw, const u_int32_t _value, double *forecast,  double *confidence_band) {
+  if(hw->num_values < hw->params.num_season_periods) {
+    hw->y[hw->num_values++] = _value;
+
+    if(hw->num_values == hw->params.num_season_periods) {
+      double avg = ndpi_avg_inline(hw->y, hw->params.num_season_periods);
+      u_int i;
+
+      for(i=0; i<hw->params.num_season_periods; i++)
+	hw->s[i] = hw->y[i] / avg;
+
+      hw->u = _value / hw->s[hw->params.num_season_periods-1];
+      hw->v = 0;
+    }
+
+    *forecast = 0;
+    *confidence_band = 0;
+
+    return(0); /* Too early still training... */
+  } else {
+    u_int idx     = hw->num_values % hw->params.num_season_periods;
+    double prev_u = hw->u;
+    double prev_v = hw->v;
+    double prev_s = hw->s[idx];
+    double value  = (double)_value;;
+    double error;
+
+    hw->u      = ((hw->params.alpha * value) / prev_s) + (1 - hw->params.alpha) * (hw->u +  hw->v);
+    hw->v      = (hw->params.beta * (hw->u - prev_u))  + ((1 - hw->params.beta) * hw->v);
+    hw->s[idx] = (hw->params.gamma * (value / hw->u))  + ((1 - hw->params.gamma) * prev_s);
+
+    hw->num_values++, idx = (idx + 1) % hw->params.num_season_periods;
+
+    if(hw->params.use_hw_additive_seasonal)
+      *forecast = (prev_u + prev_v) + prev_s;
+    else
+      *forecast = (prev_u + prev_v) * prev_s;
+
+    error                 = value - *forecast;
+    hw->sum_square_error += error * error;
+    *confidence_band      = hw->params.ro * (sqrt(hw->sum_square_error / (hw->num_values - hw->params.num_season_periods)));
+
+    return(1); /* We're in business: forecast is meaningful now */
+  }
+}
+
+/* ********************************************************************************* */
+/* ********************************************************************************* */
+
+/*
+  Jitter calculator
+  
+  Used to determine how noisy is a signal
+*/
+
+int ndpi_jitter_init(struct ndpi_jitter_struct *s, u_int16_t num_learning_values) {
+  memset(s, 0, sizeof(struct ndpi_jitter_struct));
+
+  if(num_learning_values < 2) num_learning_values = 2;
+  
+  s->empty = 1, s->num_values = num_learning_values;
+  s->observations = (float*)ndpi_calloc(num_learning_values, sizeof(float));
+
+  if(s->observations) {
+    s->last_value = 0;
+    return(0);
+  } else
+    return(-1);  
+}
+
+/* ************************************* */
+
+void ndpi_jitter_free(struct ndpi_jitter_struct *s) {
+  ndpi_free(s->observations);
+}
+
+/* ************************************* */
+
+/*
+  This function adds a new value and returns the computed Jitter
+*/
+float ndpi_jitter_add_value(struct ndpi_jitter_struct *s, const float value) {
+  float val = fabsf(value - s->last_value);
+
+  if(s->empty && (s->next_index == 0))
+    ; /* Skip the first value as we are unable to calculate the difference */
+  else {
+    s->jitter_total -= s->observations[s->next_index];
+    s->observations[s->next_index] = val;
+    s->jitter_total += val;
+  }
+  
+  s->last_value = value, s->next_index = (s->next_index + 1) % s->num_values;
+  if(s->next_index == 0) s->jitter_ready = 1; /* We have completed one round */
+
+#ifdef DEBUG_JITTER
+  printf("[JITTER] [value: %.3f][diff: %.3f][jitter_total: %.3f] -> %.3f\n",
+	 value, val, s->jitter_total,
+	 s->jitter_ready ? (s->jitter_total / s->num_values) : -1);
+#endif
+  
+  if(!s->jitter_ready)
+    return(-1); /* Too early */
+  else 
+    return(s->jitter_total / s->num_values);
+}
+

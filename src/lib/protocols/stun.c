@@ -172,7 +172,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   } else if(payload_length < sizeof(struct stun_packet_header)) {
     /* This looks like an invalid packet */
 
-    if(flow->protos.stun_ssl.stun.num_udp_pkts > 0) {
+    if(flow->protos.tls_quic_stun.stun.num_udp_pkts > 0) {
       // flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
       return(NDPI_IS_STUN);
     } else
@@ -213,9 +213,8 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 	total_len = ntohs(*((u_int16_t*) &packet->payload[11])) + 13;
 
 	if(payload_length == total_len) {
-	  /* This is DTLS and the only protocol we know behaves like this is signal */
-	  flow->guessed_host_protocol_id = NDPI_PROTOCOL_SIGNAL;
-	  return(NDPI_IS_STUN);
+	  flow->guessed_host_protocol_id = NDPI_PROTOCOL_DTLS;
+	  return(NDPI_IS_NOT_STUN);
 	}
       }
     }
@@ -269,7 +268,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   }
 
   if(msg_type == 0x01 /* Binding Request */) {
-    flow->protos.stun_ssl.stun.num_binding_requests++;
+    flow->protos.tls_quic_stun.stun.num_binding_requests++;
 
     if(!msg_len && flow->guessed_host_protocol_id == NDPI_PROTOCOL_GOOGLE)
       flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
@@ -277,7 +276,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
       flow->guessed_protocol_id = NDPI_PROTOCOL_STUN;
 
     if(!msg_len) {
-      /* flow->protos.stun_ssl.stun.num_udp_pkts++; */
+      /* flow->protos.tls_quic_stun.stun.num_udp_pkts++; */
       return(NDPI_IS_NOT_STUN); /* This to keep analyzing STUN instead of giving up */
     }
   }
@@ -287,13 +286,13 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     return(NDPI_IS_NOT_STUN);
   }
 
-  flow->protos.stun_ssl.stun.num_udp_pkts++;
+  flow->protos.tls_quic_stun.stun.num_udp_pkts++;
 
   if((payload[0] == 0x80 && payload_length < 512 && ((msg_len+20) <= payload_length))) {
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
     return(NDPI_IS_STUN); /* This is WhatsApp Call */
   } else if((payload[0] == 0x90) && (((msg_len+11) == payload_length) ||
-				     (flow->protos.stun_ssl.stun.num_binding_requests >= 4))) {
+				     (flow->protos.tls_quic_stun.stun.num_binding_requests >= 4))) {
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
     return(NDPI_IS_STUN); /* This is WhatsApp Call */
   }
@@ -472,14 +471,14 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     }
   }
 
-  if((flow->protos.stun_ssl.stun.num_udp_pkts > 0) && (msg_type <= 0x00FF)) {
+  if((flow->protos.tls_quic_stun.stun.num_udp_pkts > 0) && (msg_type <= 0x00FF)) {
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
     return(NDPI_IS_STUN);
   } else
     return(NDPI_IS_NOT_STUN);
 
  udp_stun_found:
-  flow->protos.stun_ssl.stun.num_processed_pkts++;
+  flow->protos.tls_quic_stun.stun.num_processed_pkts++;
 
   packet = &flow->packet;
 
@@ -492,7 +491,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   else if(is_google_ip_address(ntohl(packet->iph->saddr)) || is_google_ip_address(ntohl(packet->iph->daddr)))
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
   
-  rc = (flow->protos.stun_ssl.stun.num_udp_pkts < MAX_NUM_STUN_PKTS) ? NDPI_IS_NOT_STUN : NDPI_IS_STUN;
+  rc = (flow->protos.tls_quic_stun.stun.num_udp_pkts < MAX_NUM_STUN_PKTS) ? NDPI_IS_NOT_STUN : NDPI_IS_STUN;
 
   return rc;
 }
@@ -542,7 +541,7 @@ void ndpi_search_stun(struct ndpi_detection_module_struct *ndpi_struct, struct n
     return;
   }
 
-  if(flow->protos.stun_ssl.stun.num_udp_pkts >= MAX_NUM_STUN_PKTS)
+  if(flow->protos.tls_quic_stun.stun.num_udp_pkts >= MAX_NUM_STUN_PKTS)
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
 
   if(flow->packet_counter > 0) {

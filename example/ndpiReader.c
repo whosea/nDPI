@@ -48,7 +48,7 @@
 #include <assert.h>
 #include <math.h>
 #include "ndpi_api.h"
-#include "uthash.h"
+#include "../src/lib/third_party/include/uthash.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -65,8 +65,10 @@ static FILE *playlist_fp[MAX_NUM_READER_THREADS] = { NULL }; /**< Ingress playli
 static FILE *results_file           = NULL;
 static char *results_path           = NULL;
 static char * bpfFilter             = NULL; /**< bpf filter  */
-static char *_protoFilePath         = NULL; /**< Protocol file path  */
+static char *_protoFilePath         = NULL; /**< Protocol file path */
 static char *_customCategoryFilePath= NULL; /**< Custom categories file path  */
+static char *_maliciousJA3Path      = NULL; /**< Malicious JA3 signatures */
+static char *_riskyDomainFilePath   = NULL; /**< Risky domain files */
 static u_int8_t live_capture = 0;
 static u_int8_t undetected_flows_deleted = 0;
 FILE *csv_fp                 = NULL; /**< for CSV export */
@@ -114,7 +116,7 @@ struct info_pair {
   int count;
 };
 
-typedef struct node_a{
+typedef struct node_a {
   u_int32_t addr;
   u_int8_t version; /* IP version */
   char proto[16]; /*app level protocol*/
@@ -273,7 +275,7 @@ void ndpiCheckHostStringMatch(char *testChar) {
     return;
 
   ndpi_str = ndpi_init_detection_module(ndpi_no_prefs);
-  ndpi_finalize_initalization(ndpi_str);
+  ndpi_finalize_initialization(ndpi_str);
 
   // Display ALL Host strings ie host_match[] ?
   // void ac_automata_display (AC_AUTOMATA_t * thiz, char repcast);
@@ -438,7 +440,7 @@ static void help(u_int long_help) {
 	 "[-f <filter>][-s <duration>][-m <duration>][-b <num bin clusters>]\n"
 	 "          [-p <protos>][-l <loops> [-q][-d][-J][-h][-D][-e <len>][-t][-v <level>]\n"
 	 "          [-n <threads>][-w <file>][-c <file>][-C <file>][-j <file>][-x <file>]\n"
-	 "          [-T <num>][-U <num>] [-x <domain>]\n\n"
+	 "          [-r <file>][-j <file>][-T <num>][-U <num>] [-x <domain>]\n\n"
 	 "Usage:\n"
 	 "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
 	 "                            | device for live capture (comma-separated list)\n"
@@ -466,9 +468,10 @@ static void help(u_int long_help) {
 	 "                            | <d> = max packet payload dissection\n"
 	 "                            | <d> = max num reported payloads\n"
 	 "                            | Default: %u:%u:%u:%u:%u\n"
-	 "  -r                        | Print nDPI version and git revision\n"
 	 "  -c <path>                 | Load custom categories from the specified file\n"
 	 "  -C <path>                 | Write output in CSV format on the specified file\n"
+	 "  -r <path>                 | Load risky domain file\n"
+	 "  -j <path>                 | Load malicious JA3 fingeprints\n"
 	 "  -w <path>                 | Write test output on the specified file. This is useful for\n"
 	 "                            | testing purposes in order to compare results across runs\n"
 	 "  -h                        | This help\n"
@@ -768,7 +771,7 @@ static void parseOptions(int argc, char **argv) {
   }
 #endif
 
-  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:Ihp:P:l:s:tu:v:V:n:Jrp:x:w:q0123:456:7:89:m:T:U:",
+  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:Ij:hp:P:l:r:s:tu:v:V:n:Jrp:x:w:q0123:456:7:89:m:T:U:",
 			   longopts, &option_idx)) != EOF) {
 #ifdef DEBUG_TRACE
     if(trace) fprintf(trace, " #### -%c [%s] #### \n", opt, optarg ? optarg : "");
@@ -799,6 +802,10 @@ static void parseOptions(int argc, char **argv) {
 
     case 'I':
       ignore_vlanid = 1;
+      break;
+
+    case 'j':
+      _maliciousJA3Path = optarg;
       break;
 
     case 'm':
@@ -835,6 +842,10 @@ static void parseOptions(int argc, char **argv) {
 	printf("Unable to write on CSV file %s\n", optarg);
       break;
 
+    case 'r':
+      _riskyDomainFilePath = optarg;
+      break;
+
     case 's':
       capture_for = atoi(optarg);
       capture_until = capture_for + time(NULL);
@@ -843,10 +854,6 @@ static void parseOptions(int argc, char **argv) {
     case 't':
       decode_tunnels = 1;
       break;
-
-    case 'r':
-      printf("ndpiReader - nDPI (%s)\n", ndpi_revision());
-      exit(0);
 
     case 'v':
       verbose = atoi(optarg);
@@ -2080,8 +2087,8 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
   if(_customCategoryFilePath)
     ndpi_load_categories_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _customCategoryFilePath);
 
-  ndpi_finalize_initalization(ndpi_thread_info[thread_id].workflow->ndpi_struct);
   set_ndpi_debug_function(ndpi_thread_info[thread_id].workflow->ndpi_struct, debug_printf);
+  ndpi_finalize_initialization(ndpi_thread_info[thread_id].workflow->ndpi_struct);
 
   if(enable_doh_dot_detection)
     ndpi_set_detection_preferences(ndpi_thread_info[thread_id].workflow->ndpi_struct, ndpi_pref_enable_tls_block_dissection, 1);
@@ -3526,7 +3533,7 @@ static void dgaUnitTest() {
   NDPI_BITMASK_SET_ALL(all);
   ndpi_set_protocol_detection_bitmask2(ndpi_str, &all);
 
-  ndpi_finalize_initalization(ndpi_str);
+  ndpi_finalize_initialization(ndpi_str);
 
   assert(ndpi_str != NULL);
 
@@ -3612,7 +3619,7 @@ void analyzeUnitTest() {
 	  ndpi_data_min(s), ndpi_data_max(s));
 #endif
 
-  ndpi_free_data_analysis(s);
+  ndpi_free_data_analysis(s, 1);
 
 #ifdef RUN_DATA_ANALYSIS_THEN_QUIT
   exit(0);
@@ -3700,7 +3707,7 @@ void analysisUnitTest() {
     printf("Min/Max: %u/%u\n", ndpi_data_min(s), ndpi_data_max(s));
   }
 
-  ndpi_free_data_analysis(s);
+  ndpi_free_data_analysis(s, 1);
 }
 
 /* *********************************************** */
@@ -3711,6 +3718,102 @@ void rulesUnitTest() {
   ndpi_parse_rules(ndpi_info_mod, "../rules/sample_rules.txt");
 #endif
 #endif
+}
+
+/* *********************************************** */
+
+void rsiUnitTest() {
+  struct ndpi_rsi_struct s;
+  unsigned int v[] = {
+    2227, 2219, 2208, 2217, 2218, 2213, 2223, 2243, 2224, 2229,
+    2215, 2239, 2238, 2261, 2336, 2405, 2375, 2383, 2395, 2363,
+    2382, 2387, 2365, 2319, 2310, 2333, 2268, 2310, 2240, 2217,
+  };
+  u_int i, n = sizeof(v) / sizeof(unsigned int);
+
+  assert(ndpi_alloc_rsi(&s, 8) == 0);
+  
+  for(i=0; i<n; i++) {
+    float rsi = ndpi_rsi_add_value(&s, v[i]);
+
+#if 0
+    printf("%2d) RSI = %f\n", i, rsi);
+#endif
+  }
+  
+  ndpi_free_rsi(&s);
+}
+
+/* *********************************************** */
+
+void hashUnitTest() {
+  ndpi_str_hash *h = ndpi_hash_alloc(16384);
+  char* dict[] = { "hello", "world", NULL };
+  int i;
+  
+  assert(h);
+
+  for(i=0; dict[i] != NULL; i++) {
+    u_int8_t l = strlen(dict[i]), v;
+
+    assert(ndpi_hash_add_entry(h, dict[i], l, i) == 0);
+    assert(ndpi_hash_find_entry(h, dict[i], l, &v) == 0);
+  }
+  
+  ndpi_hash_free(h);
+}
+
+/* *********************************************** */
+
+void hwUnitTest() {
+  struct ndpi_hw_struct hw;
+  double v[] = { 10, 14, 8, 25, 16, 22, 14, 35, 15, 27, 218, 40, 28, 40, 25, 65 };
+  u_int i, j, num = sizeof(v) / sizeof(double);
+  u_int num_learning_points = 2;
+  u_int8_t trace = 0;
+  
+  for(j=0; j<2; j++) {
+    assert(ndpi_hw_init(&hw, num_learning_points, j /* 0=multiplicative, 1=additive */, 0.9, 0.9, 0.1, 0.05) == 0);
+
+    if(trace)
+      printf("\nHolt-Winters %s method\n", (j == 0) ? "multiplicative" : "additive");
+    
+    for(i=0; i<num; i++) {
+      double prediction, confidence_band;
+      double lower, upper;
+      int rc = ndpi_hw_add_value(&hw, v[i], &prediction, &confidence_band);
+      
+      lower = prediction - confidence_band, upper = prediction + confidence_band;
+
+      if(trace)
+	printf("%2u)\t%.3f\t%.3f\t%.3f\t%.3f\t %s [%.3f]\n", i, v[i], prediction, lower, upper,
+	       ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
+	       confidence_band);
+    }
+    
+    ndpi_hw_free(&hw);
+  }
+}
+
+/* *********************************************** */
+
+void jitterUnitTest() {
+  struct ndpi_jitter_struct jitter;
+  float v[] = { 10, 14, 8, 25, 16, 22, 14, 35, 15, 27, 218, 40, 28, 40, 25, 65 };
+  u_int i, num = sizeof(v) / sizeof(float);
+  u_int num_learning_points = 4;
+  u_int8_t trace = 0;
+  
+  assert(ndpi_jitter_init(&jitter, num_learning_points) == 0);
+
+  for(i=0; i<num; i++) {
+    float rc = ndpi_jitter_add_value(&jitter, v[i]);
+				     
+    if(trace)
+      printf("%2u)\t%.3f\t%.3f\n", i, v[i], rc);
+  }
+
+  ndpi_jitter_free(&jitter);
 }
 
 /* *********************************************** */
@@ -3735,8 +3838,12 @@ int orginal_main(int argc, char **argv) {
 
     if(ndpi_info_mod == NULL) return -1;
 
-    /* Internal checks */
+    /* Internal checks */    
     // binUnitTest();
+    hwUnitTest();
+    jitterUnitTest();
+    rsiUnitTest();
+    hashUnitTest();
     dgaUnitTest();
     hllUnitTest();
     bitmapUnitTest();
@@ -3837,3 +3944,4 @@ int orginal_main(int argc, char **argv) {
     return 0;
   }
 #endif /* WIN32 */
+

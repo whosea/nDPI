@@ -42,9 +42,9 @@ ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
         struct ndpi_net *n = PDE_DATA(file_inode(file));
-	patricia_tree_t *pt;
-	prefix_t *px;
-	patricia_node_t *Xstack[PATRICIA_MAXBITS+1], **Xsp, *node;
+	ndpi_patricia_tree_t *pt;
+	ndpi_prefix_t *px;
+	ndpi_patricia_node_t *Xstack[PATRICIA_MAXBITS+1], **Xsp, *node;
 	char lbuf[512];
 	char ibuf[64];
 	int l,bp;

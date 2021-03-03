@@ -27,6 +27,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     ndpi_analyze.c \
 		     ndpi_classify.c \
 		     ndpi_serializer.c \
+		     ndpi_geoip.c \
 		     protocols/afp.c \
 		     protocols/ajp.c \
 		     protocols/aimini.c \
@@ -44,6 +45,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/checkmk.c \
 		     protocols/ciscovpn.c \
 		     protocols/citrix.c \
+		     protocols/cpha.c \
 		     protocols/coap.c \
 		     protocols/collectd.c \
 		     protocols/corba.c \
@@ -164,7 +166,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/teredo.c \
 		     protocols/tvuplayer.c \
 		     protocols/ubntac2.c \
-		     protocols/upnp.c \
 		     protocols/usenet.c \
 		     protocols/viber.c \
 		     protocols/vhua.c \
@@ -175,6 +176,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/whoisdas.c \
 		     protocols/world_of_kung_fu.c \
 		     protocols/world_of_warcraft.c \
+		     protocols/wsd.c \
 		     protocols/xbox.c \
 		     protocols/xdmcp.c \
 		     protocols/zattoo.c \

@@ -130,7 +130,7 @@ bad_cmd:
 
 /*************************** ip_def **************************/
 
-uint16_t ndpi_check_ipport(patricia_node_t *node,uint16_t port,int l4) {
+uint16_t ndpi_check_ipport(ndpi_patricia_node_t *node,uint16_t port,int l4) {
 struct ndpi_port_def *pd;
 if(!node) return NDPI_PROTOCOL_UNKNOWN;
 pd = node->data;
@@ -493,14 +493,14 @@ if(pd && (pd->count[0] + pd->count[1]) == 0) {
 return pd;
 }
 
-int parse_ndpi_ipdef_cmd(struct ndpi_net *n, int f_op, prefix_t *prefix, char *arg) {
+int parse_ndpi_ipdef_cmd(struct ndpi_net *n, int f_op, ndpi_prefix_t *prefix, char *arg) {
 char *d1,*d2;
 int f_op2=0;
 int ret = 0;
 
 ndpi_port_range_t np = { .start=0, .end=0, .l4_proto = 2, .proto = NDPI_PROTOCOL_UNKNOWN };
-patricia_node_t *node;
-patricia_tree_t *pt;
+ndpi_patricia_node_t *node;
+ndpi_patricia_tree_t *pt;
 
 if(*arg == '-') {
 	f_op2=1;
@@ -603,7 +603,7 @@ return ret;
 int parse_ndpi_ipdef(struct ndpi_net *n,char *cmd) {
 int f_op = 0; // 1 if delete
 char *addr,c;
-prefix_t *prefix;
+ndpi_prefix_t *prefix;
 int res = 0;
 
 SKIP_SPACE_C;
@@ -632,7 +632,10 @@ while(*cmd && !res) {
 	SKIP_SPACE_C;
 	if(parse_ndpi_ipdef_cmd(n,f_op,prefix,t)) res=1;
 }
-ndpi_Deref_Prefix (prefix);
+
+prefix->ref_count--;
+ndpi_free(prefix);
+
 return res;
 }
 

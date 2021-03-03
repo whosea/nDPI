@@ -32,6 +32,13 @@
 #endif
 #include "ndpi_define.h"
 #include "ndpi_protocol_ids.h"
+#include "ndpi_utils.h"
+
+#ifndef __KERNEL__
+#ifdef HAVE_MAXMINDDB
+#include <maxminddb.h>
+#endif
+#endif
 
 /* NDPI_LOG_LEVEL */
 typedef enum {
@@ -90,6 +97,10 @@ typedef enum {
   NDPI_DNS_SUSPICIOUS_TRAFFIC,
   NDPI_TLS_MISSING_SNI,
   NDPI_HTTP_SUSPICIOUS_CONTENT,
+  NDPI_RISKY_ASN,
+  NDPI_RISKY_DOMAIN,
+  NDPI_MALICIOUS_JA3,
+
   
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 31 due to (**) */
@@ -384,9 +395,7 @@ struct ndpi_dns_packet_header {
 typedef union
 {
   u_int32_t ipv4;
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
   struct ndpi_in6_addr ipv6;
-#endif
 } ndpi_ip_addr_t;
 
 
@@ -437,6 +446,14 @@ struct ndpi_vxlanhdr {
 /* ************************************************************ */
 /* ******************* ********************* ****************** */
 /* ************************************************************ */
+
+typedef struct message {
+  u_int8_t *buffer;
+  u_int buffer_len, buffer_used, max_expected;
+  u_int32_t next_seq[2]; /* Directions */
+} message_t;
+
+/* NDPI_PROTOCOL_BITTORRENT */
 
 #ifndef __KERNEL__
 
@@ -691,18 +708,14 @@ struct ndpi_flow_tcp_struct {
   u_int32_t telnet_stage:2;			// 0 - 2
 
   struct {
-    struct {
-      u_int8_t *buffer;
-      u_int buffer_len, buffer_used;
-      u_int32_t next_seq[2]; /* Directions */
-    } message;
+    message_t message;
     
     void* srv_cert_fingerprint_ctx; /* SHA-1 */
   
     /* NDPI_PROTOCOL_TLS */
     u_int8_t hello_processed:1, certificate_processed:1, subprotocol_detected:1,
 	fingerprint_set:1, _pad:4;
-    u_int8_t sha1_certificate_fingerprint[20], num_tls_blocks;
+    u_int8_t num_tls_blocks;
     int16_t tls_application_blocks_len[NDPI_MAX_NUM_TLS_APPL_BLOCKS]; /* + = src->dst, - = dst->src */
   } tls;
   
@@ -830,9 +843,7 @@ struct ndpi_int_one_line_struct {
 
 struct ndpi_packet_struct {
   const struct ndpi_iphdr *iph;
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
   const struct ndpi_ipv6hdr *iphv6;
-#endif
   const struct ndpi_tcphdr *tcp;
   const struct ndpi_udphdr *udp;
   const u_int8_t *generic_l4_ptr;	/* is set only for non tcp-udp traffic */
@@ -1143,13 +1154,15 @@ struct ndpi_detection_module_struct {
   u_int ndpi_num_supported_protocols;
   u_int ndpi_num_custom_protocols;
 
-  /* HTTP/DNS/HTTPS host matching */
+  /* HTTP/DNS/HTTPS/QUIC host matching */
   ndpi_automa host_automa,                     /* Used for DNS/HTTPS */
     content_automa,                            /* Used for HTTP subprotocol_detection */
     subprotocol_automa,                        /* Used for HTTP subprotocol_detection */
-    bigrams_automa, impossible_bigrams_automa; /* TOR */
-  /* IMPORTANT: please update ndpi_finalize_initalization() whenever you add a new automa */
- 
+    bigrams_automa, impossible_bigrams_automa, /* TOR */
+    risky_domain_automa, tls_cert_subject_automa,
+    malicious_ja3_automa;
+  /* IMPORTANT: please update ndpi_finalize_initialization() whenever you add a new automa */
+  
   spinlock_t host_automa_lock;
 
   struct {
@@ -1181,12 +1194,14 @@ struct ndpi_detection_module_struct {
   u_int32_t jabber_file_transfer_timeout;
   u_int8_t ip_version_limit;
   /* NDPI_PROTOCOL_BITTORRENT */
+
   struct hash_ip4p_table *bt_ht;
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
   struct hash_ip4p_table *bt6_ht;
 #endif
   /* Limit for tls buffer size */
   int    max_tls_buf;
+
   /* BT_ANNOUNCE */
   struct bt_announce *bt_ann;
   int    bt_ann_len;
@@ -1211,6 +1226,13 @@ struct ndpi_detection_module_struct {
   
 #ifdef CUSTOM_NDPI_PROTOCOLS
   #include "../../../nDPI-custom/custom_ndpi_typedefs.h"
+#endif
+
+#ifndef __KERNEL__
+#ifdef HAVE_MAXMINDDB
+  MMDB_s mmdb_city, mmdb_as;
+  u_int8_t mmdb_city_loaded, mmdb_as_loaded;
+#endif
 #endif
 };
 
@@ -1242,9 +1264,19 @@ struct ndpi_flow_struct {
   */
   u_int32_t next_tcp_seq_nr[2];
 
+#ifdef FRAG_MAN
+  /* tcp_segments lists */
+  u_int8_t tcp_segments_management:1;
+  u_int8_t not_sorted[2],must_free[2];     // 0: client->server and 1: server->client
+  uint32_t trigger[2];                     // the seq waited number to start to reassembly
+  fragments_wrapper_t tcp_segments_list[2];
+#endif // FRAG_MAN
+
+  // -----------------------------------------
+
   u_int8_t max_extra_packets_to_check;
   u_int8_t num_extra_packets_checked;
-  u_int8_t num_processed_pkts; /* <= WARNING it can wrap but we do expect people to giveup earlier */
+  u_int16_t num_processed_pkts; /* <= WARNING it can wrap but we do expect people to giveup earlier */
 
   int (*extra_packets_func) (struct ndpi_detection_module_struct *, struct ndpi_flow_struct *flow);
 
@@ -1284,6 +1316,7 @@ struct ndpi_flow_struct {
     u_int8_t num_request_headers, num_response_headers;
     u_int8_t request_version; /* 0=1.0 and 1=1.1. Create an enum for this? */
     u_int16_t response_status_code; /* 200, 404, etc. */
+    u_char detected_os[32]; /* Via HTTP/QUIC User-Agent */
   } http;
 
   /* 
@@ -1322,20 +1355,22 @@ struct ndpi_flow_struct {
 	u_int32_t notBefore, notAfter;
 	char ja3_client[33], ja3_server[33];
 	u_int16_t server_cipher;
-
+	u_int8_t sha1_certificate_fingerprint[20];
+	
 	struct {
 	  u_int16_t cipher_suite;
 	  char *esni;
 	} encrypted_sni;
 	ndpi_cipher_weakness server_unsafe_cipher;
-      } ssl;
+      } tls_quic;
 
       struct {
-	u_int8_t num_udp_pkts, num_processed_pkts, num_binding_requests;
+		    u_int8_t num_udp_pkts, num_binding_requests;
+        u_int16_t num_processed_pkts;
       } stun;
 
       /* We can have STUN over SSL/TLS thus they need to live together */
-    } stun_ssl;
+    } tls_quic_stun;
 
     struct {
       char client_signature[48], server_signature[48];
@@ -1359,8 +1394,6 @@ struct ndpi_flow_struct {
     } ubntac2;
 
     struct {
-      /* Via HTTP User-Agent */
-      u_char detected_os[32];
       /* Via HTTP X-Forwarded-For */
       u_char nat_ip[24];
     } http;
@@ -1461,7 +1494,7 @@ struct ndpi_flow_struct {
 
 typedef struct {
   char *string_to_match, *proto_name;
-  int protocol_id;
+  u_int16_t protocol_id;
   ndpi_protocol_category_t protocol_category;
   ndpi_protocol_breed_t protocol_breed;
 } ndpi_protocol_match;
@@ -1470,6 +1503,11 @@ typedef struct {
   char *string_to_match;
   ndpi_protocol_category_t protocol_category;
 } ndpi_category_match;
+
+typedef struct {
+  char *string_to_match;
+  u_int16_t protocol_id;
+} ndpi_tls_cert_name_match;
 
 typedef struct {
   u_int32_t network;
@@ -1589,6 +1627,55 @@ struct ndpi_analyze_struct {
 
 /* **************************************** */
 
+struct ndpi_rsi_struct {
+  u_int8_t empty:1, rsi_ready:1, _notused:6;
+  u_int16_t num_values, next_index;
+  u_int32_t *gains, *losses;
+  u_int32_t last_value, total_gains, total_losses;
+};
+
+/* **************************************** */
+
+struct ndpi_jitter_struct {
+  u_int8_t empty:1, jitter_ready:1, _notused:6;
+  u_int16_t num_values, next_index;
+  float *observations, last_value, jitter_total;
+};
+
+/* **************************************** */
+
+#ifndef WIN32
+#define NDPI_PATRICIA_IPV6
+#else
+#undef NDPI_PATRICIA_IPV6
+#endif
+
+#ifndef AF_MAC
+#define AF_MAC            99
+#endif
+
+typedef struct _ndpi_prefix_t {
+  u_int16_t family;		/* AF_INET | AF_INET6 */
+  u_int16_t bitlen;		/* same as mask? */
+  int ref_count;		/* reference count */
+  union {
+    struct in_addr sin;
+#ifdef NDPI_PATRICIA_IPV6
+    struct ndpi_in6_addr sin6;
+#endif /* IPV6 */
+    u_int8_t mac[6];
+  } add;
+} ndpi_prefix_t;
+
+typedef struct _ndpi_patricia_node_t ndpi_patricia_node_t;
+typedef struct _ndpi_patricia_tree_t ndpi_patricia_tree_t;
+
+typedef void (*ndpi_void_fn_t)(void *data);
+typedef void (*ndpi_void_fn2_t)(ndpi_prefix_t *prefix, void *data);
+typedef void (*ndpi_void_fn3_t)(ndpi_patricia_node_t *node, void *data, void *user_data);
+
+/* **************************************** */
+
 typedef struct ndpi_ptree ndpi_ptree_t;
 
 /* **************************************** */
@@ -1617,5 +1704,41 @@ struct ndpi_bin {
     u_int32_t *bins32; /* num_bins bins */
   } u;
 };
+
+/* **************************************** */
+
+struct ndpi_str_hash_info {
+  char *key;         /* Key   */
+  u_int8_t key_len;
+  u_int8_t value;    /* Value */
+  struct ndpi_str_hash_info *next;
+};
+
+typedef struct {
+  u_int32_t num_buckets, max_num_entries;
+  struct ndpi_str_hash_info **buckets;
+} ndpi_str_hash;
+
+
+/* **************************************** */
+
+#define HW_HISTORY_LEN   4
+
+struct ndpi_hw_struct {
+  struct {
+    u_int8_t use_hw_additive_seasonal;
+    double alpha, beta, gamma, ro;
+    u_int16_t num_season_periods; /* num of values of a season */
+  } params;
+
+  u_int32_t num_values;
+  double    u, v, sum_square_error;
+  
+  /* These two values need to store the signal history */
+  u_int32_t *y;
+  double    *s;
+};
+
+/* **************************************** */
 
 #endif /* __NDPI_TYPEDEFS_H__ */

@@ -58,7 +58,7 @@ time_t ndpi_bt_node_expire = 1200; /* time in seconds */
 
 #ifndef __KERNEL__
 
-typedef int bool;
+// typedef int bool;
 #define true 1
 #define false 0
 
@@ -1446,12 +1446,15 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	return;
       }
 
-      NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+      if(flow->packet_counter > 8) {
+        NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+      }  
       return;
-  bittorrent_found:
-    NDPI_LOG_INFO(ndpi_struct,
+
+      bittorrent_found:
+        NDPI_LOG_INFO(ndpi_struct,
 	     "BT: BitTorrent protocol detected: %s\n",detect_type ? detect_type : "(NULL)");
-    ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
+        ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
 				      NDPI_PROTOCOL_SAFE_DETECTION,
 				      NDPI_PROTOCOL_PLAIN_DETECTION,
 				      utp_type);
