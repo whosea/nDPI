@@ -68,6 +68,7 @@ static char * bpfFilter             = NULL; /**< bpf filter  */
 static char *_protoFilePath         = NULL; /**< Protocol file path */
 static char *_customCategoryFilePath= NULL; /**< Custom categories file path  */
 static char *_maliciousJA3Path      = NULL; /**< Malicious JA3 signatures */
+static char *_maliciousSHA1Path     = NULL; /**< Malicious SSL certificate SHA1 fingerprints */
 static char *_riskyDomainFilePath   = NULL; /**< Risky domain files */
 static u_int8_t live_capture = 0;
 static u_int8_t undetected_flows_deleted = 0;
@@ -806,6 +807,10 @@ static void parseOptions(int argc, char **argv) {
 
     case 'j':
       _maliciousJA3Path = optarg;
+      break;
+
+    case 'S':
+      _maliciousSHA1Path = optarg;
       break;
 
     case 'm':
@@ -2086,6 +2091,15 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
 
   if(_customCategoryFilePath)
     ndpi_load_categories_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _customCategoryFilePath);
+
+  if(_riskyDomainFilePath)
+    ndpi_load_risk_domain_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _riskyDomainFilePath);
+
+  if(_maliciousJA3Path)
+    ndpi_load_malicious_ja3_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _maliciousJA3Path);
+
+  if(_maliciousSHA1Path)
+    ndpi_load_malicious_sha1_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _maliciousSHA1Path);
 
   set_ndpi_debug_function(ndpi_thread_info[thread_id].workflow->ndpi_struct, debug_printf);
   ndpi_finalize_initialization(ndpi_thread_info[thread_id].workflow->ndpi_struct);

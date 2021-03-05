@@ -82,18 +82,24 @@ static int _ndpi_debug_callbacks = 0;
 
 /* ****************************************** */
 
+static int ndpi_exact_ac_match(int match_num,AC_MATCH_t *ac_match,int input_text_len);
+
 static void *(*_ndpi_flow_malloc)(size_t size);
 static void (*_ndpi_flow_free)(void *ptr);
 
 static void *(*_ndpi_malloc)(size_t size);
 static void (*_ndpi_free)(void *ptr);
 static u_int32_t _ticks_per_second = 1000;
-
+#ifdef __KERNEL__
+  #ifdef FRAG_MAN
+  #error "Cant use FRAG_MAN  with _KERNEL_"
+  #endif
+#else
 #ifdef FRAG_MAN
 extern void add_segment_to_buffer( struct ndpi_flow_struct *flow, struct ndpi_tcphdr const * tcph);
 extern uint8_t check_for_sequence( struct ndpi_flow_struct *flow, struct ndpi_tcphdr const * tcph);
 #endif // FRAG_MAN
-
+#endif
 /* ****************************************** */
 
 /* Forward */
@@ -510,8 +516,7 @@ static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
 				 ndpi_protocol_breed_t breed,
                                  u_int8_t free_str_on_duplicate, u_int8_t add_ends_with) {
   AC_PATTERN_t ac_pattern;
-  char buf[96];
-  int r;
+  int r,end_match = 0;
   u_int len, dot;
 
   if(protocol_id >= (NDPI_MAX_SUPPORTED_PROTOCOLS + NDPI_MAX_NUM_CUSTOM_PROTOCOLS)) {
@@ -527,42 +532,33 @@ static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
 
   memset(&ac_pattern, 0, sizeof(ac_pattern));
   
-  if((!add_ends_with) || ndpi_is_middle_string_char(value[dot])) {
-    ac_pattern.length = len;
-    ac_pattern.astring = value;
-  } else {
-    u_int mlen = sizeof(buf)-2;
-
-    len = ndpi_min(len, mlen);
-    ac_pattern.length = snprintf(buf, mlen, "%s$", value);
-    ndpi_free(value);
-    value = ndpi_strdup(buf);
-    ac_pattern.astring = value;
-  }
-
-  ac_pattern.rep.number = protocol_id, ac_pattern.rep.category = (u_int16_t) category,
-    ac_pattern.rep.breed = (u_int16_t) breed;
+  ac_pattern.length = len;
+  ac_pattern.astring = value;
+  ac_pattern.rep.number = protocol_id;
+  ac_pattern.rep.category = (u_int16_t) category;
+  ac_pattern.rep.breed = (u_int16_t) breed;
 
 #ifdef MATCH_DEBUG
+  if(len > 2)
   printf("Adding to automa [%s][protocol_id: %u][category: %u][breed: %u]\n",
 	 ac_pattern.astring, protocol_id, category, breed);
 #endif
 
-  if(value == NULL)
-    ac_pattern.length = 0;
-  else
-    ac_pattern.length = strlen(ac_pattern.astring);
+  if(add_ends_with && !ndpi_is_middle_string_char(value[dot])) {
+    end_match = 1;
+  }
+
   if(automa == &ndpi_str->host_automa) {
      if( *value == '|' ) {
 	  ac_pattern.length--;
 	  ac_pattern.astring++;
 	  ac_pattern.rep.number |= NDPI_HOST_MATCH_START;
-	  printf("Add %d:%.*s match from start\n",ac_pattern.length,ac_pattern.length,ac_pattern.astring);
+//	  printf("Add %d:%.*s match from start\n",ac_pattern.length,ac_pattern.length,ac_pattern.astring);
      }
-     if (ac_pattern.length > 4 && ac_pattern.astring[ac_pattern.length-1] == '|') {
-	  ac_pattern.length--;
+     if (end_match || (ac_pattern.length > 4 && ac_pattern.astring[ac_pattern.length-1] == '|')) {
+	  if(!end_match) ac_pattern.length--;
 	  ac_pattern.rep.number |= NDPI_HOST_MATCH_END;
-	  printf("Add %d:%.*s match from end\n",ac_pattern.length,ac_pattern.length,ac_pattern.astring);
+//	  printf("Add %d:%.*s match from end\n",ac_pattern.length,ac_pattern.length,ac_pattern.astring);
      }
   }
   r = ac_automata_add(((AC_AUTOMATA_t*)automa->ac_automa), &ac_pattern);
@@ -570,13 +566,14 @@ static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
 	(automa == &ndpi_str->host_automa ||
 	 automa == &ndpi_str->content_automa)) {
 	  char *tproto = ndpi_get_proto_by_id(ndpi_str, protocol_id);
-	  if(protocol_id == ac_pattern.rep.number) {
-		  NDPI_LOG_ERR(ndpi_str, "[NDPI] Duplicate '%s' proto %s\n",
+	  u_int16_t d_proto_id = ac_pattern.rep.number & ~(NDPI_HOST_MATCH_START|NDPI_HOST_MATCH_END);
+	  if(protocol_id == d_proto_id) {
+		  if(0) NDPI_LOG_ERR(ndpi_str, "[NDPI] Duplicate '%s' proto %s\n",
 				  value, tproto)
 	  } else {
-		  NDPI_LOG_ERR(ndpi_str, "[NDPI] Missmatch '%s' proto %s origin %s\n",
-				  value, tproto,
-				  ndpi_get_proto_by_id(ndpi_str,ac_pattern.rep.number));
+		  NDPI_LOG_ERR(ndpi_str, "[NDPI] Missmatch '%s' proto %s[%d] origin %s[%d]\n",
+				  value, tproto,protocol_id,
+				  ndpi_get_proto_by_id(ndpi_str,d_proto_id),d_proto_id);
 	  }
   }
   return r == ACERR_SUCCESS ? 0:-2;
@@ -687,7 +684,7 @@ static void init_string_based_protocols(struct ndpi_detection_module_struct *ndp
     
     ndpi_add_string_value_to_automa(ndpi_str->tls_cert_subject_automa.ac_automa,
 				    tls_certificate_match[i].string_to_match,
-				    tls_certificate_match[i].protocol_id);
+				    tls_certificate_match[i].protocol_id,0);
   }
 
   /* ************************ */
@@ -1670,6 +1667,7 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
   buf[min_buf_len] = '\0';
 
 #ifdef MATCH_DEBUG
+  if(min_len > 2)
   printf("Searching [to search: %s/%u][pattern: %s/%u] [len: %d][match_num: %u][%s]\n", buf,
 	 (unsigned int) txt->length, m->patterns->astring,
 	 (unsigned int) m->patterns->length, min_len, m->match_num,
@@ -1714,12 +1712,13 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
      (strncmp(buf, m->patterns->astring, min_len) == 0) /* begins with */
      ) {
 #ifdef MATCH_DEBUG
+    if(min_len > 2)
     printf("Found match [%s][%s] [len: %d]"
 	   // "[proto_id: %u]"
 	   "\n",
-	   buf, m->patterns->astring, min_len /* , *matching_protocol_id */);
+	   buf, m->patterns->astring, min_len /*, *matching_protocol_id */);
 #endif
-    return(1); /* If the pattern found matches the string at the beginning we stop here */
+    return(0); /* If the pattern found matches the string at the beginning we stop here */
   } else {
 #ifdef MATCH_DEBUG
     printf("NO match found: continue\n");
@@ -2344,7 +2343,11 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
     case 5:
       automa = &ndpi_str->malicious_ja3_automa;
       break;
-      
+    
+    case 6:
+      automa = &ndpi_str->risky_domain_automa;
+      break;
+
     default:
       return;
     }
@@ -2365,7 +2368,7 @@ void* ndpi_init_automa(void) {
 
 /* ****************************************************** */
 
-int ndpi_add_string_value_to_automa(void *_automa, char *str, u_int32_t num) {
+int ndpi_add_string_value_to_automa(void *_automa, char *str, u_int32_t num, int atend) {
   AC_PATTERN_t ac_pattern;
   AC_AUTOMATA_t *automa = (AC_AUTOMATA_t *) _automa;
   AC_ERROR_t rc;
@@ -2375,7 +2378,7 @@ int ndpi_add_string_value_to_automa(void *_automa, char *str, u_int32_t num) {
 
   memset(&ac_pattern, 0, sizeof(ac_pattern));
   ac_pattern.astring    = str;
-  ac_pattern.rep.number = num;
+  ac_pattern.rep.number = num | atend ;
   ac_pattern.length     = strlen(ac_pattern.astring);
 
   rc = ac_automata_add(automa, &ac_pattern);
@@ -2385,7 +2388,11 @@ int ndpi_add_string_value_to_automa(void *_automa, char *str, u_int32_t num) {
 /* ****************************************************** */
 
 int ndpi_add_string_to_automa(void *_automa, char *str) {
-  return(ndpi_add_string_value_to_automa(_automa, str, 1));
+  return(ndpi_add_string_value_to_automa(_automa, str, 1, 0));
+}
+
+int ndpi_add_string_to_automa_atend(void *_automa, char *str) {
+  return(ndpi_add_string_value_to_automa(_automa, str, 1, NDPI_HOST_MATCH_END));
 }
 
 void ndpi_free_automa(void *_automa)
@@ -2426,6 +2433,8 @@ int ndpi_match_string(void *_automa, char *string_to_match) {
   ac_input_text.astring = string_to_match, ac_input_text.length = strlen(string_to_match);
   rc = ac_automata_search(automa, &ac_match, &ac_input_text, ac_match_handler,&match);
 
+  match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
+
   /*
     As ac_automata_search can detect partial matches and continue the search process
     in case rc == 0 (i.e. no match), we need to check if there is a partial match
@@ -2456,6 +2465,8 @@ int ndpi_match_string_protocol_id(void *_automa, char *string_to_match,
   memset((char *)&ac_match,0,sizeof(ac_match));
   ac_input_text.astring = string_to_match, ac_input_text.length = match_len;
   rc = ac_automata_search(automa, &ac_match, &ac_input_text, ac_match_handler, &match);
+  
+  match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
 
   /*
     As ac_automata_search can detect partial matches and continue the search process
@@ -2491,6 +2502,8 @@ int ndpi_match_string_value(void *_automa, char *string_to_match,
   memset((char *)&ac_match,0,sizeof(ac_match));
   ac_input_text.astring = string_to_match, ac_input_text.length = match_len;
   rc = ac_automata_search(automa, &ac_match, &ac_input_text, ac_match_handler,&match);
+
+  match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
 
   /*
     As ac_automata_search can detect partial matches and continue the search process
@@ -3015,10 +3028,10 @@ static int ndpi_load_risky_domain(struct ndpi_detection_module_struct *ndpi_str,
     char buf[64];
     u_int i, len;
 
-    snprintf(buf, sizeof(buf)-1, "%s$", domain_name);
+    snprintf(buf, sizeof(buf)-1, "%s", domain_name);
     for(i = 0, len = strlen(buf)-1 /* Skip $ */; i < len; i++) buf[i] = tolower(buf[i]);
 
-    return(ndpi_add_string_to_automa(ndpi_str->risky_domain_automa.ac_automa, buf));
+    return(ndpi_add_string_to_automa_atend(ndpi_str->risky_domain_automa.ac_automa, buf));
   }
 
   return(-1);
@@ -3064,9 +3077,6 @@ int ndpi_load_risk_domain_file(struct ndpi_detection_module_struct *ndpi_str, co
   }
 
   fclose(fd);
-
-  if(ndpi_str->risky_domain_automa.ac_automa)
-    ac_automata_finalize((AC_AUTOMATA_t *)ndpi_str->risky_domain_automa.ac_automa);
 
   return(num);
 }
@@ -3119,6 +3129,64 @@ int ndpi_load_malicious_ja3_file(struct ndpi_detection_module_struct *ndpi_str, 
 
   return(num);
 }
+/* ******************************************************************** */
+
+/*
+ * Format:
+ *
+ * <sha1 hash>
+ * <other info>,<sha1 hash>
+ * <other info>,<sha1 hash>[,<other info>[...]]
+ *
+ */
+int ndpi_load_malicious_sha1_file(struct ndpi_detection_module_struct *ndpi_str, const char *path)
+{
+  char buffer[128];
+  char *first_comma, *second_comma;
+  FILE *fd;
+  size_t len;
+  int num = 0;
+
+  if (ndpi_str->malicious_sha1_automa.ac_automa == NULL)
+    ndpi_str->malicious_sha1_automa.ac_automa = ac_automata_init();
+
+  fd = fopen(path, "r");
+
+  if (fd == NULL) {
+    NDPI_LOG_ERR(ndpi_str, "Unable to open file %s [%s]\n", path, strerror(errno));
+    return -1;
+  }
+  while (fgets(buffer, sizeof(buffer), fd) != NULL) {
+    len = strlen(buffer);
+
+    if (len <= 1 || buffer[0] == '#')
+      continue;
+
+    first_comma = strchr(buffer, ',');
+    if (first_comma != NULL) {
+      first_comma++;
+      second_comma = strchr(first_comma, ',');
+      if (second_comma == NULL)
+        second_comma = &buffer[len - 1];
+    } else {
+      first_comma = &buffer[0];
+      second_comma = &buffer[len - 1];
+    }
+
+    if ((second_comma - first_comma) != 40)
+      continue;
+    second_comma[0] = '\0';
+
+    for (size_t i = 0; i < 40; ++i)
+      first_comma[i] = toupper(first_comma[i]);
+
+    if (ndpi_add_string_to_automa(ndpi_str->malicious_sha1_automa.ac_automa, first_comma) >= 0)
+      num++;
+  }
+
+  return num;
+}
+
 #endif
 
 /* ******************************************************************** */
@@ -3229,7 +3297,7 @@ void ndpi_set_bitmask_protocol_detection(char *label, struct ndpi_detection_modu
 		  label, idx, ndpi_protocol_id);
 #endif
 
-    if(ndpi_str->proto_defaults[ndpi_protocol_id].protoIdx != 0) {
+    if(ndpi_str->proto_defaults[ndpi_protocol_id].protoIdx != 0 && ndpi_protocol_id != 42) {
       NDPI_LOG_DBG2(ndpi_str, "[NDPI] Internal error: protocol %s/%u has been already registered\n", label,
 		    ndpi_protocol_id);
 #ifdef DEBUG
@@ -4611,6 +4679,9 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 
     /* Init defaults */
     ret.master_protocol = flow->detected_protocol_stack[1], ret.app_protocol = flow->detected_protocol_stack[0];
+#ifndef __KERNEL__
+    ret.category = flow->category;
+#endif
     /* Ensure that we don't change our mind if detection is already complete */
     if((ret.master_protocol != NDPI_PROTOCOL_UNKNOWN) && (ret.app_protocol != NDPI_PROTOCOL_UNKNOWN))
       return(ret);
@@ -4819,6 +4890,8 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     }
 
     if(inet_pton(AF_INET, ipbuf, &pin) != 1) {
+      int rv = ndpi_load_hostname_category(ndpi_str, ip_address_and_mask, category);
+      if(!rv) return rv;
       NDPI_LOG_DBG2(ndpi_str, "Invalid ip/ip+netmask: %s\n", ip_address_and_mask);
       return(-1);
     }
@@ -4839,6 +4912,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     u_int len;
     AC_PATTERN_t ac_pattern;
     AC_ERROR_t rc;
+    int atend = 0;
 
     if(name_to_add == NULL)
       return(-1);
@@ -4849,8 +4923,9 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
       return(-1);
 
     memset(&ac_pattern, 0, sizeof(ac_pattern));
-    ac_pattern.length = snprintf(name, len+2, "%s%s", name_to_add,
-				 ndpi_is_middle_string_char(name_to_add[len-1]) ? "" : "$");
+    atend  = !ndpi_is_middle_string_char(name_to_add[len-1]);
+    ac_pattern.length = len;
+    strcpy(name,name_to_add);
 
 #if 0
     printf("===> %s() Loading %s as %u\n", __FUNCTION__, name, category);
@@ -4862,7 +4937,9 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     }
 
     ac_pattern.astring = name;
-    ac_pattern.rep.number = (u_int32_t) category,  ac_pattern.rep.category = category;
+    ac_pattern.rep.number = (u_int32_t) category ;
+    if(atend) ac_pattern.rep.number |= NDPI_HOST_MATCH_END;
+    ac_pattern.rep.category = category;
 
     rc = ac_automata_add(ndpi_str->custom_categories.hostnames_shadow.ac_automa, &ac_pattern);
     if(rc != ACERR_DUPLICATE_PATTERN && rc != ACERR_SUCCESS) {
@@ -4883,13 +4960,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 			 ndpi_protocol_category_t category) {
     int rv;
 
-    /* Try to load as IP address first */
     rv = ndpi_load_ip_category(ndpi_struct, ip_or_name, category);
-
-    if(rv < 0) {
-      /* IP load failed, load as hostname */
-      rv = ndpi_load_hostname_category(ndpi_struct, ip_or_name, category);
-    }
 
     return(rv);
   }
@@ -6672,6 +6743,21 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     return(rc);
   }
 
+  static int ndpi_exact_ac_match(int match_num,AC_MATCH_t *ac_match,int input_text_len) {
+
+    if((match_num & NDPI_HOST_MATCH_ALL) == NDPI_HOST_MATCH_ALL) {
+          if(ac_match->patterns->length != input_text_len)
+        	    return 0;
+    } else if(match_num & NDPI_HOST_MATCH_START) {
+        	  if(ac_match->position - ac_match->patterns->length != 0)
+        	       return 0;
+      } else if(match_num & NDPI_HOST_MATCH_END) {
+        	    if(ac_match->position != input_text_len)
+        		 return 0;
+      }
+    return match_num & ~NDPI_HOST_MATCH_ALL;
+  }
+
   /* ****************************************************** */
 
   int ndpi_match_string_subprotocol(struct ndpi_detection_module_struct *ndpi_str, char *string_to_match,
@@ -6702,19 +6788,8 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     if(is_host_match)
       spin_unlock_bh(&ndpi_str->host_automa_lock);
 
-    if((match.number & NDPI_HOST_MATCH_ALL) == NDPI_HOST_MATCH_ALL) {
-          match.number ^= NDPI_HOST_MATCH_ALL;
-          if(ac_match.patterns->length != ac_input_text.length)
-        	    match.number = 0;
-    } else if(match.number & NDPI_HOST_MATCH_START) {
-        	  match.number ^= NDPI_HOST_MATCH_START;
-        	  if(ac_match.position - ac_match.patterns->length != 0)
-        	       match.number = 0;
-      } else if(match.number & NDPI_HOST_MATCH_END) {
-        	    match.number ^= NDPI_HOST_MATCH_END;
-        	    if(ac_match.position != ac_input_text.length)
-        		 match.number = 0;
-      }
+    match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
+
     /*
       As ac_automata_search can detect partial matches and continue the search process
       in case rc == 0 (i.e. no match), we need to check if there is a partial match
@@ -6812,13 +6887,13 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 
     buf_len = ndpi_min(string_to_match_len, sizeof(buf)-2);
     for(i=0; i<buf_len; i++) buf[i] = tolower(string_to_match[i]);
-    buf[i++] = '$'; /* Add trailer $ */
+//    buf[i++] = '$'; /* Add trailer $ */
     buf[i] = '\0';
 
     rc = ndpi_automa_match_string_subprotocol(ndpi_str, flow, buf, i,
 					      master_protocol_id, ret_match, 1);
     id = ret_match->protocol_category;
-
+#ifndef __KERNEL__
     if(ndpi_get_custom_category_match(ndpi_str, buf, i, &id) != -1) {
       /* if(id != -1) */ {
 	flow->category = ret_match->protocol_category = id;
@@ -6832,7 +6907,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
       if(rc1 > 0)
 	NDPI_SET_BIT(flow->risk, NDPI_RISKY_DOMAIN);
     }
-
+#endif
     return(rc);
   }
 

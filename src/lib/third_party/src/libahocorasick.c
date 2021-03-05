@@ -309,31 +309,34 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 		}
 
       if(curr->final && next) {
-	  if(mc) {
-		/* We check 'next' to find out if we came here after a alphabet
-		 * transition or due to a fail. in second case we should not report
-		 * matching because it was reported in previous node */
-		match->position = position; // + thiz->base_position;
-		match->match_num = curr->matched_patterns->num;
-		match->patterns = curr->matched_patterns->patterns;
-		/* we found a match! do call-back */
-		if (mc(match, txt, param))
-		    return 1;
-	  } else {
-		return 1;
-//		AC_PATTERN_t * patterns=curr->matched_patterns->patterns;
-//		if(p_len < patterns->length) {
-//			param->number = patterns->rep.number;
-//        	param->position = position;
-//	       	param->name = patterns->astring;
-//			p_len = patterns->length;
-//			// return 0; // ???
-//		}
+		if(p_len < curr->matched_patterns->patterns->length) {
+		  p_len = curr->matched_patterns->patterns->length;
+		  if(mc) {
+			/* We check 'next' to find out if we came here after a alphabet
+			 * transition or due to a fail. in second case we should not report
+			 * matching because it was reported in previous node */
+			match->position = position; // + thiz->base_position;
+			match->match_num = curr->matched_patterns->num;
+			match->patterns = curr->matched_patterns->patterns;
+			/* we found a match! do call-back */
+			if (mc(match, txt, param))
+			    return 1;
+		  } else {
+			return 1;
+//			AC_PATTERN_t * patterns=curr->matched_patterns->patterns;
+//			if(p_len < patterns->length) {
+//				param->number = patterns->rep.number;
+//        		param->position = position;
+//	       		param->name = patterns->astring;
+//				p_len = patterns->length;
+//				// return 0; // ???
+//			}
+          }
+	  	}
 	  }
-	}
     }
     match->start_node = curr;
-  return 0;
+  return p_len > 0 ? 1:0;
 }
 
 /******************************************************************************
@@ -488,7 +491,7 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
 	if(1 && !path[ip].idx) {
 		memnode = 0;
 		dump_node_header(n,&memnode);
-		printf(" node size %zu\n",memnode);
+//		printf(" node size %zu\n",memnode);
 		memcnt += memnode;
 	}
 	
@@ -503,8 +506,10 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
 			nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %.100s", sid.rep.number,sid.astring);
 		  }
 		printf("%s}\n",lbuf);
-		ip--;
-	 	continue;
+		if(!n->use) {
+			ip--;
+		 	continue;
+  		}
 	}
 	l = path[ip].l;
 
