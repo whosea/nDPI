@@ -34,6 +34,9 @@
 #include "ndpi_protocol_ids.h"
 #include "ndpi_utils.h"
 
+/* Used by both nDPI core and patricia code under third-party */
+#include "ndpi_patricia_typedefs.h"
+
 #ifndef __KERNEL__
 #ifdef HAVE_MAXMINDDB
 #include <maxminddb.h>
@@ -100,6 +103,7 @@ typedef enum {
   NDPI_RISKY_ASN,
   NDPI_RISKY_DOMAIN,
   NDPI_MALICIOUS_JA3,
+  NDPI_MALICIOUS_SHA1,
 
   
   /* Leave this as last member */
@@ -836,6 +840,24 @@ struct ndpi_flow_udp_struct {
 
 /* ************************************************** */
 
+#define LINE_EQUALS(ndpi_int_one_line_struct, string_to_compare) \
+  ((ndpi_int_one_line_struct).len == strlen(string_to_compare) && \
+   LINE_CMP(ndpi_int_one_line_struct, string_to_compare, strlen(string_to_compare)) == 1)
+
+#define LINE_STARTS(ndpi_int_one_line_struct, string_to_compare) \
+  ((ndpi_int_one_line_struct).len >= strlen(string_to_compare) && \
+   LINE_CMP(ndpi_int_one_line_struct, string_to_compare, strlen(string_to_compare)) == 1)
+
+#define LINE_ENDS(ndpi_int_one_line_struct, string_to_compare) \
+  ((ndpi_int_one_line_struct).len >= strlen(string_to_compare) && \
+   memcmp((ndpi_int_one_line_struct).ptr + \
+          ((ndpi_int_one_line_struct).len - strlen(string_to_compare)), \
+          string_to_compare, strlen(string_to_compare)) == 0)
+
+#define LINE_CMP(ndpi_int_one_line_struct, string_to_compare, string_to_compare_length) \
+  ((ndpi_int_one_line_struct).ptr != NULL && \
+   memcmp((ndpi_int_one_line_struct).ptr, string_to_compare, string_to_compare_length) == 0)
+
 struct ndpi_int_one_line_struct {
   const u_int8_t *ptr;
   u_int16_t len;
@@ -853,7 +875,6 @@ struct ndpi_packet_struct {
   u_int64_t current_time;
 
   u_int16_t detected_protocol_stack[NDPI_PROTOCOL_SIZE];
-  u_int8_t detected_subprotocol_stack[NDPI_PROTOCOL_SIZE];
   u_int16_t protocol_stack_info;
 
 /* Don't change order! */
@@ -1038,9 +1059,9 @@ typedef enum {
 typedef struct ndpi_proto_defaults {
   char *protoName;
   ndpi_protocol_category_t protoCategory;
-  u_int8_t can_have_a_subprotocol;
+  u_int16_t * subprotocols;
+  u_int32_t subprotocol_count;
   u_int16_t protoId, protoIdx;
-  u_int16_t master_tcp_protoId[2], master_udp_protoId[2]; /* The main protocols on which this sub-protocol sits on */
   u_int16_t tcp_default_ports[MAX_DEFAULT_PORTS], udp_default_ports[MAX_DEFAULT_PORTS];
   ndpi_protocol_breed_t protoBreed;
   void (*func) (struct ndpi_detection_module_struct *, struct ndpi_flow_struct *flow);
@@ -1107,7 +1128,7 @@ struct ndpi_detection_module_struct {
   u_int32_t current_ts;
   u_int32_t ticks_per_second;
   u_int16_t num_tls_blocks_to_follow;
-  u_int8_t skip_tls_blocks_until_change_cipher:1, _notused:7;
+  u_int8_t skip_tls_blocks_until_change_cipher:1, enable_ja3_plus:1, _notused:6;
   
   char custom_category_labels[NUM_CUSTOM_CATEGORIES][CUSTOM_CATEGORY_LABEL_LEN];
   /* callback function buffer */
@@ -1158,7 +1179,7 @@ struct ndpi_detection_module_struct {
   ndpi_automa host_automa,                     /* Used for DNS/HTTPS */
     content_automa,                            /* Used for HTTP subprotocol_detection */
     subprotocol_automa,                        /* Used for HTTP subprotocol_detection */
-    bigrams_automa, impossible_bigrams_automa, /* TOR */
+    bigrams_automa, trigrams_automa, impossible_bigrams_automa, /* TOR */
     risky_domain_automa, tls_cert_subject_automa,
     malicious_ja3_automa, malicious_sha1_automa;
   /* IMPORTANT: please update ndpi_finalize_initialization() whenever you add a new automa */
@@ -1215,6 +1236,9 @@ struct ndpi_detection_module_struct {
   /* NDPI_PROTOCOL_STUN and subprotocols */
   struct ndpi_lru_cache *stun_cache;
 
+  /* NDPI_PROTOCOL_MINING and subprotocols */
+  struct ndpi_lru_cache *mining_cache;
+  
   /* NDPI_PROTOCOL_MSTEAMS */
   struct ndpi_lru_cache *msteams_cache;
 
@@ -1519,9 +1543,10 @@ typedef u_int32_t ndpi_init_prefs;
 
 typedef enum
   {
-   ndpi_no_prefs = 0,
-   ndpi_dont_load_tor_hosts,
-   ndpi_dont_init_libgcrypt,
+    ndpi_no_prefs            = 0,
+    ndpi_dont_load_tor_hosts = 1,
+    ndpi_dont_init_libgcrypt = 2,
+    ndpi_enable_ja3_plus     = 4
   } ndpi_prefs;
 
 typedef struct {
@@ -1644,31 +1669,9 @@ struct ndpi_jitter_struct {
 
 /* **************************************** */
 
-#ifndef WIN32
-#define NDPI_PATRICIA_IPV6
-#else
-#undef NDPI_PATRICIA_IPV6
-#endif
-
 #ifndef AF_MAC
 #define AF_MAC            99
 #endif
-
-typedef struct _ndpi_prefix_t {
-  u_int16_t family;		/* AF_INET | AF_INET6 */
-  u_int16_t bitlen;		/* same as mask? */
-  int ref_count;		/* reference count */
-  union {
-    struct in_addr sin;
-#ifdef NDPI_PATRICIA_IPV6
-    struct ndpi_in6_addr sin6;
-#endif /* IPV6 */
-    u_int8_t mac[6];
-  } add;
-} ndpi_prefix_t;
-
-typedef struct _ndpi_patricia_node_t ndpi_patricia_node_t;
-typedef struct _ndpi_patricia_tree_t ndpi_patricia_tree_t;
 
 typedef void (*ndpi_void_fn_t)(void *data);
 typedef void (*ndpi_void_fn2_t)(ndpi_prefix_t *prefix, void *data);
@@ -1722,7 +1725,8 @@ typedef struct {
 
 /* **************************************** */
 
-#define HW_HISTORY_LEN   4
+#define HW_HISTORY_LEN               4
+#define MAX_SQUARE_ERROR_ITERATIONS 64 /* MUST be < num_values_rollup (256 max) */
 
 struct ndpi_hw_struct {
   struct {
@@ -1731,6 +1735,11 @@ struct ndpi_hw_struct {
     u_int16_t num_season_periods; /* num of values of a season */
   } params;
 
+  struct {
+    double sum_square_error;
+    u_int8_t num_values_rollup;
+  } prev_error;
+
   u_int32_t num_values;
   double    u, v, sum_square_error;
   
@@ -1738,6 +1747,39 @@ struct ndpi_hw_struct {
   u_int32_t *y;
   double    *s;
 };
+
+struct ndpi_ses_struct {
+  struct {
+    double alpha, ro;
+  } params;
+
+  struct {
+    double sum_square_error;
+    u_int8_t num_values_rollup;
+  } prev_error;
+
+  u_int32_t num_values;
+  double sum_square_error, last_forecast, last_value;
+};
+
+struct ndpi_des_struct {
+  struct {
+    double alpha, beta, ro;
+  } params;
+
+  struct {
+    double sum_square_error;
+    u_int8_t num_values_rollup;
+  } prev_error;
+
+  u_int32_t num_values;
+  double sum_square_error, last_forecast, last_trend, last_value;
+};
+
+/* **************************************** */
+
+/* Prototype used to define custom DGA detection function */
+typedef int (*ndpi_custom_dga_predict_fctn)(const char* domain, int domain_length);
 
 /* **************************************** */
 

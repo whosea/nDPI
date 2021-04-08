@@ -1147,6 +1147,10 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_serialize_start_of_block(serializer, "ndpi");
   ndpi_serialize_risk(serializer, flow);
   ndpi_serialize_string_string(serializer, "proto", ndpi_protocol2name(ndpi_struct, l7_protocol, buf, sizeof(buf)));
+  ndpi_protocol_breed_t breed =
+      ndpi_get_proto_breed(ndpi_struct,
+                           (l7_protocol.app_protocol != NDPI_PROTOCOL_UNKNOWN ? l7_protocol.app_protocol : l7_protocol.master_protocol));
+  ndpi_serialize_string_string(serializer, "breed", ndpi_get_proto_breed_name(ndpi_struct, breed));
   if(l7_protocol.category != NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
     ndpi_serialize_string_string(serializer, "category", ndpi_category_get_name(ndpi_struct, l7_protocol.category));
   ndpi_serialize_end_of_block(serializer);
@@ -1294,6 +1298,7 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
     break;
 
   case NDPI_PROTOCOL_TLS:
+  case NDPI_PROTOCOL_DTLS:
     if(flow->protos.tls_quic_stun.tls_quic.ssl_version) {
       char notBefore[32], notAfter[32];
       struct tm a, b, *before = NULL, *after = NULL;
@@ -1771,7 +1776,10 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("Risky domain name");
 
   case NDPI_MALICIOUS_JA3:
-    return("Malicious JA3 Fingerprint");
+    return("Possibly Malicious JA3 Fingerprint");
+
+  case NDPI_MALICIOUS_SHA1:
+    return("Possibly Malicious SSL Certificate SHA1 Fingerprint");
 
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
@@ -2453,3 +2461,12 @@ int ndpi_hash_add_entry(ndpi_str_hash *h, char *key, u_int8_t key_len, u_int8_t 
     return(0);
 }
 
+/* ******************************************************************** */
+
+void ndpi_set_risk(struct ndpi_flow_struct *flow, ndpi_risk_enum r) {
+  u_int32_t v = 1 << r;
+  
+  // NDPI_SET_BIT(flow->risk, (u_int32_t)r);
+  flow->risk |= v;
+
+}

@@ -50,23 +50,23 @@ static void ndpi_search_http_tcp(struct ndpi_detection_module_struct *ndpi_struc
 
 static void ndpi_analyze_content_signature(struct ndpi_flow_struct *flow) {
   if((flow->initial_binary_bytes_len >= 2) && (flow->initial_binary_bytes[0] == 0x4D) && (flow->initial_binary_bytes[1] == 0x5A))
-    NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER); /* Win executable */
+    ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER); /* Win executable */
   else if((flow->initial_binary_bytes_len >= 4) && (flow->initial_binary_bytes[0] == 0x7F) && (flow->initial_binary_bytes[1] == 'E')
 	  && (flow->initial_binary_bytes[2] == 'L') && (flow->initial_binary_bytes[3] == 'F'))
-    NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER); /* Linux executable */
+    ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER); /* Linux executable */
   else if((flow->initial_binary_bytes_len >= 4) && (flow->initial_binary_bytes[0] == 0xCF) && (flow->initial_binary_bytes[1] == 0xFA)
 	  && (flow->initial_binary_bytes[2] == 0xED) && (flow->initial_binary_bytes[3] == 0xFE))
-    NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER); /* Linux executable */
+    ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER); /* Linux executable */
   else if((flow->initial_binary_bytes_len >= 3)
 	  && (flow->initial_binary_bytes[0] == '#')
 	  && (flow->initial_binary_bytes[1] == '!')
 	  && (flow->initial_binary_bytes[2] == '/'))
-    NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER); /* Unix script (e.g. #!/bin/sh) */
+    ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER); /* Unix script (e.g. #!/bin/sh) */
   else if(flow->initial_binary_bytes_len >= 8) {
     u_int8_t exec_pattern[] = { 0x64, 0x65, 0x78, 0x0A, 0x30, 0x33, 0x35, 0x00 };
 
     if(memcmp(flow->initial_binary_bytes, exec_pattern, 8) == 0)
-      NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER); /* Dalvik Executable (Android) */
+      ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER); /* Dalvik Executable (Android) */
   }
 }
 
@@ -127,7 +127,7 @@ static void ndpi_http_check_human_redeable_content(struct ndpi_detection_module_
 	 && (content[3] == 0x00)) {
 	/* Looks like compressed data */
       } else
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_CONTENT);		  
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_CONTENT);		  
     }
   }
 }
@@ -220,7 +220,7 @@ static ndpi_protocol_category_t ndpi_http_check_content(struct ndpi_detection_mo
 	    for(i = 0; cmp_mimes[i] != NULL; i++) {
 	      if(strncasecmp(app, cmp_mimes[i], app_len_avail) == 0) {
 		flow->guessed_category = flow->category = NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT;
-		NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER);
+		ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER);
 		NDPI_LOG_INFO(ndpi_struct, "found executable HTTP transfer");
 		return(flow->category);
 	      }
@@ -248,7 +248,7 @@ static ndpi_protocol_category_t ndpi_http_check_content(struct ndpi_detection_mo
 	      if(memcmp((const char*)&packet->content_disposition_line.ptr[attachment_len],
 			binary_file_ext[i], ATTACHMENT_LEN) == 0) {
 		flow->guessed_category = flow->category = NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT;
-		NDPI_SET_BIT(flow->risk, NDPI_BINARY_APPLICATION_TRANSFER);
+		ndpi_set_risk(flow, NDPI_BINARY_APPLICATION_TRANSFER);
 		NDPI_LOG_INFO(ndpi_struct, "found executable HTTP transfer");
 		return(flow->category);
 	      }
@@ -348,10 +348,17 @@ static void ndpi_http_parse_subprotocol(struct ndpi_detection_module_struct *ndp
     char *double_col = strchr((char*)flow->host_server_name, ':');
 
     if(double_col) double_col[0] = '\0';
-
-    ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_HTTP,
-				 (char *)flow->host_server_name,
-				 strlen((const char *)flow->host_server_name));
+    
+    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_HTTP,
+				    (char *)flow->host_server_name,
+				    strlen((const char *)flow->host_server_name)) == 0) {
+      if(flow->http.url &&
+         ((strstr(flow->http.url, ":8080/downloading?n=0.") != NULL)
+          || (strstr(flow->http.url, ":8080/upload?n=0.") != NULL))) {
+	/* This looks like Ookla speedtest */
+	ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_OOKLA, NDPI_PROTOCOL_HTTP);
+      }
+    }
   }
 }
 
@@ -367,10 +374,10 @@ static void ndpi_check_user_agent(struct ndpi_detection_module_struct *ndpi_stru
      || (!strncmp(ua, "<?", 2))
      || strchr(ua, '{')
      || strchr(ua, '}')
-     || ndpi_check_dga_name(ndpi_struct, NULL, ua, 0)
+     // || ndpi_check_dga_name(ndpi_struct, NULL, ua, 0)
      // || ndpi_match_bigram(ndpi_struct, &ndpi_struct->impossible_bigrams_automa, ua)
      ) {
-    NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_USER_AGENT);
+    ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_USER_AGENT);
   }
 }
 
@@ -475,7 +482,7 @@ static void ndpi_check_numeric_ip(struct ndpi_detection_module_struct *ndpi_stru
 	a += *s - '0';
   }
   if(a < 0 || a > 255 || i != 3) return;
-  NDPI_SET_BIT(flow->risk, NDPI_HTTP_NUMERIC_IP_HOST);
+  ndpi_set_risk(flow, NDPI_HTTP_NUMERIC_IP_HOST);
 }
 
 /* ************************************************************* */
@@ -571,7 +578,7 @@ static void check_content_type_and_change_protocol(struct ndpi_detection_module_
     **/
     if(flow->detected_protocol_stack[1] == NDPI_PROTOCOL_UNKNOWN) {
       /* Avoid putting as subprotocol a "core" protocol such as SSL or DNS */
-      if(ndpi_struct->proto_defaults[flow->guessed_protocol_id].can_have_a_subprotocol == 0) {
+      if(ndpi_struct->proto_defaults[flow->guessed_protocol_id].subprotocol_count == 0) {
 	flow->detected_protocol_stack[1] = flow->guessed_protocol_id;
 	if(flow->detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN)
 	  flow->detected_protocol_stack[0] = flow->guessed_host_protocol_id;
@@ -786,55 +793,55 @@ static void ndpi_check_http_header(struct ndpi_detection_module_struct *ndpi_str
     switch(packet->line[i].ptr[0]){
     case 'A':
       if(is_a_suspicious_header(suspicious_http_header_keys_A, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'C':
       if(is_a_suspicious_header(suspicious_http_header_keys_C, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'M':
       if(is_a_suspicious_header(suspicious_http_header_keys_M, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'O':
       if(is_a_suspicious_header(suspicious_http_header_keys_O, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'R':
       if(is_a_suspicious_header(suspicious_http_header_keys_R, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'S':
       if(is_a_suspicious_header(suspicious_http_header_keys_S, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'T':
       if(is_a_suspicious_header(suspicious_http_header_keys_T, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'U':
       if(is_a_suspicious_header(suspicious_http_header_keys_U, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
       break;
     case 'X':
       if(is_a_suspicious_header(suspicious_http_header_keys_X, packet->line[i])) {
-	NDPI_SET_BIT(flow->risk, NDPI_HTTP_SUSPICIOUS_HEADER);
+	ndpi_set_risk(flow, NDPI_HTTP_SUSPICIOUS_HEADER);
 	return;
       }
 
@@ -929,13 +936,24 @@ static void ndpi_check_http_tcp(struct ndpi_detection_module_struct *ndpi_struct
 	if(ndpi_struct->ookla_cache == NULL)
 	  ndpi_struct->ookla_cache = ndpi_lru_cache_init(1024);
 
-	if(packet->iph != NULL && ndpi_struct->ookla_cache != NULL) {
-	  if(packet->tcp->source == htons(8080))
-	    ndpi_lru_add_to_cache(ndpi_struct->ookla_cache, packet->iph->saddr, 1 /* dummy */);
-	  else
-	    ndpi_lru_add_to_cache(ndpi_struct->ookla_cache, packet->iph->daddr, 1 /* dummy */);
+	if(ndpi_struct->ookla_cache != NULL) {
+	  if(packet->iph != NULL) {
+	    if(packet->tcp->source == htons(8080))
+	      ndpi_lru_add_to_cache(ndpi_struct->ookla_cache, packet->iph->saddr, 1 /* dummy */);
+	    else
+	      ndpi_lru_add_to_cache(ndpi_struct->ookla_cache, packet->iph->daddr, 1 /* dummy */);
+	  } else if(packet->iphv6 != NULL) {
+	    u_int32_t h;
+	    
+	    if(packet->tcp->source == htons(8080))
+	      h = ndpi_quick_hash((unsigned char *)&packet->iphv6->ip6_src, sizeof(packet->iphv6->ip6_src));
+	    else
+	      h = ndpi_quick_hash((unsigned char *)&packet->iphv6->ip6_dst, sizeof(packet->iphv6->ip6_dst));
+	    
+	    ndpi_lru_add_to_cache(ndpi_struct->ookla_cache, h, 1 /* dummy */);
+	  }
 	}
-
+	
         return;
       }
 
@@ -1156,7 +1174,7 @@ static void ndpi_search_http_tcp(struct ndpi_detection_module_struct *ndpi_struc
 ndpi_http_method ndpi_get_http_method(struct ndpi_detection_module_struct *ndpi_mod,
 				      struct ndpi_flow_struct *flow) {
   if(!flow) {
-    NDPI_SET_BIT(flow->risk, NDPI_MALFORMED_PACKET);
+    ndpi_set_risk(flow, NDPI_MALFORMED_PACKET);
     return(NDPI_HTTP_METHOD_UNKNOWN);
   } else
     return(flow->http.method);

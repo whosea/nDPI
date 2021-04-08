@@ -36,6 +36,9 @@
 #include "ndpi_api.h"
 #include "ndpi_protocols.h"
 
+/* used by ndpi_set_proto_subprotocols */
+#define NDPI_PROTOCOL_NO_MORE_SUBPROTOCOLS (-1)
+#define NDPI_PROTOCOL_MATCHED_BY_CONTENT (-2)
 
 #ifdef __cplusplus
 extern "C" {
@@ -101,11 +104,11 @@ extern "C" {
 				       struct ndpi_flow_struct *flow,
 				       ndpi_protocol_category_t protocol_category);
 
+  extern void ndpi_set_proto_subprotocols(struct ndpi_detection_module_struct *ndpi_mod,
+				      int protoId, ...);
+
   extern void ndpi_set_proto_defaults(struct ndpi_detection_module_struct *ndpi_mod,
-				      ndpi_protocol_breed_t protoBreed, u_int16_t protoId,
-				      u_int8_t can_have_a_subprotocol,
-				      u_int16_t tcp_alias_protoId[2],
-				      u_int16_t udp_alias_protoId[2], char *protoName,
+				      ndpi_protocol_breed_t protoBreed, u_int16_t protoId, char *protoName,
 				      ndpi_protocol_category_t protoCategory,
 				      ndpi_port_range *tcpDefPorts,
 				      ndpi_port_range *udpDefPorts);
@@ -133,11 +136,7 @@ extern "C" {
   extern u_int8_t ndpi_is_proto(ndpi_protocol proto, u_int16_t p);
 
   extern u_int16_t ndpi_get_lower_proto(ndpi_protocol p);
-  extern int ndpi_get_protocol_id_master_proto(struct ndpi_detection_module_struct *ndpi_struct,
-					       u_int16_t protocol_id,
-					       u_int16_t** tcp_master_proto,
-					       u_int16_t** udp_master_proto);
-  #/* NDPI_PROTOCOL_NETBIOS */
+  /* NDPI_PROTOCOL_NETBIOS */
   int ndpi_netbios_name_interpret(char *in, size_t inlen, char *out, u_int out_len);
   
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
@@ -160,6 +159,7 @@ extern "C" {
   int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi_str,
 					 const u_int8_t ** l4ptr, u_int16_t * l4len,
 					 u_int8_t * nxt_hdr);
+  void ndpi_set_risk(struct ndpi_flow_struct *flow, ndpi_risk_enum r);
 #ifdef __cplusplus
 }
 #endif

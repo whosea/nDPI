@@ -127,10 +127,8 @@ static int ndpi_my_inet_pton (int af, const char *src, void *dst)
     }
     memcpy (dst, xp, sizeof(struct in_addr));
     return (1);
-#if defined(NDPI_PATRICIA_IPV6)
   } else if(af == AF_INET6) {
     return (inet_pton (af, src, dst));
-#endif /* NDPI_PATRICIA_IPV6 */
   } else {
 #ifndef NT
     errno = EAFNOSUPPORT;
@@ -189,7 +187,6 @@ static char * ndpi_prefix_toa2x (ndpi_prefix_t *prefix, char *buff, int with_len
     }
     return (buff);
   }
-#if defined(NDPI_PATRICIA_IPV6)
   else if(prefix->family == AF_INET6) {
     char *r;
     r = (char *) inet_ntop (AF_INET6, &prefix->add.sin6, buff, 48 /* a guess value */ );
@@ -199,7 +196,6 @@ static char * ndpi_prefix_toa2x (ndpi_prefix_t *prefix, char *buff, int with_len
     }
     return (buff);
   }
-#endif /* NDPI_PATRICIA_IPV6 */
   else
     return (NULL);
 }
@@ -225,7 +221,6 @@ static ndpi_prefix_t * ndpi_New_Prefix2 (int family, void *dest, int bitlen, ndp
   int dynamic_allocated = 0;
   int default_bitlen = sizeof(struct in_addr) * 8;
 
-#if defined(NDPI_PATRICIA_IPV6)
   if(family == AF_INET6) {
     default_bitlen = sizeof(struct in6_addr) * 8;
     if(prefix == NULL) {
@@ -235,7 +230,6 @@ static ndpi_prefix_t * ndpi_New_Prefix2 (int family, void *dest, int bitlen, ndp
     memcpy (&prefix->add.sin6, dest, sizeof(struct in6_addr));
   }
   else
-#endif /* NDPI_PATRICIA_IPV6 */
     if(family == AF_INET) {
       if(prefix == NULL) {
 #ifndef NT
@@ -978,9 +972,7 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
   long maxbitlen = 0;
   char *cp;
   struct in_addr sin;
-#if defined(NDPI_PATRICIA_IPV6)
   struct in6_addr sin6;
-#endif /* NDPI_PATRICIA_IPV6 */ 
   char save[MAXLINE];
 
   if(string == NULL)
@@ -989,19 +981,15 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
   /* easy way to handle both families */
   if(family == 0) {
     family = AF_INET;
-#if defined(NDPI_PATRICIA_IPV6)
     if(strchr (string, ':')) family = AF_INET6;
-#endif /* NDPI_PATRICIA_IPV6 */
   }
 
   if(family == AF_INET) {
     maxbitlen = sizeof(struct in_addr) * 8;
   }
-#if defined(NDPI_PATRICIA_IPV6)
   else if(family == AF_INET6) {
     maxbitlen = sizeof(struct in6_addr) * 8;
   }
-#endif /* NDPI_PATRICIA_IPV6 */
 
   if((cp = strchr (string, '/')) != NULL) {
     bitlen = atol (cp + 1);
@@ -1022,8 +1010,6 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
       return (NULL);
     return (ndpi_New_Prefix2 (AF_INET, &sin, bitlen, NULL));
   }
-
-#if defined(NDPI_PATRICIA_IPV6)
   else if(family == AF_INET6) {
     // Get rid of this with next IPv6 upgrade
 #if defined(NT) && !defined(HAVE_INET_NTOP)
@@ -1035,7 +1021,6 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
 #endif /* NT */
     return (ndpi_New_Prefix2 (AF_INET6, &sin6, bitlen, NULL));
   }
-#endif /* NDPI_PATRICIA_IPV6 */
   else
     return (NULL);
 }

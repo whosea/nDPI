@@ -76,13 +76,15 @@ FILE *csv_fp                 = NULL; /**< for CSV export */
 static char* domain_to_check = NULL;
 static u_int8_t ignore_vlanid = 0;
 /** User preferences **/
-u_int8_t enable_protocol_guess = 1, enable_payload_analyzer = 0, num_bin_clusters = 0;
+u_int8_t enable_protocol_guess = 1, enable_payload_analyzer = 0, num_bin_clusters = 0, extcap_exit = 0;
 u_int8_t verbose = 0, enable_joy_stats = 0;
 int nDPI_LogLevel = 0;
 char *_debug_protocols = NULL;
 u_int8_t human_readeable_string_len = 5;
-u_int8_t max_num_udp_dissected_pkts = 16 /* 8 is enough for most protocols, Signal requires more */, max_num_tcp_dissected_pkts = 80 /* due to telnet */;
+u_int8_t max_num_udp_dissected_pkts = 24 /* 8 is enough for most protocols, Signal and SnapchatCall require more */, max_num_tcp_dissected_pkts = 80 /* due to telnet */;
 static u_int32_t pcap_analysis_duration = (u_int32_t)-1;
+static u_int32_t risk_stats[NDPI_MAX_RISK] = { 0 }, risks_found = 0, flows_with_risks = 0;
+static struct ndpi_stats cumulative_stats;
 static u_int16_t decode_tunnels = 0;
 static u_int16_t num_loops = 1;
 static u_int8_t shutdown_app = 0, quiet_mode = 0;
@@ -98,7 +100,7 @@ static time_t capture_until = 0;
 static u_int32_t num_flows;
 static struct ndpi_detection_module_struct *ndpi_info_mod = NULL;
 
-extern u_int8_t enable_doh_dot_detection;
+extern u_int8_t enable_doh_dot_detection, enable_ja3_plus;
 extern u_int32_t max_num_packets_per_flow, max_packet_payload_dissection, max_num_reported_top_payloads;
 extern u_int16_t min_pattern_len, max_pattern_len;
 extern void ndpi_self_check_host_match(); /* Self check function */
@@ -215,6 +217,8 @@ extern void ndpi_report_payload_stats();
 static int rep_mini = 0; 
 /* ********************************** */
 
+#define DEBUG_TRACE
+
 #ifdef DEBUG_TRACE
 FILE *trace = NULL;
 #endif
@@ -245,7 +249,7 @@ void init_doh_bins() {
 
 u_int check_bin_doh_similarity(struct ndpi_bin *bin, float *similarity) {
   u_int i;
-  float lowest_similarity = 9999999999;
+  float lowest_similarity = 9999999999.0f;
 
   for(i=0; i<NUM_DOH_BINS; i++) {
     *similarity = ndpi_bin_similarity(&doh_ndpi_bins[i], bin, 0);
@@ -275,7 +279,7 @@ void ndpiCheckHostStringMatch(char *testChar) {
   if(!testChar)
     return;
 
-  ndpi_str = ndpi_init_detection_module(ndpi_no_prefs);
+  ndpi_str = ndpi_init_detection_module(enable_ja3_plus ? ndpi_enable_ja3_plus : ndpi_no_prefs);
   ndpi_finalize_initialization(ndpi_str);
 
   // Display ALL Host strings ie host_match[] ?
@@ -441,7 +445,7 @@ static void help(u_int long_help) {
 	 "[-f <filter>][-s <duration>][-m <duration>][-b <num bin clusters>]\n"
 	 "          [-p <protos>][-l <loops> [-q][-d][-J][-h][-D][-e <len>][-t][-v <level>]\n"
 	 "          [-n <threads>][-w <file>][-c <file>][-C <file>][-j <file>][-x <file>]\n"
-	 "          [-r <file>][-j <file>][-T <num>][-U <num>] [-x <domain>]\n\n"
+	 "          [-r <file>][-j <file>][-S <file>][-T <num>][-U <num>] [-x <domain>][-z]\n\n"
 	 "Usage:\n"
 	 "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
 	 "                            | device for live capture (comma-separated list)\n"
@@ -473,6 +477,7 @@ static void help(u_int long_help) {
 	 "  -C <path>                 | Write output in CSV format on the specified file\n"
 	 "  -r <path>                 | Load risky domain file\n"
 	 "  -j <path>                 | Load malicious JA3 fingeprints\n"
+	 "  -S <path>                 | Load malicious SSL certificate SHA1 fingerprints\n"
 	 "  -w <path>                 | Write test output on the specified file. This is useful for\n"
 	 "                            | testing purposes in order to compare results across runs\n"
 	 "  -h                        | This help\n"
@@ -491,6 +496,7 @@ static void help(u_int long_help) {
 	 "  -D                        | Enable DoH traffic analysis based on content (no DPI)\n"
 	 "  -x <domain>               | Check domain name [Test only]\n"
 	 "  -I                        | Ignore VLAN id for flow hash calculation\n"
+	 "  -z                        | Enable JA3+\n"
 	 ,
 	 human_readeable_string_len,
 	 min_pattern_len, max_pattern_len, max_num_packets_per_flow, max_packet_payload_dissection,
@@ -504,15 +510,16 @@ static void help(u_int long_help) {
 	 "  --extcap-interface <name>\n"
 	 "  --extcap-config\n"
 	 "  --capture\n"
-	 "  --extcap-capture-filter\n"
+	 "  --extcap-capture-filter <filter>\n"
 	 "  --fifo <path to file or pipe>\n"
-	 "  --debug\n"
+	 "  --ndpi-proto-filter <protocol>\n"
     );
 #endif
 
   if(long_help) {
     NDPI_PROTOCOL_BITMASK all;
 
+    ndpi_info_mod = ndpi_init_detection_module(ndpi_no_prefs);
     printf("\n\nnDPI supported protocols:\n");
     printf("%3s %-22s %-8s %-12s %s\n", "Id", "Protocol", "Layer_4", "Breed", "Category");
     num_threads = 1;
@@ -570,17 +577,19 @@ static struct option longopts[] = {
 /* ********************************** */
 
 void extcap_interfaces() {
-  printf("extcap {version=%s}\n", ndpi_revision());
+  printf("extcap {version=%s}{help=https://github.com/ntop/nDPI/tree/dev/wireshark}\n", ndpi_revision());
   printf("interface {value=ndpi}{display=nDPI interface}\n");
-  exit(0);
+
+  extcap_exit = 1;
 }
 
 /* ********************************** */
 
 void extcap_dlts() {
   u_int dlts_number = DLT_EN10MB;
+
   printf("dlt {number=%u}{name=%s}{display=%s}\n", dlts_number, "ndpi", "nDPI Interface");
-  exit(0);
+  extcap_exit = 1;
 }
 
 /* ********************************** */
@@ -628,19 +637,36 @@ int cmpFlows(const void *_a, const void *_b) {
 /* ********************************** */
 
 void extcap_config() {
-  int i, argidx = 0;
+  int argidx = 0;
+#if 0
   struct ndpi_proto_sorter *protos;
-  u_int ndpi_num_supported_protocols = ndpi_get_ndpi_num_supported_protocols(ndpi_info_mod);
-  ndpi_proto_defaults_t *proto_defaults = ndpi_get_proto_defaults(ndpi_info_mod);
+  u_int ndpi_num_supported_protocols;
+  int i;
+  ndpi_proto_defaults_t *proto_defaults;
+#endif
+
+  ndpi_info_mod = ndpi_init_detection_module(ndpi_no_prefs);
+#if 0
+  ndpi_num_supported_protocols = ndpi_get_ndpi_num_supported_protocols(ndpi_info_mod);
+  proto_defaults = ndpi_get_proto_defaults(ndpi_info_mod);
+#endif
 
   /* -i <interface> */
-  printf("arg {number=%d}{call=-i}{display=Capture Interface}{type=string}"
+  printf("arg {number=%d}{call=-i}{display=Capture Interface}{type=string}{group=Live Capture}"
 	 "{tooltip=The interface name}\n", argidx++);
-  printf("arg {number=%d}{call=-i}{display=Pcap File to Analyze}{type=fileselect}"
+
+  printf("arg {number=%d}{call=-i}{display=Pcap File to Analyze}{type=fileselect}{mustexist=true}{group=Pcap}"
 	 "{tooltip=The pcap file to analyze (if the interface is unspecified)}\n", argidx++);
 
+#if 0
+  /* Removed as it breaks! extcap */
   protos = (struct ndpi_proto_sorter*)ndpi_malloc(sizeof(struct ndpi_proto_sorter) * ndpi_num_supported_protocols);
   if(!protos) exit(0);
+
+  printf("arg {number=%d}{call=--ndpi-proto-filter}{display=nDPI Protocol Filter}{type=selector}{group=Filter}"
+	 "{tooltip=nDPI Protocol to be filtered}\n", argidx);
+
+  printf("value {arg=%d}{value=%d}{display=%s}{default=true}\n", argidx, 0, "No nDPI filtering");
 
   for(i=0; i<(int) ndpi_num_supported_protocols; i++) {
     protos[i].id = i;
@@ -649,18 +675,16 @@ void extcap_config() {
 
   qsort(protos, ndpi_num_supported_protocols, sizeof(struct ndpi_proto_sorter), cmpProto);
 
-  printf("arg {number=%d}{call=-9}{display=nDPI Protocol Filter}{type=selector}"
-	 "{tooltip=nDPI Protocol to be filtered}\n", argidx);
-
-  printf("value {arg=%d}{value=%d}{display=%s}\n", argidx, -1, "All Protocols (no nDPI filtering)");
-
   for(i=0; i<(int)ndpi_num_supported_protocols; i++)
-    printf("value {arg=%d}{value=%d}{display=%s (%d)}\n", argidx, protos[i].id,
+    printf("value {arg=%d}{value=%d}{display=%s (%d)}{default=false}{enabled=true}\n", argidx, protos[i].id,
 	   protos[i].name, protos[i].id);
 
   ndpi_free(protos);
+#endif
 
-  exit(0);
+  ndpi_exit_detection_module(ndpi_info_mod);
+
+  extcap_exit = 1;
 }
 
 /* ********************************** */
@@ -755,12 +779,6 @@ static void parseOptions(int argc, char **argv) {
   u_int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
 
-#ifdef DEBUG_TRACE
-  trace = fopen("/tmp/ndpiReader.log", "a");
-
-  if(trace) fprintf(trace, " #### %s #### \n", __FUNCTION__);
-#endif
-
 #ifdef USE_DPDK
   {
     int ret = rte_eal_init(argc, argv);
@@ -772,10 +790,10 @@ static void parseOptions(int argc, char **argv) {
   }
 #endif
 
-  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:Ij:hp:P:l:r:s:tu:v:V:n:Jrp:x:w:q0123:456:7:89:m:T:U:",
+  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:Ij:S:hp:pP:l:r:s:tu:v:V:n:Jrp:x:w:zq0123:456:7:89:m:T:U:",
 			   longopts, &option_idx)) != EOF) {
 #ifdef DEBUG_TRACE
-    if(trace) fprintf(trace, " #### -%c [%s] #### \n", opt, optarg ? optarg : "");
+    if(trace) fprintf(trace, " #### Handling option -%c [%s] #### \n", opt, optarg ? optarg : "");
 #endif
 
     switch (opt) {
@@ -868,9 +886,9 @@ static void parseOptions(int argc, char **argv) {
       nDPI_LogLevel  = atoi(optarg);
       if(nDPI_LogLevel < NDPI_LOG_ERROR) nDPI_LogLevel = NDPI_LOG_ERROR;
       if(nDPI_LogLevel > NDPI_LOG_DEBUG_EXTRA) {
-	    nDPI_LogLevel = NDPI_LOG_DEBUG_EXTRA;
-	    ndpi_free(_debug_protocols);
-	    _debug_protocols = strdup("all");
+	nDPI_LogLevel = NDPI_LOG_DEBUG_EXTRA;
+	ndpi_free(_debug_protocols);
+	_debug_protocols = strdup("all");
       }
       break;
 
@@ -971,11 +989,22 @@ static void parseOptions(int argc, char **argv) {
       if(max_num_udp_dissected_pkts < 3) max_num_udp_dissected_pkts = 3;
       break;
 
+    case 'z':
+      enable_ja3_plus = 1;
+      break;
+
     default:
+#ifdef DEBUG_TRACE
+      if(trace) fprintf(trace, " #### Unknown option -%c: skipping it #### \n", opt);
+#endif
+
       help(0);
       break;
     }
   }
+
+  if(extcap_exit)
+    exit(0);
 
   if(csv_fp)
     printCSVHeader();
@@ -1005,22 +1034,18 @@ static void parseOptions(int argc, char **argv) {
   }
 
 #ifdef linux
-    for(thread_id = 0; thread_id < num_threads; thread_id++)
-      core_affinity[thread_id] = -1;
+  for(thread_id = 0; thread_id < num_threads; thread_id++)
+    core_affinity[thread_id] = -1;
 
-    if(num_cores > 1 && bind_mask != NULL) {
-      char *core_id = strtok(bind_mask, ":");
-      thread_id = 0;
-      while(core_id != NULL && thread_id < num_threads) {
-        core_affinity[thread_id++] = atoi(core_id) % num_cores;
-        core_id = strtok(NULL, ":");
-      }
+  if(num_cores > 1 && bind_mask != NULL) {
+    char *core_id = strtok(bind_mask, ":");
+    thread_id = 0;
+    while(core_id != NULL && thread_id < num_threads) {
+      core_affinity[thread_id++] = atoi(core_id) % num_cores;
+      core_id = strtok(NULL, ":");
     }
+  }
 #endif
-#endif
-
-#ifdef DEBUG_TRACE
-  if(trace) fclose(trace);
 #endif
 }
 
@@ -1553,6 +1578,8 @@ static void node_proto_guess_walker(const void *node, ndpi_VISIT which, int dept
 
       flow->detected_protocol = ndpi_detection_giveup(ndpi_thread_info[0].workflow->ndpi_struct,
 						      flow->ndpi_flow, enable_protocol_guess, &proto_guessed);
+
+      if(enable_protocol_guess) ndpi_thread_info[thread_id].workflow->stats.guessed_flow_protocols++;
     }
 
     process_ndpi_collected_info(ndpi_thread_info[thread_id].workflow, flow, csv_fp);
@@ -2255,6 +2282,57 @@ void printPortStats(struct port_stats *stats) {
 
 /* *********************************************** */
 
+static void node_flow_risk_walker(const void *node, ndpi_VISIT which, int depth, void *user_data) {
+  struct ndpi_flow_info *f = *(struct ndpi_flow_info**)node;
+
+  if(f->risk) {
+    u_int j;
+
+    flows_with_risks++;
+
+    for(j = 0; j < NDPI_MAX_RISK; j++) {
+      ndpi_risk_enum r = (ndpi_risk_enum)j;
+
+      if(NDPI_ISSET_BIT(f->risk, r))
+	risks_found++, risk_stats[r]++;
+    }
+  }
+}
+
+/* *********************************************** */
+
+static void printRiskStats() {
+  if(!quiet_mode) {
+    u_int thread_id, i;
+
+    for(thread_id = 0; thread_id < num_threads; thread_id++) {
+      for(i=0; i<NUM_ROOTS; i++)
+	ndpi_twalk(ndpi_thread_info[thread_id].workflow->ndpi_flows_root[i],
+		 node_flow_risk_walker, &thread_id);
+    }
+
+    if(risks_found) {
+      printf("\nRisk stats [found %u (%.1f %%) flows with risks]:\n",
+	     flows_with_risks,
+	     (100.*flows_with_risks)/(float)cumulative_stats.ndpi_flow_count);
+
+      for(i = 0; i < NDPI_MAX_RISK; i++) {
+	ndpi_risk_enum r = (ndpi_risk_enum)i;
+
+	if(risk_stats[r] != 0)
+	  printf("\t%-40s %5u [%4.01f %%]\n", ndpi_risk2str(r), risk_stats[r],
+		 (float)(risk_stats[r]*100)/(float)risks_found);
+    }
+
+      printf("\n\tNOTE: as one flow can have multiple risks set, the sum of the\n"
+	     "\t      last column can exceed the number of flows with risks.\n");
+      printf("\n\n");
+    }
+  }
+}
+
+/* *********************************************** */
+
 static void printFlowsStats() {
   int thread_id;
   u_int32_t total_flows = 0;
@@ -2428,7 +2506,6 @@ static void printFlowsStats() {
 	      HASH_ADD_INT(hostByJA3Found->ipToDNS_ht, ip, newInnerElement);
 	    }
 	  }
-
 	}
       }
 
@@ -2781,7 +2858,6 @@ static void printFlowsStats() {
 
     for(i=0; i<num_flows; i++)
       printFlow(i+1, all_flows[i].flow, all_flows[i].thread_id);
-
   } else if(csv_fp != NULL) {
     int i;
 
@@ -2808,7 +2884,6 @@ static void printResults(u_int64_t processing_time_usec, u_int64_t setup_time_us
   u_int32_t i;
   u_int64_t total_flow_bytes = 0;
   u_int32_t avg_pkt_size = 0;
-  struct ndpi_stats cumulative_stats;
   int thread_id;
   char buf[32];
   long long unsigned int breed_stats[NUM_BREEDS] = { 0 };
@@ -2967,6 +3042,7 @@ static void printResults(u_int64_t processing_time_usec, u_int64_t setup_time_us
 
   // printf("\n\nTotal Flow Traffic: %llu (diff: %llu)\n", total_flow_bytes, cumulative_stats.total_ip_bytes-total_flow_bytes);
 
+  printRiskStats();
   printFlowsStats();
 
   if(verbose == 3) {
@@ -3288,9 +3364,15 @@ static void ndpi_process_packet(u_char *args,
  * @brief Call pcap_loop() to process packets from a live capture or savefile
  */
 static void runPcapLoop(u_int16_t thread_id) {
-  if((!shutdown_app) && (ndpi_thread_info[thread_id].workflow->pcap_handle != NULL))
+  if((!shutdown_app) && (ndpi_thread_info[thread_id].workflow->pcap_handle != NULL)) {
+    int datalink_type = pcap_datalink(ndpi_thread_info[thread_id].workflow->pcap_handle);
+    if(!ndpi_is_datalink_supported(datalink_type)) {
+      printf("Unsupported datalink %d. Skip pcap\n", datalink_type);
+      return;
+    }
     if(pcap_loop(ndpi_thread_info[thread_id].workflow->pcap_handle, -1, &ndpi_process_packet, (u_char*)&thread_id) < 0)
       printf("Error while reading pcap file: '%s'\n", pcap_geterr(ndpi_thread_info[thread_id].workflow->pcap_handle));
+  }
 }
 
 /**
@@ -3493,54 +3575,57 @@ static void binUnitTest() {
 
 /* *********************************************** */
 
+#ifndef DEBUG_TRACE
+
 static void dgaUnitTest() {
   const char *dga[] = {
-		     "lbjamwptxz",
-		     "l54c2e21e80ba5471be7a8402cffb98768.so",
-		     "wdd7ee574106a84807a601beb62dd851f0.hk",
-		     "jaa12148a5831a5af92aa1d8fe6059e276.ws",
-		     "www.e6r5p57kbafwrxj3plz.com",
-		     // "grdawgrcwegpjaoo.eu",
-		     "mcfpeqbotiwxfxqu.eu",
-		     "adgxwxhqsegnrsih.eu",
-		     NULL
+    //"www.lbjamwptxz.com",
+    "www.l54c2e21e80ba5471be7a8402cffb98768.so",
+    "www.wdd7ee574106a84807a601beb62dd851f0.hk",
+    "www.jaa12148a5831a5af92aa1d8fe6059e276.ws",
+    "www.e6r5p57kbafwrxj3plz.com",
+    // "grdawgrcwegpjaoo.eu",
+    "www.mcfpeqbotiwxfxqu.eu",
+    "www.adgxwxhqsegnrsih.eu",
+    NULL
   };
 
   const char *non_dga[] = {
-		     "mz.gov.pl",
-		     "zoomam104zc.zoom.us",
-		     "5CI_DOMBIN",
-		     "ALICEGATE",
-		     "BOWIE",
-		     "D002465",
-		     "DESKTOP-RB5T12G",
-		     "ECI_DOM",
-		     "ECI_DOMA",
-		     "ECI_DOMAIN",
-		     "ENDIAN-PC",
-		     "GFILE",
-		     "GIOVANNI-PC",
-		     "GUNNAR",
-		     "ISATAP",
-		     "LAB111",
-		     "LP-RKERUR-OSX",
-		     "LUCAS-IMAC",
-		     "LUCASMACBOOKPRO",
-		     "MACBOOKAIR-E1D0",
-		     "MDJR98",
-		     "NASFILE",
-		     "SANJI-LIFEBOOK-",
-		     "SC.ARRANCAR.ORG",
-		     "WORKG",
-		     "WORKGROUP",
-		     "XSTREAM_HY",
-		     "__MSBROWSE__",
-		     "mqtt.facebook.com",
-		     NULL
+    "www.confindustriabrescia.it",
+    "mz.gov.pl",
+    "zoomam104zc.zoom.us",
+    "5CI_DOMBIN",
+    "ALICEGATE",
+    "BOWIE",
+    "D002465",
+    "DESKTOP-RB5T12G",
+    "ECI_DOM",
+    "ECI_DOMA",
+    "ECI_DOMAIN",
+    "ENDIAN-PC",
+    "GFILE",
+    "GIOVANNI-PC",
+    "GUNNAR",
+    "ISATAP",
+    "LAB111",
+    "LP-RKERUR-OSX",
+    "LUCAS-IMAC",
+    "LUCASMACBOOKPRO",
+    "MACBOOKAIR-E1D0",
+    //"MDJR98",
+    "NASFILE",
+    "SANJI-LIFEBOOK-",
+    "SC.ARRANCAR.ORG",
+    "WORKG",
+    "WORKGROUP",
+    "XSTREAM_HY",
+    "__MSBROWSE__",
+    "mqtt.facebook.com",
+    NULL
   };
   int i;
   NDPI_PROTOCOL_BITMASK all;
-  struct ndpi_detection_module_struct *ndpi_str = ndpi_init_detection_module(ndpi_no_prefs);
+  struct ndpi_detection_module_struct *ndpi_str = ndpi_init_detection_module(enable_ja3_plus ? ndpi_enable_ja3_plus : ndpi_no_prefs);
 
   assert(ndpi_str != NULL);
 
@@ -3554,8 +3639,10 @@ static void dgaUnitTest() {
   for(i=0; dga[i] != NULL; i++)
     assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)dga[i], 1) == 1);
 
-  for(i=0; non_dga[i] != NULL; i++)
+  for(i=0; non_dga[i] != NULL; i++) {
+    /* printf("Checking non DGA %s\n", non_dga[i]); */
     assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)non_dga[i], 1) == 0);
+  }
 
   ndpi_exit_detection_module(ndpi_str);
 }
@@ -3608,6 +3695,8 @@ void automataUnitTest() {
   assert(ndpi_match_string(automa, "This is the wonderful world of nDPI") == 1);
   ndpi_free_automa(automa);
 }
+
+#endif
 
 /* *********************************************** */
 
@@ -3739,22 +3828,49 @@ void rulesUnitTest() {
 void rsiUnitTest() {
   struct ndpi_rsi_struct s;
   unsigned int v[] = {
-    2227, 2219, 2208, 2217, 2218, 2213, 2223, 2243, 2224, 2229,
-    2215, 2239, 2238, 2261, 2336, 2405, 2375, 2383, 2395, 2363,
-    2382, 2387, 2365, 2319, 2310, 2333, 2268, 2310, 2240, 2217,
+    31,
+    87,
+    173,
+    213,
+    223,
+    230,
+    238,
+    245,
+    251,
+    151,
+    259,
+    261,
+    264,
+    264,
+    270,
+    273,
+    288,
+    288,
+    304,
+    304,
+    350,
+    384,
+    423,
+    439,
+    445,
+    445,
+    445,
+    445
   };
+
   u_int i, n = sizeof(v) / sizeof(unsigned int);
+  u_int debug = 0;
 
   assert(ndpi_alloc_rsi(&s, 8) == 0);
-  
+
   for(i=0; i<n; i++) {
     float rsi = ndpi_rsi_add_value(&s, v[i]);
 
-#if 0
-    printf("%2d) RSI = %f\n", i, rsi);
-#endif
+
+    if(debug)
+      printf("%2d) RSI = %f\n", i, rsi);
   }
-  
+
   ndpi_free_rsi(&s);
 }
 
@@ -3764,7 +3880,7 @@ void hashUnitTest() {
   ndpi_str_hash *h = ndpi_hash_alloc(16384);
   char* dict[] = { "hello", "world", NULL };
   int i;
-  
+
   assert(h);
 
   for(i=0; dict[i] != NULL; i++) {
@@ -3773,7 +3889,7 @@ void hashUnitTest() {
     assert(ndpi_hash_add_entry(h, dict[i], l, i) == 0);
     assert(ndpi_hash_find_entry(h, dict[i], l, &v) == 0);
   }
-  
+
   ndpi_hash_free(h);
 }
 
@@ -3785,18 +3901,18 @@ void hwUnitTest() {
   u_int i, j, num = sizeof(v) / sizeof(double);
   u_int num_learning_points = 2;
   u_int8_t trace = 0;
-  
+
   for(j=0; j<2; j++) {
     assert(ndpi_hw_init(&hw, num_learning_points, j /* 0=multiplicative, 1=additive */, 0.9, 0.9, 0.1, 0.05) == 0);
 
     if(trace)
       printf("\nHolt-Winters %s method\n", (j == 0) ? "multiplicative" : "additive");
-    
+
     for(i=0; i<num; i++) {
       double prediction, confidence_band;
       double lower, upper;
       int rc = ndpi_hw_add_value(&hw, v[i], &prediction, &confidence_band);
-      
+
       lower = prediction - confidence_band, upper = prediction + confidence_band;
 
       if(trace)
@@ -3804,9 +3920,304 @@ void hwUnitTest() {
 	       ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
 	       confidence_band);
     }
-    
+
     ndpi_hw_free(&hw);
   }
+}
+
+/* *********************************************** */
+
+void hwUnitTest2() {
+  struct ndpi_hw_struct hw;
+  u_int8_t trace = 1;
+  double v[] = {
+    31.908466339111,
+    87.339714050293,
+    173.47660827637,
+    213.92568969727,
+    223.32124328613,
+    230.60134887695,
+    238.09457397461,
+    245.8137512207,
+    251.09228515625,
+    251.09228515625,
+    259.21997070312,
+    261.98754882812,
+    264.78540039062,
+    264.78540039062,
+    270.47451782227,
+    173.3671875,
+    288.34222412109,
+    288.34222412109,
+    304.24795532227,
+    304.24795532227,
+    350.92227172852,
+    384.54431152344,
+    423.25942993164,
+    439.43322753906,
+    445.05981445312,
+    445.05981445312,
+    445.05981445312,
+    445.05981445312
+  };
+  u_int num_learning_points = 1;
+  u_int i, num = sizeof(v) / sizeof(double);
+  float alpha = 0.9, beta = 0.5, gamma = 1;
+  FILE *fd = fopen("/tmp/result.csv", "w");
+
+  assert(ndpi_hw_init(&hw, num_learning_points, 0 /* 0=multiplicative, 1=additive */,
+		      alpha, beta, gamma, 0.05) == 0);
+
+  if(trace) {
+    printf("\nHolt-Winters [alpha: %.1f][beta: %.1f][gamma: %.1f]\n", alpha, beta, gamma);
+
+    if(fd)
+      fprintf(fd, "index;value;prediction;lower;upper;anomaly\n");
+  }
+
+  for(i=0; i<num; i++) {
+    double prediction, confidence_band;
+    double lower, upper;
+    int rc = ndpi_hw_add_value(&hw, v[i], &prediction, &confidence_band);
+
+    lower = prediction - confidence_band, upper = prediction + confidence_band;
+
+    if(trace) {
+      printf("%2u)\t%12.3f\t%.3f\t%12.3f\t%12.3f\t %s [%.3f]\n", i, v[i], prediction, lower, upper,
+	     ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
+	     confidence_band);
+
+      if(fd)
+	fprintf(fd, "%u;%.0f;%.0f;%.0f;%.0f;%s\n",
+		i, v[i], prediction, lower, upper,
+		((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY");
+    }
+  }
+
+  if(fd) fclose(fd);
+
+  ndpi_hw_free(&hw);
+
+  //exit(0);
+}
+
+/* *********************************************** */
+
+void sesUnitTest() {
+  struct ndpi_ses_struct ses;
+  u_int8_t trace = 0;
+  double v[] = {
+    31.908466339111,
+    87.339714050293,
+    173.47660827637,
+    213.92568969727,
+    223.32124328613,
+    230.60134887695,
+    238.09457397461,
+    245.8137512207,
+    251.09228515625,
+    251.09228515625,
+    259.21997070312,
+    261.98754882812,
+    264.78540039062,
+    264.78540039062,
+    270.47451782227,
+    173.3671875,
+    288.34222412109,
+    288.34222412109,
+    304.24795532227,
+    304.24795532227,
+    350.92227172852,
+    384.54431152344,
+    423.25942993164,
+    439.43322753906,
+    445.05981445312,
+    445.05981445312,
+    445.05981445312,
+    445.05981445312
+  };
+  u_int i, num = sizeof(v) / sizeof(double);
+  float alpha = 0.9;
+  FILE *fd = fopen("/tmp/ses_result.csv", "w");
+
+  assert(ndpi_ses_init(&ses, alpha, 0.05) == 0);
+
+  if(trace) {
+    printf("\nSingle Exponential Smoothing [alpha: %.1f]\n", alpha);
+
+    if(fd)
+      fprintf(fd, "index;value;prediction;lower;upper;anomaly\n");
+  }
+
+  for(i=0; i<num; i++) {
+    double prediction, confidence_band;
+    double lower, upper;
+    int rc = ndpi_ses_add_value(&ses, v[i], &prediction, &confidence_band);
+
+    lower = prediction - confidence_band, upper = prediction + confidence_band;
+
+    if(trace) {
+      printf("%2u)\t%12.3f\t%.3f\t%12.3f\t%12.3f\t %s [%.3f]\n", i, v[i], prediction, lower, upper,
+	     ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
+	     confidence_band);
+
+      if(fd)
+	fprintf(fd, "%u;%.0f;%.0f;%.0f;%.0f;%s\n",
+		i, v[i], prediction, lower, upper,
+		((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY");
+    }
+  }
+
+  if(fd) fclose(fd);
+}
+
+/* *********************************************** */
+
+void desUnitTest() {
+  struct ndpi_des_struct des;
+  u_int8_t trace = 0;
+  double v[] = {
+    31.908466339111,
+    87.339714050293,
+    173.47660827637,
+    213.92568969727,
+    223.32124328613,
+    230.60134887695,
+    238.09457397461,
+    245.8137512207,
+    251.09228515625,
+    251.09228515625,
+    259.21997070312,
+    261.98754882812,
+    264.78540039062,
+    264.78540039062,
+    270.47451782227,
+    173.3671875,
+    288.34222412109,
+    288.34222412109,
+    304.24795532227,
+    304.24795532227,
+    350.92227172852,
+    384.54431152344,
+    423.25942993164,
+    439.43322753906,
+    445.05981445312,
+    445.05981445312,
+    445.05981445312,
+    445.05981445312
+  };
+  u_int i, num = sizeof(v) / sizeof(double);
+  float alpha = 0.9, beta = 0.5;
+  FILE *fd = fopen("/tmp/des_result.csv", "w");
+
+  assert(ndpi_des_init(&des, alpha, beta, 0.05) == 0);
+
+  if(trace) {
+    printf("\nDouble Exponential Smoothing [alpha: %.1f][beta: %.1f]\n", alpha, beta);
+
+    if(fd)
+      fprintf(fd, "index;value;prediction;lower;upper;anomaly\n");
+  }
+
+  for(i=0; i<num; i++) {
+    double prediction, confidence_band;
+    double lower, upper;
+    int rc = ndpi_des_add_value(&des, v[i], &prediction, &confidence_band);
+
+    lower = prediction - confidence_band, upper = prediction + confidence_band;
+
+    if(trace) {
+      printf("%2u)\t%12.3f\t%.3f\t%12.3f\t%12.3f\t %s [%.3f]\n", i, v[i], prediction, lower, upper,
+	     ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
+	     confidence_band);
+
+      if(fd)
+	fprintf(fd, "%u;%.0f;%.0f;%.0f;%.0f;%s\n",
+		i, v[i], prediction, lower, upper,
+		((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY");
+    }
+  }
+
+  if(fd) fclose(fd);
+}
+
+/* *********************************************** */
+
+void desUnitStressTest() {
+  struct ndpi_des_struct des;
+  u_int8_t trace = 1;
+  u_int i;
+  float alpha = 0.9, beta = 0.5;
+  double init_value = time(NULL) % 1000;
+
+  assert(ndpi_des_init(&des, alpha, beta, 0.05) == 0);
+
+  if(trace) {
+    printf("\nDouble Exponential Smoothing [alpha: %.1f][beta: %.1f]\n", alpha, beta);
+  }
+
+  for(i=0; i<512; i++) {
+    double prediction, confidence_band;
+    double lower, upper;
+    double value = init_value + rand() % 25;
+    int rc = ndpi_des_add_value(&des, value, &prediction, &confidence_band);
+
+    lower = prediction - confidence_band, upper = prediction + confidence_band;
+
+    if(trace) {
+      printf("%2u)\t%12.3f\t%.3f\t%12.3f\t%12.3f\t %s [%.3f]\n", i, value, prediction, lower, upper,
+	     ((rc == 0) || ((value >= lower) && (value <= upper))) ? "OK" : "ANOMALY",
+	     confidence_band);
+    }
+  }
+}
+
+/* *********************************************** */
+
+void hwUnitTest3() {
+  struct ndpi_hw_struct hw;
+  u_int num_learning_points = 3;
+  u_int8_t trace = 1;
+  double v[] = {
+    10,
+    14,
+    8,
+    25,
+    16,
+    22,
+    14,
+    35,
+    15,
+    27,
+    18,
+    40,
+    28,
+    40,
+    25,
+    65,
+  };
+  u_int i, num = sizeof(v) / sizeof(double);
+  float alpha = 0.5, beta = 0.5, gamma = 0.1;
+  assert(ndpi_hw_init(&hw, num_learning_points, 0 /* 0=multiplicative, 1=additive */, alpha, beta, gamma, 0.05) == 0);
+
+  if(trace)
+    printf("\nHolt-Winters [alpha: %.1f][beta: %.1f][gamma: %.1f]\n", alpha, beta, gamma);
+
+  for(i=0; i<num; i++) {
+    double prediction, confidence_band;
+    double lower, upper;
+    int rc = ndpi_hw_add_value(&hw, v[i], &prediction, &confidence_band);
+
+    lower = prediction - confidence_band, upper = prediction + confidence_band;
+
+    if(trace)
+      printf("%2u)\t%12.3f\t%.3f\t%12.3f\t%12.3f\t %s [%.3f]\n",
+	     i, v[i], prediction, lower, upper,
+	     ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
+	     confidence_band);
+  }
+
+  ndpi_hw_free(&hw);
 }
 
 /* *********************************************** */
@@ -3817,12 +4228,12 @@ void jitterUnitTest() {
   u_int i, num = sizeof(v) / sizeof(float);
   u_int num_learning_points = 4;
   u_int8_t trace = 0;
-  
+
   assert(ndpi_jitter_init(&jitter, num_learning_points) == 0);
 
   for(i=0; i<num; i++) {
     float rc = ndpi_jitter_add_value(&jitter, v[i]);
-				     
+
     if(trace)
       printf("%2u)\t%.3f\t%.3f\n", i, v[i], rc);
   }
@@ -3836,25 +4247,50 @@ void jitterUnitTest() {
    @brief MAIN FUNCTION
 **/
 #ifdef APP_HAS_OWN_MAIN
-int orginal_main(int argc, char **argv) {
+int original_main(int argc, char **argv) {
 #else
   int main(int argc, char **argv) {
 #endif
     int i;
+
+#ifdef DEBUG_TRACE
+    trace = fopen("/tmp/ndpiReader.log", "a");
+
+    if(trace) {
+      int i;
+
+      fprintf(trace, " #### %s #### \n", __FUNCTION__);
+      fprintf(trace, " #### [argc: %u] #### \n", argc);
+
+      for(i=0; i<argc; i++)
+	fprintf(trace, " #### [%d] [%s]\n", i, argv[i]);
+    }
+#endif
+
 
     if(ndpi_get_api_version() != NDPI_API_VERSION) {
       printf("nDPI Library version mismatch: please make sure this code and the nDPI library are in sync\n");
       return(-1);
     }
 
-    gettimeofday(&startup_time, NULL);
-    ndpi_info_mod = ndpi_init_detection_module(ndpi_no_prefs);
+#ifndef DEBUG_TRACE
+    /* Skip tests when debugging */
 
-    if(ndpi_info_mod == NULL) return -1;
+#ifdef HW_TEST
+    hwUnitTest2();
+#endif
 
-    /* Internal checks */    
+#ifdef STRESS_TEST
+    desUnitStressTest();
+    exit(0);
+#endif
+
+    sesUnitTest();
+    desUnitTest();
+
+    /* Internal checks */
     // binUnitTest();
-    hwUnitTest();
+    //hwUnitTest();
     jitterUnitTest();
     rsiUnitTest();
     hashUnitTest();
@@ -3866,17 +4302,22 @@ int orginal_main(int argc, char **argv) {
     ndpi_self_check_host_match();
     analysisUnitTest();
     rulesUnitTest();
+#endif
+
+    gettimeofday(&startup_time, NULL);
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     if(getenv("REP_MINI"))
 	    rep_mini = 1;
     parseOptions(argc, argv);
 
+    ndpi_info_mod = ndpi_init_detection_module(enable_ja3_plus ? ndpi_enable_ja3_plus : ndpi_no_prefs);
+
+    if(ndpi_info_mod == NULL) return -1;
+
     if(domain_to_check) {
       ndpiCheckHostStringMatch(domain_to_check);
       exit(0);
     }
-
-    if(enable_doh_dot_detection) init_doh_bins();
 
     if(!quiet_mode) {
       printf("\n-----------------------------------------------------------\n"
@@ -3905,6 +4346,10 @@ int orginal_main(int argc, char **argv) {
     if(ndpi_info_mod) ndpi_exit_detection_module(ndpi_info_mod);
     if(csv_fp)        fclose(csv_fp);
     ndpi_free(_debug_protocols);
+    
+#ifdef DEBUG_TRACE
+    if(trace) fclose(trace);
+#endif
 
     return 0;
   }
@@ -3958,4 +4403,3 @@ int orginal_main(int argc, char **argv) {
     return 0;
   }
 #endif /* WIN32 */
-

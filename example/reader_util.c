@@ -88,10 +88,12 @@
 
 extern u_int8_t enable_protocol_guess, enable_joy_stats, enable_payload_analyzer;
 extern u_int8_t verbose, human_readeable_string_len;
-extern u_int8_t max_num_udp_dissected_pkts /* 8 */, max_num_tcp_dissected_pkts /* 10 */;
+extern u_int8_t max_num_udp_dissected_pkts /* 24 */, max_num_tcp_dissected_pkts /* 80 */;
 static u_int32_t flow_id = 0;
 
 u_int8_t enable_doh_dot_detection = 0;
+u_int8_t enable_ja3_plus = 0;
+
 /* ****************************************************** */
 
 struct flow_id_stats {
@@ -419,7 +421,7 @@ struct ndpi_workflow* ndpi_workflow_init(const struct ndpi_workflow_prefs * pref
   set_ndpi_flow_malloc(NULL), set_ndpi_flow_free(NULL);
 
   /* TODO: just needed here to init ndpi ndpi_malloc wrapper */
-  module = ndpi_init_detection_module(ndpi_no_prefs);
+  module = ndpi_init_detection_module(enable_ja3_plus ? ndpi_enable_ja3_plus : ndpi_no_prefs);
 
   if(module == NULL) {
     LOG(NDPI_LOG_ERROR, "global structure initialization failed\n");
@@ -1536,6 +1538,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 
 	  flow->detected_protocol = ndpi_detection_giveup(workflow->ndpi_struct, flow->ndpi_flow,
 							  enable_protocol_guess, &proto_guessed);
+	  if(enable_protocol_guess) workflow->stats.guessed_flow_protocols++;
 	}
 
 	process_ndpi_collected_info(workflow, flow, csv_fp);
@@ -1655,6 +1658,25 @@ static const u_char *parse_nflog_packet(const struct pcap_pkthdr *h, const u_cha
 	return p;
 }
 #endif
+int ndpi_is_datalink_supported(int datalink_type)
+{
+  /* Keep in sync with the similar switch in ndpi_workflow_process_packet */
+  switch(datalink_type) {
+  case DLT_NULL:
+  case DLT_PPP_SERIAL:
+  case DLT_C_HDLC:
+  case DLT_PPP:
+  case DLT_IPV4:
+  case DLT_IPV6:
+  case DLT_EN10MB:
+  case DLT_LINUX_SLL:
+  case DLT_IEEE802_11_RADIO:
+  case DLT_RAW:
+    return 1;
+  default:
+    return 0;
+  }
+}
 
 /* ****************************************************** */
 
@@ -1744,6 +1766,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   if(h_caplen < eth_offset + 28)
     return(nproto); /* Too short */
 
+  /* Keep in sync with ndpi_is_datalink_supported() */
   switch(datalink_type) {
   case DLT_NULL:
     if(ntohl(*((u_int32_t*)&packet[eth_offset])) == 2)
@@ -1868,7 +1891,9 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 #endif
 
   default:
-    /* printf("Unknown datalink %d\n", datalink_type); */
+    /* We shoudn't be here, because we already checked that this datalink is supported.
+       Should ndpi_is_datalink_supported() be updated? */
+    printf("Unknown datalink %d\n", datalink_type);
     return(nproto);
   }
 
