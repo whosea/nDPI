@@ -58,7 +58,7 @@ time_t ndpi_bt_node_expire = 1200; /* time in seconds */
 
 #ifndef __KERNEL__
 
-// typedef int bool;
+typedef int bool;
 #define true 1
 #define false 0
 
@@ -1009,7 +1009,7 @@ static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
     	return f1 != NULL || f2 != NULL;
     }
 #endif
-    if(ndpi_struct->bt_ht) {
+    if(ndpi_struct->bt_ht && packet->iph) {
 	f1 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,source,
 			    flow->packet.current_time);
 	f2 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,dest,
