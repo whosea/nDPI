@@ -580,7 +580,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
      && (!strcmp(flow->protos.tls_quic_stun.tls_quic.subjectDN, flow->protos.tls_quic_stun.tls_quic.issuerDN)))
     ndpi_set_risk(flow, NDPI_TLS_SELFSIGNED_CERTIFICATE);
 
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
   printf("[TLS] %s() SubjectDN [%s]\n", __FUNCTION__, rdnSeqBuf);
 #endif
 }
@@ -669,11 +669,13 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
 
       flow->l4.tcp.tls.fingerprint_set = 1;
 
+      {
       uint8_t * sha1 = flow->protos.tls_quic_stun.tls_quic.sha1_certificate_fingerprint;
       const size_t sha1_siz = sizeof(flow->protos.tls_quic_stun.tls_quic.sha1_certificate_fingerprint);
       char sha1_str[20 /* sha1_siz */ * 2 + 1];
       static const char hexalnum[] = "0123456789ABCDEF";
-      for (size_t i = 0; i < sha1_siz; ++i) {
+      size_t i;
+      for (i = 0; i < sha1_siz; ++i) {
         u_int8_t lower = (sha1[i] & 0x0F);
         u_int8_t upper = (sha1[i] & 0xF0) >> 4;
         sha1_str[i*2] = hexalnum[upper];
@@ -693,6 +695,7 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
       }
 
       processCertificateElements(ndpi_struct, flow, certificates_offset, certificate_len);
+      }
     }
 
     certificates_offset += certificate_len;

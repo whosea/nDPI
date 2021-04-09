@@ -362,6 +362,7 @@ void ndpi_set_proto_subprotocols(struct ndpi_detection_module_struct *ndpi_str, 
 {
   va_list ap;
   int current_arg = protoId;
+  size_t i = 0;
 
   va_start(ap, protoId);
   while (current_arg != NDPI_PROTOCOL_NO_MORE_SUBPROTOCOLS)
@@ -384,7 +385,6 @@ void ndpi_set_proto_subprotocols(struct ndpi_detection_module_struct *ndpi_str, 
   ndpi_str->proto_defaults[protoId].subprotocols =
     ndpi_malloc(sizeof(protoId) * ndpi_str->proto_defaults[protoId].subprotocol_count);
 
-  size_t i = 0;
   va_start(ap, protoId);
   current_arg = va_arg(ap, int);
   while (current_arg != NDPI_PROTOCOL_NO_MORE_SUBPROTOCOLS)
@@ -1798,7 +1798,7 @@ int ndpi_fill_prefix_v4(ndpi_prefix_t *p, const struct in_addr *a, int b, int mb
 
 /* ******************************************* */
 
-int ndpi_fill_prefix_v6(ndpi_prefix_t *prefix, const struct in6_addr *addr, int bits, int maxbits) {
+int ndpi_fill_prefix_v6(ndpi_prefix_t *prefix, const struct ndpi_in6_addr *addr, int bits, int maxbits) {
   if(bits < 0 || bits > maxbits)
     return -1;
 
@@ -2695,7 +2695,7 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_str) {
       ac_automata_release((AC_AUTOMATA_t*)ndpi_str->bigrams_automa.ac_automa);
 
     if(ndpi_str->trigrams_automa.ac_automa != NULL)
-      ac_automata_release((AC_AUTOMATA_t *) ndpi_str->trigrams_automa.ac_automa, 0);
+      ac_automata_release((AC_AUTOMATA_t *) ndpi_str->trigrams_automa.ac_automa);
 
     if(ndpi_str->impossible_bigrams_automa.ac_automa != NULL)
       ac_automata_release((AC_AUTOMATA_t*)ndpi_str->impossible_bigrams_automa.ac_automa);
@@ -3248,71 +3248,6 @@ int ndpi_load_malicious_sha1_file(struct ndpi_detection_module_struct *ndpi_str,
 }
 
 #endif
-
-/* ******************************************************************** */
-
-/*
- * Format:
- *
- * <sha1 hash>
- * <other info>,<sha1 hash>
- * <other info>,<sha1 hash>[,<other info>[...]]
- *
- */
-int ndpi_load_malicious_sha1_file(struct ndpi_detection_module_struct *ndpi_str, const char *path)
-{
-  char buffer[128];
-  char *first_comma, *second_comma, *str;
-  FILE *fd;
-  size_t len;
-  int num = 0;
-
-  if (ndpi_str->malicious_sha1_automa.ac_automa == NULL)
-    ndpi_str->malicious_sha1_automa.ac_automa = ac_automata_init(ac_match_handler);
-
-  fd = fopen(path, "r");
-
-  if (fd == NULL) {
-    NDPI_LOG_ERR(ndpi_str, "Unable to open file %s [%s]\n", path, strerror(errno));
-    return -1;
-  }
-
-  while (fgets(buffer, sizeof(buffer), fd) != NULL) {
-    len = strlen(buffer);
-
-    if (len <= 1 || buffer[0] == '#')
-      continue;
-
-    first_comma = strchr(buffer, ',');
-    if (first_comma != NULL) {
-      first_comma++;
-      second_comma = strchr(first_comma, ',');
-      if (second_comma == NULL)
-        second_comma = &buffer[len - 1];
-    } else {
-      first_comma = &buffer[0];
-      second_comma = &buffer[len - 1];
-    }
-
-    if ((second_comma - first_comma) != 40)
-      continue;
-    second_comma[0] = '\0';
-
-    for (size_t i = 0; i < 40; ++i)
-      first_comma[i] = toupper(first_comma[i]);
-
-    str = ndpi_strdup(first_comma);
-    if (str == NULL) {
-      NDPI_LOG_ERR(ndpi_str, "Memory allocation failure\n");
-      return -1;
-    };
-
-    if (ndpi_add_string_to_automa(ndpi_str->malicious_sha1_automa.ac_automa, str) >= 0)
-      num++;
-  }
-
-  return num;
-}
 
 /* ******************************************************************** */
 
@@ -4572,6 +4507,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
                                              uint32_t callback_buffer_size)
   {
     void *func = NULL;
+    u_int32_t a;
     u_int8_t is_tcp_without_payload = (callback_buffer == ndpi_str->callback_buffer_tcp_no_payload);
     u_int32_t num_calls = (is_tcp_without_payload != 0 ? 1 : 0);
     u_int16_t proto_index = ndpi_str->proto_defaults[flow->guessed_protocol_id].protoIdx;
@@ -4601,7 +4537,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 
     if (flow->detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN)
     {
-      for (u_int32_t a = 0; a < callback_buffer_size; a++) {
+      for (a = 0; a < callback_buffer_size; a++) {
         if ((func != callback_buffer[a].func) &&
             (callback_buffer[a].ndpi_selection_bitmask & ndpi_selection_packet) ==
              callback_buffer[a].ndpi_selection_bitmask &&
@@ -4622,15 +4558,16 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     }
 
     /* Check for subprotocols. */
-    for (u_int32_t a = 0; a < ndpi_str->proto_defaults[flow->detected_protocol_stack[0]].subprotocol_count; a++)
+    for (a = 0; a < ndpi_str->proto_defaults[flow->detected_protocol_stack[0]].subprotocol_count; a++)
     {
+      u_int16_t subproto_index;
       u_int16_t subproto_id = ndpi_str->proto_defaults[flow->detected_protocol_stack[0]].subprotocols[a];
       if (subproto_id == (uint16_t)NDPI_PROTOCOL_MATCHED_BY_CONTENT)
       {
         continue;
       }
 
-      u_int16_t subproto_index = ndpi_str->proto_defaults[subproto_id].protoIdx;
+      subproto_index = ndpi_str->proto_defaults[subproto_id].protoIdx;
       if ((func != ndpi_str->proto_defaults[subproto_id].func) &&
           (ndpi_str->callback_buffer[subproto_index].ndpi_selection_bitmask & ndpi_selection_packet) ==
            ndpi_str->callback_buffer[subproto_index].ndpi_selection_bitmask &&
@@ -4917,6 +4854,8 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 
     /* set up the packet headers for the extra packet function to use if it wants */
     if(ndpi_init_packet_header(ndpi_str, flow, packetlen) != 0)
+      return;
+    if(!flow->packet.iph && !flow->packet.iphv6)
       return;
 
     /* detect traffic for tcp or udp only */
@@ -5454,6 +5393,8 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     /* we are interested in ipv4 packet */
 
     if(ndpi_init_packet_header(ndpi_str, flow, packetlen) != 0)
+      goto invalidate_ptr;
+    if(!flow->packet.iph && !flow->packet.iphv6)
       goto invalidate_ptr;
 
     /* detect traffic for tcp or udp only */
@@ -7081,6 +7022,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
   int ndpi_match_trigram(struct ndpi_detection_module_struct *ndpi_str,
 			ndpi_automa *automa, char *trigram_to_match) {
     AC_TEXT_t ac_input_text;
+    AC_MATCH_t ac_match;
     AC_REP_t match = {NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED};
     int rc;
 
@@ -7096,8 +7038,10 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 #endif
     }
 
+    memset((char *)&ac_match,0,sizeof(ac_match));
     ac_input_text.astring = trigram_to_match, ac_input_text.length = 3;
-    rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa), &ac_input_text, &match);
+    rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa),
+		    &ac_match, &ac_input_text, ac_match_handler,&match);
 
     /*
       As ac_automata_search can detect partial matches and continue the search process
