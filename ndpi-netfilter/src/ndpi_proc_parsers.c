@@ -41,8 +41,6 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 		if(ndpi_log_debug > 1)
 			pr_info("hostdef: clean host_ac %px\n",n->host_ac);
 
-		ac_automata_clean((AC_AUTOMATA_t*)n->host_ac);
-
 		for(protocol_id = 0; protocol_id < NDPI_NUM_BITS; protocol_id++) {
 			if(n->hosts_tmp->p[protocol_id]) {
 				kfree(n->hosts_tmp->p[protocol_id]);
@@ -50,6 +48,7 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 			}
 		}
 		n->host_error = 0;
+		n->host_upd++;
 
 		if(ndpi_log_debug > 1)
 			pr_info("xt_ndpi: reset hosts\n");
@@ -90,31 +89,16 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 		if(nh) *nh++ = '\0';
 
 		sml = strlen(host_match);
+		if(str_collect_look(n->hosts_tmp->p[protocol_id],host_match,sml) >= 0) {
+			pr_err("xt_ndpi: exists '%.60s'\n",host_match);
+			continue;
+		}
 		cstr = str_collect_add(&n->hosts_tmp->p[protocol_id],host_match,sml);
 		if(!cstr) {
 			pr_err("xt_ndpi: can't alloc memory for '%.60s'\n",host_match);
 			goto bad_cmd;
 		}
-
-		ac_pattern.astring    = cstr;
-		ac_pattern.length     = sml;
-		ac_pattern.rep.number = protocol_id;
-		r = n->host_ac ? ac_automata_add_exact(n->host_ac, &ac_pattern) : ACERR_ERROR;
-		if(r != ACERR_SUCCESS) {
-			str_collect_del(n->hosts_tmp->p[protocol_id],host_match,sml);
-			if(r != ACERR_DUPLICATE_PATTERN) {
-				pr_info("xt_ndpi: add host '%s' proto %s error: %s\n",
-						host_match,pname,acerr2txt(r));
-				goto bad_cmd;
-			}
-			if(ac_pattern.rep.number != protocol_id) {
-				pr_info("xt_ndpi: Host '%s' proto %s already defined as %s\n",
-					host_match,pname,
-					ndpi_get_proto_by_id(n->ndpi_struct,
-								     ac_pattern.rep.number));
-				goto bad_cmd;
-			}
-		}
+		n->host_upd++;
 	}
 	if(ndpi_log_debug > 2 && nc && *nc)
 		pr_info("xt_ndpi: next part '%s'\n",nc);

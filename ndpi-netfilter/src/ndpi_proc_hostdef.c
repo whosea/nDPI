@@ -22,11 +22,7 @@
 int n_hostdef_proc_open(struct inode *inode, struct file *file)
 {
         struct ndpi_net *n = PDE_DATA(file_inode(file));
-	str_collect_t *ph;
-	char *host;
-	AC_PATTERN_t ac_pattern;
-	AC_ERROR_t r;
-	int np,nh,ret = 0;
+	int ret = 0;
 
 	mutex_lock(&n->host_lock);
 	n->host_ac = NULL;
@@ -52,25 +48,8 @@ do {
 		pr_info("host_open:%s %px new\n",n->ns_name,n->host_ac);
 
 	n->host_error = 0;
+	n->host_upd   = 0;
 
-	for(np = 0; np < NDPI_NUM_BITS; np++) {
-		ph = n->hosts_tmp->p[np];
-		if(ph) {
-			nh = 0;
-			for(nh = 0 ; nh < ph->last && ph->s[nh] ;
-					nh += (uint8_t)ph->s[nh] + 2) {
-				host = &ph->s[nh+1];
-				ac_pattern.astring = host;
-				ac_pattern.length = strlen(host);
-				ac_pattern.rep.number = np;
-				r = ac_automata_add_exact(n->host_ac, &ac_pattern);
-				if(r != ACERR_SUCCESS) {
-					pr_err("%s:%s host add '%s' : %s : skipped\n",
-						__func__,n->ns_name,host,acerr2txt(r));
-				}
-			}
-		}
-	}
 } while(0);
 
 	if(ndpi_log_debug > 1)
@@ -200,10 +179,10 @@ int n_hostdef_proc_close(struct inode *inode, struct file *file)
 	generic_proc_close(n,parse_ndpi_hostdef,W_BUF_HOST);
 
 	if(n->host_ac) { // open for write
+	    if(n->host_upd) {
+		if(!n->host_error && str_coll_to_automata(n->host_ac,n->hosts_tmp))
+			n->host_error++;
 		if(!n->host_error) {
-
-			ac_automata_finalize((AC_AUTOMATA_t*)n->host_ac);
-
 			spin_lock_bh(&nstr->host_automa_lock);
 			XCHGP(nstr->host_automa.ac_automa,n->host_ac);
 			spin_unlock_bh(&nstr->host_automa_lock);
@@ -216,11 +195,11 @@ int n_hostdef_proc_close(struct inode *inode, struct file *file)
 
 		if(ndpi_log_debug > 1)
 			pr_info("host_open:%s release host_ac %px\n",n->ns_name,n->host_ac);
-
-		ac_automata_release((AC_AUTOMATA_t*)n->host_ac);
-		n->host_ac = NULL;
-		str_hosts_done(n->hosts_tmp);
-		n->hosts_tmp = NULL;
+	    }
+	    ac_automata_release((AC_AUTOMATA_t*)n->host_ac,0);
+	    n->host_ac = NULL;
+	    str_hosts_done(n->hosts_tmp);
+	    n->hosts_tmp = NULL;
 	}
 
 	mutex_unlock(&n->host_lock);

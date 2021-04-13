@@ -57,6 +57,7 @@ struct ndpi_net {
 	hosts_str_t	*hosts_tmp;
 	void		*host_ac;
 	int		host_error;
+	int		host_upd;
 
 	int		n_hash;
 	int		gc_count;
@@ -202,5 +203,8 @@ extern unsigned long ndpi_log_debug;
 #include "../lib/third_party/include/libahocorasick.h"
 
 const char *acerr2txt(AC_ERROR_t r);
+int str_coll_to_automata(void *host_ac,hosts_str_t *hosts);
 
 void set_debug_trace( struct ndpi_net *n);
+
+

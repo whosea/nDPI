@@ -49,11 +49,12 @@ static int  node_has_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * newstr);
 
 static AC_NODE_t * node_create            (void);
 static AC_NODE_t * node_create_next       (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
-static int         node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str);
+static int         node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str, int is_existing);
 static int         node_register_outgoing (AC_NODE_t * thiz, AC_NODE_t * next, AC_ALPHABET_t alpha);
 static AC_NODE_t * node_find_next         (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
 static AC_NODE_t * node_findbs_next       (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
 static void        node_release           (AC_NODE_t * thiz);
+static void        node_release_pattern   (AC_NODE_t * thiz);
 static inline void node_sort_edges        (AC_NODE_t * thiz);
 
 #ifndef __KERNEL__
@@ -167,7 +168,7 @@ AC_ERROR_t ac_automata_add (AC_AUTOMATA_t * thiz, AC_PATTERN_t * patt)
 
   n->final = 1;
  
-  if(node_register_matchstr(n, patt))
+  if(node_register_matchstr(n, patt, 0))
 	  return ACERR_ERROR;
  
   thiz->total_patterns++;
@@ -344,9 +345,13 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
  * Release all allocated memories to the automata
  * PARAMS:
  * AC_AUTOMATA_t * thiz: the pointer to the automata
+ * free_pattern: 
+ *  0 - free all struct w/o free pattern
+ *  1 - free all struct and pattern
+ *  2 - clean struct w/o free pattern
  ******************************************************************************/
 
-static void _ac_automata_release (AC_AUTOMATA_t * thiz, int clean)
+void ac_automata_release (AC_AUTOMATA_t * thiz, u_int8_t free_pattern)
 {
   struct ac_path *path;
   AC_NODE_t *n,*next;
@@ -361,8 +366,11 @@ static void _ac_automata_release (AC_AUTOMATA_t * thiz, int clean)
 	n = path[ip].n;
 
 	if(!n->outgoing) {
-		if(n != thiz->root)
+		if(n != thiz->root) {
+				if(free_pattern == 1)
+						node_release_pattern(n);
 				node_release(n);
+		}
 		ip--; continue;
 	}
 	if(n->one) {
@@ -374,8 +382,11 @@ static void _ac_automata_release (AC_AUTOMATA_t * thiz, int clean)
 			next = n->outgoing->next[i];
 			n->outgoing->next[i] = NULL;
 		} else {
-			if(n != thiz->root)
+			if(n != thiz->root) {
+					if(free_pattern == 1)
+							node_release_pattern(n);
 					node_release(n);
+			}
 			ip--; continue;
 		}
 	}
@@ -390,7 +401,9 @@ static void _ac_automata_release (AC_AUTOMATA_t * thiz, int clean)
 	path[ip].n = next;
   }
 
-  if(!clean) {
+  if(free_pattern <= 1) {
+	if(free_pattern == 1)
+		node_release_pattern(thiz->root);
 	node_release(thiz->root);
 	thiz->root = NULL;
   	acho_free(thiz);
@@ -405,20 +418,17 @@ static void _ac_automata_release (AC_AUTOMATA_t * thiz, int clean)
 	n->id    = 0;
 	n->final = 0;
 	n->depth = 0;
-	if(n->outgoing) acho_free(n->outgoing);
-	if(n->matched_patterns) acho_free(n->matched_patterns);
-	n->outgoing = NULL;
-	n->matched_patterns=NULL;
+	if(n->outgoing) {
+		acho_free(n->outgoing);
+		n->outgoing = NULL;
+	}
+	if(n->matched_patterns) {
+		acho_free(n->matched_patterns);
+		n->matched_patterns=NULL;
+	}
 	n->use = 0;
 	n->one = 0;
   }
-}
-
-void ac_automata_release (AC_AUTOMATA_t * thiz) {
-	_ac_automata_release(thiz,0);
-}
-void ac_automata_clean (AC_AUTOMATA_t * thiz) {
-	_ac_automata_release(thiz,1);
 }
 
 /******************************************************************************
@@ -566,7 +576,7 @@ static int ac_automata_union_matchstrs (AC_NODE_t * node)
 	  if(!m->matched_patterns) continue;
 
       for (i=0; i < m->matched_patterns->num; i++)
-		if(node_register_matchstr(node, &(m->matched_patterns->patterns[i])))
+		if(node_register_matchstr(node, &(m->matched_patterns->patterns[i]), 1))
 		return 1;
 
       if (m->final)
@@ -659,6 +669,25 @@ static AC_NODE_t * node_create(void)
 {
   return  (AC_NODE_t *) acho_calloc (1,sizeof(AC_NODE_t));
 }
+
+
+static void node_release_pattern(AC_NODE_t * thiz)
+{
+  int i;
+  AC_PATTERN_t * str;
+
+	if(!thiz->matched_patterns) return;
+	str = thiz->matched_patterns->patterns;
+
+	for (i=0; i < thiz->matched_patterns->num; str++,i++)
+    {
+	  if(!str->is_existing && str->astring) {
+			  acho_free(str->astring);
+			  str->astring = NULL;
+	  }
+    }
+}
+
 
 /******************************************************************************
  * FUNCTION: node_release
@@ -812,7 +841,7 @@ AC_PATTERNS_t *new_m;
  * FUNCTION: node_register_matchstr
  * Adds the pattern to the list of accepted pattern.
  ******************************************************************************/
-static int node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str)
+static int node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str,int is_existing)
 {
   AC_PATTERN_t *l;
   /* Check if the new pattern already exists in the node list */
@@ -831,6 +860,7 @@ static int node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str)
   l = &thiz->matched_patterns->patterns[thiz->matched_patterns->num];
   l->astring = str->astring;
   l->length  = str->length;
+  l->is_existing = is_existing;
   l->rep = str->rep;
   thiz->matched_patterns->num++;
   return 0;

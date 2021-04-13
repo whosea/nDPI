@@ -2263,6 +2263,28 @@ const char *acerr2txt(AC_ERROR_t r) {
 	return r >= ACERR_SUCCESS && r <= ACERR_ERROR ? __acerr2txt[r]:"UNKNOWN";
 }
 
+int str_coll_to_automata(void *host_ac,hosts_str_t *hosts) {
+str_collect_t *ph;
+AC_PATTERN_t ac_pattern;
+AC_ERROR_t r;
+int np,nh,err=0;
+
+    for(np = 0; np < NDPI_NUM_BITS; np++) {
+        ph = hosts->p[np];
+        if(!ph) continue;
+        for(nh = 0 ; nh < ph->last && ph->s[nh] ; nh += (uint8_t)ph->s[nh] + 2) {
+            ac_pattern.astring = &ph->s[nh+1];
+            ac_pattern.length = (uint8_t)ph->s[nh];
+            ac_pattern.rep.number = np;
+            r = ac_automata_add_exact(host_ac, &ac_pattern);
+            if(r != ACERR_SUCCESS)
+		err++;
+        }
+    }
+    if(!err) ac_automata_finalize((AC_AUTOMATA_t*)host_ac);
+    return err;
+}
+
 #if  LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
 #define PROC_OPS(s,o,r,w,l,d) static const struct file_operations s = { \
         .open    = o , \
@@ -2499,7 +2521,7 @@ static int __net_init ndpi_net_init(struct net *net)
 	ndpi_stun_cache_enable = ndpi_stun_cache_opt;
 
 	/* init global detection structure */
-	n->ndpi_struct = ndpi_init_detection_module(0);
+	n->ndpi_struct = ndpi_init_detection_module(ndpi_no_prefs);
 	if (n->ndpi_struct == NULL) {
 		pr_err("xt_ndpi: global structure initialization failed.\n");
                 return -ENOMEM;
@@ -2552,7 +2574,6 @@ static int __net_init ndpi_net_init(struct net *net)
 	}
 	do {
 		ndpi_protocol_match *hm;
-		char *cstr;
 		int i2;
 
 		n->pe_info = NULL;
@@ -2630,6 +2651,7 @@ static int __net_init ndpi_net_init(struct net *net)
 				continue;
 			}
 			sml = strlen(hm->string_to_match);
+			/* Beginning checking for duplicates */
 			i2 = ndpi_match_string_subprotocol(n->ndpi_struct,
 								hm->string_to_match,sml,&s_ret,1);
 			if(i2 == NDPI_PROTOCOL_UNKNOWN || i != i2) {
@@ -2644,39 +2666,16 @@ static int __net_init ndpi_net_init(struct net *net)
 						hm->string_to_match);
 				continue;
 			}
-			cstr = str_collect_add(&n->hosts->p[i],hm->string_to_match,sml);
-			if(!cstr) {
+			/* Ending checking for duplicates */
+			if(str_collect_add(&n->hosts->p[i],hm->string_to_match,sml) == NULL) {
 				hm = NULL; // error
 				break;
 			}
-			{
-				AC_ERROR_t r;
-				AC_PATTERN_t ac_pattern;
-				ac_pattern.astring    = cstr;
-				ac_pattern.length     = sml;
-				ac_pattern.rep.number = i;
-				r = ac_automata_add_exact(n->host_ac, &ac_pattern);
-				if(r != ACERR_SUCCESS) {
-					str_collect_del(n->hosts_tmp->p[i],cstr,sml);
-					if(r != ACERR_DUPLICATE_PATTERN) {
-						pr_info("xt_ndpi: add host '%s' proto %x error: %s\n",
-							hm->string_to_match,i,acerr2txt(r));
-						hm = NULL; // error
-						break;
-					}
-					if(ac_pattern.rep.number != i) {
-						pr_info("xt_ndpi: Host '%s' proto %x already defined as %s\n",
-							hm->string_to_match,i, 
-							ndpi_get_proto_by_id(n->ndpi_struct,
-								     ac_pattern.rep.number));
-					}
-				}
-			}
 		}
+		if(hm && str_coll_to_automata(n->host_ac,n->hosts)) hm = NULL;
 		if(hm) {
-			ac_automata_finalize((AC_AUTOMATA_t*)n->host_ac);
-			XCHGP(n->ndpi_struct->host_automa.ac_automa,n->host_ac);
-			ac_automata_release(n->host_ac);
+			ac_automata_release(n->ndpi_struct->host_automa.ac_automa,0);
+			n->ndpi_struct->host_automa.ac_automa = n->host_ac;
 			n->host_ac = NULL;
 		} else break;
 
@@ -2711,7 +2710,10 @@ static int __net_init ndpi_net_init(struct net *net)
 	} while(0);
 
 /* rollback procfs on error */
-	str_hosts_done(n->hosts);
+	if(n->hosts)
+		str_hosts_done(n->hosts);
+	if(n->host_ac)
+		ac_automata_release(n->host_ac,0);
 
 	if(n->pe_hostdef)
 		remove_proc_entry(hostdef_name,n->pde);

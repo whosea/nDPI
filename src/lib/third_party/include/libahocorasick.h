@@ -71,7 +71,8 @@ typedef struct {
 typedef struct
 {
   AC_ALPHABET_t * astring; /* String of alphabets */
-  unsigned int length; /* Length of pattern */
+  u_int16_t length, /* Length of pattern */
+	    is_existing; /* not union_matchstr */
   AC_REP_t rep; /* Representative string (optional) */
 } AC_PATTERN_t;
 
@@ -243,7 +244,7 @@ int             ac_automata_search   (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 						MATCH_CALLBACK_f mc,
 						AC_REP_t * param);
 void            ac_automata_clean    (AC_AUTOMATA_t * thiz);
-void            ac_automata_release  (AC_AUTOMATA_t * thiz);
+void            ac_automata_release  (AC_AUTOMATA_t * thiz, u_int8_t free_pattern);
 void            ac_automata_dump     (AC_AUTOMATA_t * thiz, 
 					char *buf, size_t bufsize, char repcast);
 
