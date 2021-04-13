@@ -114,7 +114,8 @@ void ndpi_Clear_Patricia (ndpi_patricia_tree_t *patricia, void_fn_t func);
 void ndpi_Destroy_Patricia (ndpi_patricia_tree_t *patricia, void_fn_t func);
 void ndpi_patricia_process (ndpi_patricia_tree_t *patricia, void_fn2_t func);
 ndpi_prefix_t *ndpi_ascii2prefix (int family, char *string);
-// void ndpi_Deref_Prefix (ndpi_prefix_t * prefix);
+ndpi_prefix_t *ndpi_Ref_Prefix (ndpi_prefix_t * prefix);
+void ndpi_Deref_Prefix (ndpi_prefix_t * prefix);
 
 #ifdef WIN32
 #define PATRICIA_MAXBITS	128

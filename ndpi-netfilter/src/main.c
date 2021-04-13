@@ -900,7 +900,7 @@ static char *ct_info(const struct nf_conn * ct,char *buf,size_t buf_size,int dir
 		t->dst.protonum,
 		&t->src.u3.ip, ntohs(t->src.u.all),
 		&t->dst.u3.ip, ntohs(t->dst.u.all),
-		dir ? "DIR":"REV");
+		!dir ? "DIR":"REV");
  return buf;
 }
 
@@ -1035,15 +1035,15 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 	    } else {
 		low_port = up_port = 0;
 	    }
-	    if (iph && flow && flow->packet_counter < 3 &&
-			!flow->protocol_id_already_guessed) {
+	    if (iph && flow && !flow->ip_port_finished) {
+
 		proto.app_protocol = check_known_ipv4_service(n,
 				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3,up_port,protocol);
-		if(proto.app_protocol != NDPI_PROTOCOL_UNKNOWN)
+		if(proto.app_protocol == NDPI_PROTOCOL_UNKNOWN)
 			proto.app_protocol = check_known_ipv4_service(n,
 				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3,low_port,protocol);
-		if(proto.app_protocol != NDPI_PROTOCOL_UNKNOWN)
-			flow->protocol_id_already_guessed = 1;
+		if(flow->packet_counter > 3 || proto.app_protocol != NDPI_PROTOCOL_UNKNOWN)
+			flow->ip_port_finished = 1;
 	    }
 	    if(proto.app_protocol == NDPI_PROTOCOL_UNKNOWN) {
 		if(low_ip > up_ip) { tmp_ip = low_ip; low_ip=up_ip; up_ip = tmp_ip; }
@@ -1201,7 +1201,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct sk_buff *skb_use = NULL;
 	struct nf_ct_ext_ndpi *ct_ndpi = NULL;
 	struct ndpi_cb *c_proto;
-	uint8_t l4_proto=0;
+	uint8_t l4_proto=0,ct_dir=0;
 	bool result=false, host_match = true, is_ipv6=false;
 	struct ndpi_net *n;
 
@@ -1265,7 +1265,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		COUNTER(ndpi_p31);
 		break;
 	}
-
+	ct_dir = CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL;
 	{
 	    struct nf_ct_ext_labels *ct_label = nf_ct_ext_find_label(ct);
 #ifdef NF_CT_CUSTOM
@@ -1289,14 +1289,14 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 				ndpi_init_ct_struct(n,ct_ndpi,l4_proto,ct,is_ipv6,tm.tv_sec);
 				if(ndpi_log_debug > 2)
 					pr_info("Create  ct_ndpi %p ct %p %s\n",
-						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
+						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),ct_dir));
 			}
 		} else {
 			if(ct_label->magic == MAGIC_CT) {
 				ct_ndpi = ct_label->ndpi_ext;
 				if(ndpi_log_debug > 2)
 					pr_info("Reuse   ct_ndpi %p ct %p %s\n",
-						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
+						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),ct_dir));
 			  } else
 				COUNTER(ndpi_p34);
 		}
@@ -1310,7 +1310,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 	if(ndpi_log_debug > 2)
 		pr_info("START match ct_ndpi %p ct %p %s\n",
-			(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
+			(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),ct_dir));
 
 	proto.app_protocol = NDPI_PROTOCOL_UNKNOWN;
 	if(ndpi_log_debug > 3)
@@ -1423,9 +1423,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		time = (uint64_t)(tm.tv_sec*1000 + tm.tv_nsec/1000000);
 
 		n = ndpi_pernet(nf_ct_net(ct));
-		r_proto = ndpi_process_packet(n, ct,
-				ct_ndpi, time, skb_use,
-				CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL);
+		r_proto = ndpi_process_packet(n, ct, ct_ndpi, time, skb_use, ct_dir);
 
 		c_proto->magic = NDPI_ID;
 		c_proto->proto = r_proto;
@@ -1715,7 +1713,8 @@ ndpi_tg(struct sk_buff *skb, const struct xt_action_param *par)
 		if(!ct_ndpi) break;
 		if(ndpi_log_debug > 2)
 			pr_info("START target ct_ndpi %p ct %p %s\n",
-				(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),0));
+				(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),
+					CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL));
 
 		spin_lock_bh (&ct_ndpi->lock);
 

@@ -265,7 +265,7 @@ static ndpi_prefix_t * ndpi_New_Prefix (int family, void *dest, int bitlen)
 }
 #endif
 
-static  ndpi_prefix_t *
+ndpi_prefix_t *
 ndpi_Ref_Prefix (ndpi_prefix_t * prefix)
 {
   if(prefix == NULL)
@@ -279,7 +279,7 @@ ndpi_Ref_Prefix (ndpi_prefix_t * prefix)
   return (prefix);
 }
 
-static void 
+void 
 ndpi_Deref_Prefix (ndpi_prefix_t * prefix)
 {
   if(prefix == NULL)
@@ -1008,6 +1008,8 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
   if(family == AF_INET) {
     if(ndpi_my_inet_pton (AF_INET, string, &sin) <= 0)
       return (NULL);
+    if((htonl(sin.s_addr) << bitlen) & 0xfffffffful)
+      return (NULL);
     return (ndpi_New_Prefix2 (AF_INET, &sin, bitlen, NULL));
   }
   else if(family == AF_INET6) {
@@ -1019,6 +1021,7 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
     if(inet_pton (AF_INET6, string, &sin6) <= 0)
       return (NULL);
 #endif /* NT */
+    /* FIXME check network mask! */
     return (ndpi_New_Prefix2 (AF_INET6, &sin6, bitlen, NULL));
   }
   else

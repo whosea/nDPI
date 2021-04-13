@@ -23,10 +23,8 @@
 
 int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 
-    AC_PATTERN_t ac_pattern;
     char *pname,*host_match,*nc,*nh,*cstr;
     uint16_t protocol_id;
-    AC_ERROR_t r;
 
     nc = NULL;
 
@@ -617,8 +615,7 @@ while(*cmd && !res) {
 	if(parse_ndpi_ipdef_cmd(n,f_op,prefix,t)) res=1;
 }
 
-prefix->ref_count--;
-ndpi_free(prefix);
+ndpi_Deref_Prefix(prefix);
 
 return res;
 }
