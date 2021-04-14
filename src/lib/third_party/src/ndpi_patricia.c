@@ -416,9 +416,10 @@ ndpi_patricia_clone_walk(ndpi_patricia_node_t *node, ndpi_patricia_tree_t *dst)
 ndpi_patricia_tree_t *
 ndpi_patricia_clone (const ndpi_patricia_tree_t * const from)
 {
+  ndpi_patricia_tree_t *patricia;
   if(!from) return (NULL);
 
-  ndpi_patricia_tree_t *patricia = ndpi_patricia_new(from->maxbits);
+  patricia = ndpi_patricia_new(from->maxbits);
 
   if(!patricia) return (NULL);
 
@@ -1008,7 +1009,7 @@ ndpi_prefix_t * ndpi_ascii2prefix (int family, char *string)
   if(family == AF_INET) {
     if(ndpi_my_inet_pton (AF_INET, string, &sin) <= 0)
       return (NULL);
-    if((htonl(sin.s_addr) << bitlen) & 0xfffffffful)
+    if(htonl(sin.s_addr) & (0xfffffffful >> bitlen))
       return (NULL);
     return (ndpi_New_Prefix2 (AF_INET, &sin, bitlen, NULL));
   }
