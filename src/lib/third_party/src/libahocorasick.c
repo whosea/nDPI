@@ -288,8 +288,7 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 
   p_len = 0;
   position = 0;
-  curr = match->start_node;
-  if(!curr) curr = thiz->root;
+  curr = thiz->root;
   apos = txt->astring;
   
   /* This is the main search loop.
@@ -310,8 +309,7 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 		}
 
       if(curr->final && next) {
-		if(p_len < curr->matched_patterns->patterns->length) {
-		  p_len = curr->matched_patterns->patterns->length;
+		  p_len = 1; /* we have a matching */
 		  if(mc) {
 			/* We check 'next' to find out if we came here after a alphabet
 			 * transition or due to a fail. in second case we should not report
@@ -333,10 +331,8 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 //				// return 0; // ???
 //			}
           }
-	  	}
 	  }
     }
-    match->start_node = curr;
   return p_len > 0 ? 1:0;
 }
 
