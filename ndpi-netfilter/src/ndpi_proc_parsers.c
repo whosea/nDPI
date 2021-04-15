@@ -440,6 +440,12 @@ ndpi_free(tmp);
 return pd;
 }
 
+static inline void _node_free_data(ndpi_patricia_node_t *node) {
+	if(!node->data) return;
+	ndpi_free(node->data);
+	node->data = NULL;
+}
+
 void *ndpi_port_add_one_range(void *data, ndpi_port_range_t *np,int op,
 		ndpi_mod_str_t *ndpi_str)
 {
@@ -527,6 +533,7 @@ if(f_op || f_op2) { // delete
 	// -xxxx any
 	if(np.proto >= NDPI_NUM_BITS && 
 		np.l4_proto == 2 && !np.start && !np.end) {
+		_node_free_data(node);
 		ndpi_patricia_remove(pt,node);
 		break;
 	}
@@ -534,6 +541,7 @@ if(f_op || f_op2) { // delete
 	    // -xxxx proto
 	    if(node->value.u.uv32.user_value == np.proto) {
 		if(!node->data) {
+		    _node_free_data(node);
 		    ndpi_patricia_remove(pt,node);
 		} else {
 		  node->value.u.uv32.user_value = 0;

@@ -2652,7 +2652,11 @@ int ndpi_get_custom_category_match(struct ndpi_detection_module_struct *ndpi_str
 /* *********************************************** */
 
 static void free_ptree_data(void *data) {
+#ifdef __KERNEL__
+  ndpi_free(data);
+#else
   ;
+#endif
 }
 
 /* ****************************************************** */
