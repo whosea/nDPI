@@ -1713,8 +1713,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
   int min_len = (txt->length < m->patterns->length) ? txt->length : m->patterns->length;
   char buf[64] = {'\0'}, *whatfound;
-  int min_buf_len = (txt->length > 63 /* sizeof(buf)-1 */) ? 63 : txt->length;
-  u_int buf_len = strlen(buf);
+  int min_buf_len = ndpi_min(txt->length, sizeof(buf)-1);
 
   strncpy(buf, txt->astring, min_buf_len);
   buf[min_buf_len] = '\0';
@@ -1761,7 +1760,7 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
   */
   memcpy(match, &m->patterns[0].rep, sizeof(AC_REP_t));
 
-  if(((buf_len >= min_len) && (strncmp(&buf[buf_len - min_len], m->patterns->astring, min_len) == 0)) ||
+  if(((min_buf_len >= min_len) && (strncmp(&buf[min_buf_len - min_len], m->patterns->astring, min_len) == 0)) ||
      (strncmp(buf, m->patterns->astring, min_len) == 0) /* begins with */
      ) {
 #ifdef MATCH_DEBUG
@@ -1771,7 +1770,7 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
 	   "\n",
 	   buf, m->patterns->astring, min_len /*, *matching_protocol_id */);
 #endif
-    return(0); /* If the pattern found matches the string at the beginning we stop here */
+    return(0); /* If the pattern found matches the string at the beginning we DONT stop here */
   } else {
 #ifdef MATCH_DEBUG
     printf("NO match found: continue\n");
