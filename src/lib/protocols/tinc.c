@@ -110,7 +110,7 @@ static void ndpi_check_tinc(struct ndpi_detection_module_struct *ndpi_struct, st
 	if(packet_payload[i] == '\n') {
 	  if(++flow->tinc_state > 3) {
 	    if(ndpi_struct->tinc_cache == NULL)
-	      ndpi_struct->tinc_cache = cache_new(TINC_CACHE_MAX_SIZE);              
+	      ndpi_struct->tinc_cache = cache_new(TINC_CACHE_MAX_SIZE,0);
 
 	    cache_add(ndpi_struct->tinc_cache, &(flow->tinc_cache_entry), sizeof(flow->tinc_cache_entry));
 	    NDPI_LOG_INFO(ndpi_struct, "found tinc tcp connection\n");
