@@ -1728,12 +1728,11 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
 
   whatfound = strstr(buf, m->patterns->astring);
 
+  if(whatfound) {
 #ifdef MATCH_DEBUG
-  printf("[NDPI] %s() [searching=%s][pattern=%s][%s][%c]\n", __FUNCTION__, buf, m->patterns->astring,
+      printf("[NDPI] %s() [searching=%s][pattern=%s][%s][%c]\n", __FUNCTION__, buf, m->patterns->astring,
 	 whatfound ? whatfound : "<NULL>", whatfound[-1]);
 #endif
-
-  if(whatfound) {
     /*
       The patch below allows in case of pattern ws.amazon.com
       to avoid matching aws.amazon.com whereas a.ws.amazon.com
@@ -1773,6 +1772,7 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
     return(0); /* If the pattern found matches the string at the beginning we DONT stop here */
   } else {
 #ifdef MATCH_DEBUG
+    if(min_len > 2)
     printf("NO match found: continue\n");
 #endif
     return(0); /* 0 to continue searching, !0 to stop */
@@ -2410,6 +2410,10 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
 
     case 7:
       automa = &ndpi_str->trigrams_automa;
+      break;
+
+    case 8:
+      automa = &ndpi_str->risky_domain_automa;
       break;
 
     default:
@@ -3110,7 +3114,7 @@ static int ndpi_load_risky_domain(struct ndpi_detection_module_struct *ndpi_str,
     snprintf(buf, sizeof(buf)-1, "%s", domain_name);
     for(i = 0, len = strlen(buf)-1 /* Skip $ */; i < len; i++) buf[i] = tolower(buf[i]);
 
-    return(ndpi_add_string_to_automa_atend(ndpi_str->risky_domain_automa.ac_automa, str));
+    return(ndpi_add_string_to_automa_atend(ndpi_str->risky_domain_automa.ac_automa, buf));
   }
 
   return(-1);
