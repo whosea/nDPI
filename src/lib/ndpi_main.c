@@ -1730,8 +1730,9 @@ static int ac_match_handler(AC_MATCH_t *m, AC_TEXT_t *txt, AC_REP_t *match) {
 
   if(whatfound) {
 #ifdef MATCH_DEBUG
+      if(min_len > 2)
       printf("[NDPI] %s() [searching=%s][pattern=%s][%s][%c]\n", __FUNCTION__, buf, m->patterns->astring,
-	 whatfound ? whatfound : "<NULL>", whatfound[-1]);
+	 whatfound, whatfound != buf ? whatfound[-1]:'?');
 #endif
     /*
       The patch below allows in case of pattern ws.amazon.com
@@ -5452,8 +5453,11 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
       ndpi_selection_packet |=
 	(NDPI_SELECTION_BITMASK_PROTOCOL_INT_UDP | NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP);
 
-    if(flow->packet.payload_packet_len != 0)
+    if(flow->packet.payload_packet_len != 0) {
+      uint8_t *pcnt = &flow->num_processed_packets[flow->packet_direction & 1];
+      if(*pcnt != 0xff) (*pcnt)++;
       ndpi_selection_packet |= NDPI_SELECTION_BITMASK_PROTOCOL_HAS_PAYLOAD;
+    }
 
     if(flow->packet.tcp_retransmission == 0)
       ndpi_selection_packet |= NDPI_SELECTION_BITMASK_PROTOCOL_NO_TCP_RETRANSMISSION;

@@ -1035,15 +1035,25 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 	    } else {
 		low_port = up_port = 0;
 	    }
-	    if (iph && flow && !flow->ip_port_finished) {
-
-		proto.app_protocol = check_known_ipv4_service(n,
+	    if (iph && flow) {
+		if(!flow->ip_port_finished) {
+		    flow->ipdef_proto = check_known_ipv4_service(n,
 				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3,up_port,protocol);
-		if(proto.app_protocol == NDPI_PROTOCOL_UNKNOWN)
-			proto.app_protocol = check_known_ipv4_service(n,
+		    if(flow->ipdef_proto == NDPI_PROTOCOL_UNKNOWN)
+			   flow->ipdef_proto = check_known_ipv4_service(n,
 				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3,low_port,protocol);
-		if(flow->packet_counter > 3 || proto.app_protocol != NDPI_PROTOCOL_UNKNOWN)
-			flow->ip_port_finished = 1;
+		    flow->ip_port_finished = 1;
+		}
+	    
+	        if(flow->ip_port_finished && flow->ipdef_proto != NDPI_PROTOCOL_UNKNOWN) {
+		    if( (flow->num_processed_packets[0] && 
+		         flow->num_processed_packets[1]) ||
+		        (flow->num_processed_packets[0] > 3) ||
+		        (flow->num_processed_packets[1] > 3) ) {
+			    proto.app_protocol = flow->ipdef_proto;
+			    flow->ipdef_proto = NDPI_PROTOCOL_UNKNOWN;
+		    }
+		}
 	    }
 	    if(proto.app_protocol == NDPI_PROTOCOL_UNKNOWN) {
 		if(low_ip > up_ip) { tmp_ip = low_ip; low_ip=up_ip; up_ip = tmp_ip; }

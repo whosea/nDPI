@@ -1301,6 +1301,7 @@ struct ndpi_flow_struct {
 
   u_int8_t max_extra_packets_to_check;
   u_int8_t num_extra_packets_checked;
+  u_int8_t num_processed_packets[2]; /* packet with payload. direct and replay. 255 max */
   u_int16_t num_processed_pkts; /* <= WARNING it can wrap but we do expect people to giveup earlier */
 
   int (*extra_packets_func) (struct ndpi_detection_module_struct *, struct ndpi_flow_struct *flow);
@@ -1445,6 +1446,7 @@ struct ndpi_flow_struct {
   NDPI_PROTOCOL_BITMASK excluded_protocol_bitmask;
 
   ndpi_protocol_category_t category;
+  uint16_t ipdef_proto; /* protocol by ip/port + ip_port_finished */
 
   /* NDPI_PROTOCOL_REDIS */
   u_int8_t redis_s2d_first_char, redis_d2s_first_char;
