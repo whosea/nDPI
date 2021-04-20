@@ -58,7 +58,8 @@ static void        node_release_pattern   (AC_NODE_t * thiz);
 static inline void node_sort_edges        (AC_NODE_t * thiz);
 
 #ifndef __KERNEL__
-static void dump_node_header(AC_NODE_t * n,size_t *);
+static void dump_node_header(AC_NODE_t * n, size_t *mc,
+				size_t *node_oc,size_t *node_8c,size_t *node_xc);
 #endif
 
 /* Private function prototype */
@@ -277,7 +278,7 @@ AC_ERROR_t ac_automata_finalize (AC_AUTOMATA_t * thiz)
 int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 		AC_TEXT_t * txt, MATCH_CALLBACK_f mc, AC_REP_t * param)
 {
-  unsigned long position,p_len;
+  unsigned long position;
   AC_NODE_t *curr;
   AC_NODE_t *next;
   unsigned char *apos;
@@ -286,10 +287,10 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
     /* you must call ac_automata_locate_failure() first */
     return -1;
 
-  p_len = 0;
   position = 0;
   curr = thiz->root;
   apos = txt->astring;
+  match->match_counter = 0;
   
   /* This is the main search loop.
    * it must be keep as lightweight as possible. */
@@ -309,7 +310,7 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 		}
 
       if(curr->final && next) {
-		  p_len = 1; /* we have a matching */
+		  match->match_counter++; /* we have a matching */
 		  if(mc) {
 			/* We check 'next' to find out if we came here after a alphabet
 			 * transition or due to a fail. in second case we should not report
@@ -323,17 +324,14 @@ int ac_automata_search (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
 		  } else {
 			return 1;
 //			AC_PATTERN_t * patterns=curr->matched_patterns->patterns;
-//			if(p_len < patterns->length) {
-//				param->number = patterns->rep.number;
-//        		param->position = position;
-//	       		param->name = patterns->astring;
-//				p_len = patterns->length;
-//				// return 0; // ???
-//			}
+//			param->number = patterns->rep.number;
+//        	param->position = position;
+//	       	param->name = patterns->astring;
+//			// return 0; // ???
           }
 	  }
     }
-  return p_len > 0 ? 1:0;
+  return match->match_counter > 0 ? 1:0;
 }
 
 /******************************************************************************
@@ -437,20 +435,22 @@ void ac_automata_release (AC_AUTOMATA_t * thiz, u_int8_t free_pattern)
  ******************************************************************************/
 #ifndef __KERNEL__
 
-static void dump_node_header(AC_NODE_t * n, size_t *mc) {
+static void dump_node_header(AC_NODE_t * n, size_t *mc,
+				size_t *node_oc,size_t *node_8c,size_t *node_xc) {
 	char *c;
 	int i;
-	printf("%03d: failure %03d use %d",
-			n->id,
-			n->failure_node ? n->failure_node->id : 0,
-			n->use);
+	printf("%04d: ",n->id);
+	if(n->failure_node) printf(" failure %04d:",n->failure_node->id);
+	printf(" d:%d %c",n->depth,	n->use ? '+':'-');
 	*mc += sizeof(*n);
 	if(n->matched_patterns) {
-		*mc += sizeof(n->matched_patterns) + n->matched_patterns->max*sizeof(n->matched_patterns->patterns);
+		*mc += sizeof(n->matched_patterns) + 
+				n->matched_patterns->max*sizeof(n->matched_patterns->patterns[0]);
 	}
 	if(!n->use) { printf("\n"); return; }
 	if(n->one) {
-			printf(" oc '%c' next->%d\n",n->one_alpha,
+			(*node_oc)++;
+			printf(" '%c' next->%d\n",n->one_alpha,
 				n->outgoing ? ((AC_NODE_t *)n->outgoing)->id : -1);
 			return;
 	}
@@ -460,8 +460,12 @@ static void dump_node_header(AC_NODE_t * n, size_t *mc) {
 	}
 	printf("\n");
 	c = edge_get_alpha(n->outgoing);
+	if(n->outgoing->degree <= 8)
+			(*node_8c)++;
+	   else
+			(*node_xc)++;
 	for(i=0; i < n->outgoing->degree; i++) {
-			printf("  %d: '%c' -> %d\n",i,c[i],
+			printf("  %d: \"%c\" -> %d\n",i,c[i],
 					n->outgoing->next[i] ? n->outgoing->next[i]->id:-1);
 	}
 	*mc += sizeof(n->outgoing) + edge_data_size(n->outgoing->max);
@@ -476,7 +480,7 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
   AC_NODE_t * n, *next;
   AC_PATTERN_t sid;
   AC_ALPHABET_t alpha;
-  size_t memcnt = 0,memnode;
+  size_t memcnt = 0,memnode,node_oc=0,node_8c=0,node_xc=0;
 
   path  = thiz->ac_path;
 
@@ -496,7 +500,7 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
 	/* for debug */
 	if(1 && !path[ip].idx) {
 		memnode = 0;
-		dump_node_header(n,&memnode);
+		dump_node_header(n,&memnode,&node_oc,&node_8c,&node_xc);
 //		printf(" node size %zu\n",memnode);
 		memcnt += memnode;
 	}
@@ -504,12 +508,16 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
 	if (n->matched_patterns && n->matched_patterns->num && n->final) {
 		char lbuf[300];
 		int nl = 0;
-		nl = snprintf(lbuf,sizeof(lbuf),"'%.100s' {",rstr);
+		nl = snprintf(lbuf,sizeof(lbuf),"'%.100s' N:%d{",rstr,n->matched_patterns->num);
 		for (j=0; j<n->matched_patterns->num; j++)
 		  {
 			sid = n->matched_patterns->patterns[j];
 			if(j) nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,", ");
-			nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %.100s", sid.rep.number,sid.astring);
+			nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %c%.100s%c",
+							sid.rep.number & 0x3fff,
+							sid.rep.number & 0x8000 ? '^':' ',
+							sid.astring,
+							sid.rep.number & 0x4000 ? '$':' ');
 		  }
 		printf("%s}\n",lbuf);
 		if(!n->use) {
@@ -552,8 +560,8 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char r
 	path[ip].idx = 0;
 	path[ip].l = l+1;
   }
-  printf("---\n mem size %zu avg node size %d\n---DUMP-END-\n",
-			  memcnt,(int)memcnt/(thiz->all_nodes_num+1));
+  printf("---\n mem size %zu avg node size %d, node one char %d, <=8c %d, >8c %d\n---DUMP-END-\n",
+			  memcnt,(int)memcnt/(thiz->all_nodes_num+1),node_oc,node_8c,node_xc);
 
 #endif
 }

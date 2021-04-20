@@ -56,6 +56,7 @@
 
 #include "reader_util.h"
 #include "intrusion_detection.h"
+#include "../src/lib/third_party/include/libahocorasick.h"
 extern int bt_parse_debug;
 
 /** Client parameters **/
@@ -528,7 +529,39 @@ static void help(u_int long_help) {
     ndpi_set_protocol_detection_bitmask2(ndpi_info_mod, &all);
 
     ndpi_dump_protocols(ndpi_info_mod);
-  }
+    if(getenv("DUMP_HOST")) {
+	char buf[256];
+	ndpi_finalize_initialization(ndpi_info_mod);
+  	ac_automata_dump( ndpi_automa_host(ndpi_info_mod), buf, sizeof(buf)-1,'n');
+	exit(0);
+    }
+    if(getenv("DUMP_AUTOMA")) {
+	char buf[256];
+	char *ac_name[] = {
+		"host",
+		"content",
+		"bigrams",
+		"impossible",
+		"trigrams",
+		"tls_cert_subject",
+		"malicious_ja3",
+		"malicious_sha1",
+		"risky_domain",
+		"end"
+	};
+
+	void **ac_list;
+	int i;
+	ndpi_finalize_initialization(ndpi_info_mod);
+	ac_list = ndpi_get_automata(ndpi_info_mod);
+	for(i=0; ac_list[i] != (void *)1; i++) {
+	    if(ac_list[i]) {
+		printf("====== %s\n",ac_name[i]);
+	  	ac_automata_dump( ac_list[i], buf, sizeof(buf)-1,'n');
+	    }
+	}
+    }
+}
 
   exit(!long_help);
 }

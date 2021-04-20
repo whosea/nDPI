@@ -865,6 +865,8 @@ extern "C" {
   void ndpi_open_automa(void *_automa);
   int  ndpi_is_open_automa(void *_automa);
   void *ndpi_automa_host(struct ndpi_detection_module_struct *ndpi_struct);
+  void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str);
+
 
   /**
    * Add a string to match to an automata

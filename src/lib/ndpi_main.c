@@ -2365,6 +2365,20 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 }
 
 /* *********************************************** */
+static void *ac_automa_list[10];
+void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str) {
+  ac_automa_list[0] = ndpi_str->host_automa.ac_automa;
+  ac_automa_list[1] = ndpi_str->content_automa.ac_automa;
+  ac_automa_list[2] = ndpi_str->bigrams_automa.ac_automa;
+  ac_automa_list[3] = ndpi_str->impossible_bigrams_automa.ac_automa;
+  ac_automa_list[4] = ndpi_str->trigrams_automa.ac_automa;
+  ac_automa_list[5] = ndpi_str->tls_cert_subject_automa.ac_automa;
+  ac_automa_list[6] = ndpi_str->malicious_ja3_automa.ac_automa;
+  ac_automa_list[7] = ndpi_str->malicious_sha1_automa.ac_automa;
+  ac_automa_list[8] = ndpi_str->risky_domain_automa.ac_automa;
+  ac_automa_list[9] = (void *)1;
+  return ac_automa_list;
+}
 
 void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str) {
   u_int i;

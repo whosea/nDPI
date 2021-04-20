@@ -79,7 +79,7 @@ typedef struct
 typedef struct {
   unsigned short num; /* Number of matched patterns at this node */
   unsigned short max; /* Max capacity of allocated memory for matched_patterns */
-  AC_PATTERN_t	patterns[0];
+  AC_PATTERN_t	patterns[];
 } AC_PATTERNS_t;
 
 
@@ -112,10 +112,11 @@ struct ac_node;
 
 typedef struct
 {
-  struct ac_node *start_node; /* for continue search */
+  // unused: struct ac_node *start_node; /* for continue search */
   AC_PATTERN_t * patterns; /* Array of matched pattern */
   long position; /* The end position of matching pattern(s) in the text */
   unsigned int match_num; /* Number of matched patterns */
+  unsigned int match_counter; /* Counter of found matches */
 } AC_MATCH_t;
 
 /* AC_ERROR_t:
