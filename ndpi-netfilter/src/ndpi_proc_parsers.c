@@ -129,7 +129,7 @@ if(pd->count[l4]) {
 		i = start + ((end-start) >> 1);
 		do {
 			pt = &pd->p[i];
-			if(pt->start <= port && port <= pt->end) return pt->proto;
+			if(pt->start <= port && port <= pt->end) return pt->proto | (pt->no_dpi ? 0x8000:0);
 			if(port < pt->start) {
 			    end = i;
 			} else {
@@ -139,9 +139,8 @@ if(pd->count[l4]) {
 		} while(start < end);
 	}
 }
-/* FIXME */
-//return node->value.uv.user_value;
-return NDPI_PROTOCOL_UNKNOWN;
+return (node->value.u.uv32.user_value & 0x7fff) |
+	(node->value.u.uv32.user_value & 0xff0000 ? 0x8000:0);
 }
 
 int ndpi_print_port_range(ndpi_port_range_t *pt,
@@ -158,8 +157,9 @@ int ndpi_print_port_range(ndpi_port_range_t *pt,
 		else
 		  l += snprintf(&buf[l],bufsize - l,":%d-%d",pt->start,pt->end);
 
-		t_proto = ndpi_get_proto_by_id(ndpi_str,pt->proto);
-		l += snprintf(&buf[l],bufsize - l,":%s", t_proto ? t_proto : "unknown");
+		t_proto = ndpi_get_proto_by_id(ndpi_str,pt->proto & 0xffff);
+		l += snprintf(&buf[l],bufsize - l,":%s%s", t_proto ? t_proto : "unknown",
+				pt->no_dpi ? "!":"");
 		if(l == bufsize) break;
 	}
 	return l;
@@ -168,12 +168,18 @@ int ndpi_print_port_range(ndpi_port_range_t *pt,
 int parse_n_proto(char *pr,ndpi_port_range_t *np,ndpi_mod_str_t *ndpi_str)
 {
 int i;
+char *lc;
 
 if(!*pr) return 1;
 
 if(!strcmp(pr,"any")) {
 	np->proto = NDPI_NUM_BITS;
 	return 0;
+}
+lc = pr + strlen(pr)-1;
+if(*lc == '!') {
+	np->no_dpi = 1;
+	*lc = '\0';
 }
 i = ndpi_get_proto_by_name(ndpi_str,pr);
 if(i != NDPI_PROTOCOL_UNKNOWN) {
@@ -568,7 +574,7 @@ if(np.proto == NDPI_PROTOCOL_UNKNOWN ||
 if(!np.start && !np.end) {
 	if(np.l4_proto == 2) {
 	    // any:proto
-	    node->value.u.uv32.user_value = np.proto;
+	    node->value.u.uv32.user_value = np.proto | (np.no_dpi << 16);
 	    break;
 	}
 	// (tcp|udp):any:proto

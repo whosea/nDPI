@@ -1045,13 +1045,19 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		    flow->ip_port_finished = 1;
 		}
 	    
-	        if(flow->ip_port_finished && flow->ipdef_proto != NDPI_PROTOCOL_UNKNOWN) {
-		    if( (flow->num_processed_packets[0] && 
-		         flow->num_processed_packets[1]) ||
-		        (flow->num_processed_packets[0] > 3) ||
-		        (flow->num_processed_packets[1] > 3) ) {
-			    proto.app_protocol = flow->ipdef_proto;
+	        if(flow->ip_port_finished && (flow->ipdef_proto & 0x7fff) != NDPI_PROTOCOL_UNKNOWN) {
+		    if(flow->ipdef_proto & 0x8000) {
+			    proto.app_protocol = flow->ipdef_proto & 0x7fff;
 			    flow->ipdef_proto = NDPI_PROTOCOL_UNKNOWN;
+		    } else {
+		        if( flow->num_processed_pkts >= 10 ||
+			    (flow->num_processed_packets[0] && 
+		             flow->num_processed_packets[1]) ||
+		            (flow->num_processed_packets[0] >= 3) ||
+		            (flow->num_processed_packets[1] >= 3) ) {
+			         proto.app_protocol = flow->ipdef_proto;
+			         flow->ipdef_proto = NDPI_PROTOCOL_UNKNOWN;
+		        }
 		    }
 		}
 	    }

@@ -3,8 +3,9 @@
 
 struct ndpi_port_range {
 	uint16_t	start, end, // port range
-			proto,	    // ndpi proto
-			l4_proto;   // 0 - udp, 1 - tcp
+			proto;	    // ndpi proto
+	uint8_t		l4_proto,   // 0 - udp, 1 - tcp
+			no_dpi;     // 1 - set proto without DPI
 };
 typedef struct ndpi_port_range ndpi_port_range_t;
 
