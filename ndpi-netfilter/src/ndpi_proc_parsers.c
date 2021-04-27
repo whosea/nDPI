@@ -248,7 +248,7 @@ struct ndpi_port_def *ndpi_port_range_replace(
 		struct ndpi_port_def *pd,
 		int start, int end,
 		ndpi_port_range_t *np,
-		int count,int proto,
+		int count,
 		ndpi_mod_str_t *ndpi_str)
 {
 struct ndpi_port_def *pd1;
@@ -259,7 +259,7 @@ DBGDATA(char dbuf[256])
 ndpi_print_port_range(pd->p,pd->count[0]+pd->count[1],dbuf,sizeof(dbuf),ndpi_str);
 DP("%s: old %d,%d %s\n",pd->count[0],pd->count[1],dbuf);
 ndpi_print_port_range(np,count,dbuf,sizeof(dbuf),ndpi_str);
-DP("%s: on %d,%d,%d,%d %s\n",start,end,count,proto,dbuf);
+DP("%s: on %d,%d,%d,%d %s\n",start,end,count,np->l4_proto,dbuf);
 #endif
 
 if( (end-start) == count) {
@@ -272,11 +272,11 @@ if( (end-start) == count) {
 
 pd1 = ndpi_malloc( sizeof(struct ndpi_port_def) + 
 		   sizeof(ndpi_port_range_t) * 
-		   (count + pd->count[1-proto]));
+		   (count + pd->count[1-np->l4_proto]));
 if(!pd1) return pd;
 
 memcpy(pd1,pd,sizeof(struct ndpi_port_def));
-if(!proto) { // udp
+if(!np->l4_proto) { // udp
 	if(count) 
 		memcpy( &pd1->p[0],np,count*sizeof(ndpi_port_range_t));
 	if(pd->count[1])
@@ -305,13 +305,13 @@ return pd1;
 struct ndpi_port_def *ndpi_port_range_update(
 		struct ndpi_port_def *pd,
 		ndpi_port_range_t *np,
-		int proto,int op,
+		int op,
 		ndpi_mod_str_t *ndpi_str)
 {
 ndpi_port_range_t *tp,*tmp;
 int i,n,k;
 int start,end;
-if(!proto) {
+if(!np->l4_proto) {
 	start = 0;
 	end   = pd->count[0];
 } else {
@@ -321,12 +321,12 @@ if(!proto) {
 n = end-start;
 DP("%s: %s:%d-%d:%d %d %d %d %s\n",
 	np->l4_proto ? (np->l4_proto == 1 ? "tcp":"any"):"udp",
-	np->start,np->end,np->proto,start,end,proto,
+	np->start,np->end,np->proto,start,end,np->l4_proto,
 	op ? "set":"del");
 
 if(!n) {
 	if(!op) return pd;
-	return ndpi_port_range_replace(pd,start,end,np,1,proto,ndpi_str); // create 1 range
+	return ndpi_port_range_replace(pd,start,end,np,1,ndpi_str); // create 1 range
 }
 
 tmp = ndpi_malloc(sizeof(ndpi_port_range_t)*(n+2));
@@ -441,7 +441,7 @@ if(k <= 1) {
 }
 DP("%s: k %d\n",k);
 
-pd = ndpi_port_range_replace(pd,start,end,tmp,k,proto,ndpi_str);
+pd = ndpi_port_range_replace(pd,start,end,tmp,k,ndpi_str);
 ndpi_free(tmp);
 return pd;
 }
@@ -474,11 +474,18 @@ if(!pd) {
 	}
 	return pd;
 }
-if(np->l4_proto != 1) { // udp or any
-	pd = ndpi_port_range_update(pd,np,0,op,ndpi_str);
-}
-if(np->l4_proto > 0 ) { // tcp or any
-	pd = ndpi_port_range_update(pd,np,1,op,ndpi_str);
+switch(np->l4_proto) {
+    case 2: // any
+	np->l4_proto = 0;
+	pd = ndpi_port_range_update(pd,np,op,ndpi_str);
+	np->l4_proto = 1;
+	pd = ndpi_port_range_update(pd,np,op,ndpi_str);
+	break;
+    case 1:
+	pd = ndpi_port_range_update(pd,np,op,ndpi_str);
+	break;
+    case 0:
+	pd = ndpi_port_range_update(pd,np,op,ndpi_str);
 }
 if(pd && (pd->count[0] + pd->count[1]) == 0) {
 	ndpi_free(pd);
