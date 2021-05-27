@@ -56,7 +56,7 @@
 
 #include "reader_util.h"
 #include "intrusion_detection.h"
-#include "../src/lib/third_party/include/libahocorasick.h"
+#include "../src/lib/third_party/include/ahocorasick.h"
 extern int bt_parse_debug;
 
 /** Client parameters **/

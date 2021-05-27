@@ -6,7 +6,7 @@ int ndpi_delete_acct(struct ndpi_net *n,int all);
 ssize_t nflow_read(struct ndpi_net *n, char __user *buf,
 	            size_t count, loff_t *ppos);
 
-#include "../lib/third_party/include/libahocorasick.h"
+#include "../lib/third_party/include/ahocorasick.h"
 AC_ERROR_t      ac_automata_add_exact(AC_AUTOMATA_t *, AC_PATTERN_t *);
 
 extern unsigned long  ndpi_flow_limit;

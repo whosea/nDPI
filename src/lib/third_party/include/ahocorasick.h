@@ -1,5 +1,5 @@
 /*
- * actypes.h: Includes basic data types of ahocorasick library
+ * ahocorasick.h: Includes all types of ahocorasick library
  * This file is part of multifast.
  *
  Copyright 2010-2012 Kamiar Kanani <kamiar.kanani@gmail.com>
@@ -21,12 +21,14 @@
 #ifndef _AC_TYPES_H_
 #define _AC_TYPES_H_
 
+#define AC_AHOCORASICK_NEW
 #define AC_PATTRN_MAX_LENGTH 256
 
 /* reallocation step for AC_NODE_t.matched_patterns */
 #define REALLOC_CHUNK_MATCHSTR 8
 
 /* reallocation step for AC_NODE_t.outgoing array */
+/* Must be a multiple of __SIZEOF_LONG__ ! */
 #define REALLOC_CHUNK_OUTGOING 8
 
 /* AC_ALPHABET_t:
@@ -39,7 +41,7 @@
  * AC_ALPHABET_t and leave it optional for other developers to define their
  * own alphabets.
  **/
-typedef unsigned char AC_ALPHABET_t;
+typedef char AC_ALPHABET_t;
 
 /* AC_REP_t:
  * Provides a more readable representative for a pattern.
@@ -51,8 +53,8 @@ typedef unsigned char AC_ALPHABET_t;
  * union for this purpose. you can add your desired type in it.
  **/
 typedef struct {
-  u_int32_t number; /* Often used to store procotolId */
-  u_int16_t category, breed;
+  uint32_t number; /* Often used to store procotolId */
+  uint16_t category, breed;
 } AC_REP_t;
 
 /* AC_PATTERN_t:
@@ -71,7 +73,7 @@ typedef struct {
 typedef struct
 {
   AC_ALPHABET_t * astring; /* String of alphabets */
-  u_int16_t length, /* Length of pattern */
+  uint16_t length, /* Length of pattern */
 	    is_existing; /* not union_matchstr */
   AC_REP_t rep; /* Representative string (optional) */
 } AC_PATTERN_t;
@@ -82,17 +84,6 @@ typedef struct {
   AC_PATTERN_t	patterns[];
 } AC_PATTERNS_t;
 
-
-/* AC_TEXT_t:
- * The input text type that is fed to ac_automata_search() to be searched.
- * it is similar to AC_PATTERN_t. actually we could use AC_PATTERN_t as input
- * text, but for the purpose of being more readable, we defined this new type.
- **/
-typedef struct
-{
-  AC_ALPHABET_t * astring; /* String of alphabets */
-  unsigned int length; /* Length of string */
-} AC_TEXT_t;
 
 /* AC_MATCH_t:
  * Provides the structure for reporting a match event.
@@ -108,16 +99,27 @@ typedef struct
  * respectively. finally the field 'match_num' maintains the number of
  * matched patterns.
  **/
-struct ac_node;
 
 typedef struct
 {
-  // unused: struct ac_node *start_node; /* for continue search */
   AC_PATTERN_t * patterns; /* Array of matched pattern */
   long position; /* The end position of matching pattern(s) in the text */
   unsigned int match_num; /* Number of matched patterns */
   unsigned int match_counter; /* Counter of found matches */
 } AC_MATCH_t;
+
+/* AC_TEXT_t:
+ * The input text type that is fed to ac_automata_search() to be searched.
+ * it is similar to AC_PATTERN_t. actually we could use AC_PATTERN_t as input
+ * text, but for the purpose of being more readable, we defined this new type.
+ **/
+typedef struct
+{
+  AC_ALPHABET_t * astring; /* String of alphabets */
+  unsigned int length; /* Length of string */
+  AC_MATCH_t match;
+} AC_TEXT_t;
+
 
 /* AC_ERROR_t:
  * Error that may occur while adding a pattern to the automata.
@@ -164,8 +166,11 @@ typedef struct ac_node
 {
   int id;                              /* Node ID : set after finalize(), only for ac_automata_dump */
   AC_ALPHABET_t  one_alpha,
+		 one:1,                /* one_char: yes/no */
+		 range:1,              /* range symbols start from one_alpha */
+		 root:1,               /* is root node */
 	  	 final:1,	       /* 0: no ; 1: yes, it is a final node */
-		 one:1,use:1,	       /* use: yes/no, one_char: yes/no */
+		 use:1,	               /* use: yes/no */ 
 		 ff:1;		       /* finalized node */
   unsigned short depth;                /* depth: distance between this node and the root */
 
@@ -173,18 +178,18 @@ typedef struct ac_node
   struct edge   * outgoing;           /* Array of outgoing edges */
 
   struct ac_node * failure_node;       /* The failure node of this node */
+  AC_ALPHABET_t *a_ptr;
 } AC_NODE_t;
 
 #ifndef __SIZEOF_POINTER__
 #error SIZEOF_POINTER not defined!
 #endif
 
-
 struct edge {
   unsigned short degree;      /* Number of outgoing edges */
   unsigned short max;         /* Max capacity of allocated memory for outgoing */
-  unsigned long  cmap[8];      /* 256 bit */
-  AC_NODE_t	 *next[0];
+  uint32_t       cmap[8];      /* 256 bit */
+  AC_NODE_t	 *next[];
  /*
   * first N elements used for 'next' pointers +
   * M elements used for symbols storage
@@ -196,12 +201,6 @@ struct edge {
   *
   */
 };
-static inline AC_ALPHABET_t *edge_get_alpha(struct edge *e) {
-	return (AC_ALPHABET_t *)(&e->next[e->max]);
-}
-static inline size_t edge_data_size(int num) {
-	return sizeof(void *)*num + ((num + sizeof(void *) - 1) & ~(sizeof(void *)-1));
-}
 
 struct ac_path {
   AC_NODE_t * n;
@@ -212,13 +211,15 @@ typedef struct
 {
   /* The root of the Aho-Corasick trie */
   AC_NODE_t * root;
+  MATCH_CALLBACK_f match_handler;
   unsigned int all_nodes_num; /* Number of all nodes in the automata */
 
   /* this flag indicates that if automata is finalized by
    * ac_automata_finalize() or not. 1 means finalized and 0
    * means not finalized (is open). after finalizing automata you can not
    * add pattern to automata anymore. */
-  unsigned short automata_open;
+  unsigned short automata_open,
+		 to_lc:1, no_root_range:1; /* lowercase match */
 
   /* Statistic Variables */
   unsigned long total_patterns; /* Total patterns in the automata */
@@ -227,26 +228,22 @@ typedef struct
 
   struct ac_path ac_path[AC_PATTRN_MAX_LENGTH+4];
   int id;
-
 } AC_AUTOMATA_t;
 
-struct acho_ret_id {
-        int     id;
-        int     position;
-	char	*name;
-};
-typedef struct acho_ret_id acho_ret_id_t;
+#define AC_FEATURE_LC 1
+#define AC_FEATURE_NO_ROOT_RANGE 2
 
-AC_AUTOMATA_t * ac_automata_init     (void);
+AC_AUTOMATA_t * ac_automata_init     (MATCH_CALLBACK_f mc);
+AC_ERROR_t      ac_automata_feature  (AC_AUTOMATA_t * thiz, unsigned int feature);
 AC_ERROR_t      ac_automata_add      (AC_AUTOMATA_t * thiz, AC_PATTERN_t * str);
 AC_ERROR_t      ac_automata_finalize (AC_AUTOMATA_t * thiz);
-int             ac_automata_search   (AC_AUTOMATA_t * thiz, AC_MATCH_t * match,
+int             ac_automata_search   (AC_AUTOMATA_t * thiz,
 						AC_TEXT_t * str, 
-						MATCH_CALLBACK_f mc,
 						AC_REP_t * param);
 void            ac_automata_clean    (AC_AUTOMATA_t * thiz);
-void            ac_automata_release  (AC_AUTOMATA_t * thiz, u_int8_t free_pattern);
+void            ac_automata_release  (AC_AUTOMATA_t * thiz, uint8_t free_pattern);
+#ifndef __KERNEL__
 void            ac_automata_dump     (AC_AUTOMATA_t * thiz, 
 					char *buf, size_t bufsize, char repcast);
-
+#endif
 #endif  

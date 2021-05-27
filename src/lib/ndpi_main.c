@@ -41,7 +41,7 @@
 
 #include "ndpi_config.h"
 #include "ndpi_api.h"
-#include "libahocorasick.h"
+#include "ahocorasick.h"
 #include "libcache.h"
 
 #ifdef __KERNEL__
@@ -84,7 +84,7 @@ u_int ndpi_verbose_dga_detection = 0;
 
 /* ****************************************** */
 
-static int ndpi_exact_ac_match(int match_num,AC_MATCH_t *ac_match,int input_text_len);
+static int ndpi_exact_ac_match(int match_num,const AC_TEXT_t *input_text);
 
 static void *(*_ndpi_flow_malloc)(size_t size);
 static void (*_ndpi_flow_free)(void *ptr);
@@ -2325,12 +2325,12 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   ndpi_str->ndpi_num_custom_protocols = 0;
 
   spin_lock_init(&ndpi_str->host_automa_lock);
-  ndpi_str->host_automa.ac_automa = ac_automata_init();
-  ndpi_str->content_automa.ac_automa = ac_automata_init();
-  ndpi_str->bigrams_automa.ac_automa = ac_automata_init();
-  ndpi_str->impossible_bigrams_automa.ac_automa = ac_automata_init();
-  ndpi_str->trigrams_automa.ac_automa = ac_automata_init();
-  ndpi_str->tls_cert_subject_automa.ac_automa = ac_automata_init();
+  ndpi_str->host_automa.ac_automa = ac_automata_init(ac_match_handler);
+  ndpi_str->content_automa.ac_automa = ac_automata_init(ac_match_handler);
+  ndpi_str->bigrams_automa.ac_automa = ac_automata_init(ac_match_handler);
+  ndpi_str->impossible_bigrams_automa.ac_automa = ac_automata_init(ac_match_handler);
+  ndpi_str->trigrams_automa.ac_automa = ac_automata_init(ac_match_handler);
+  ndpi_str->tls_cert_subject_automa.ac_automa = ac_automata_init(ac_match_handler);
   ndpi_str->malicious_ja3_automa.ac_automa = NULL; /* Initialized on demand */
   ndpi_str->malicious_sha1_automa.ac_automa = NULL; /* Initialized on demand */
   ndpi_str->risky_domain_automa.ac_automa = NULL; /* Initialized on demand */
@@ -2341,11 +2341,18 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
     return(NULL);
   }
 
-  ndpi_str->custom_categories.hostnames.ac_automa = ac_automata_init();
-  ndpi_str->custom_categories.hostnames_shadow.ac_automa = ac_automata_init();
+  ndpi_str->custom_categories.hostnames.ac_automa = ac_automata_init(ac_match_handler);
+  ndpi_str->custom_categories.hostnames_shadow.ac_automa = ac_automata_init(ac_match_handler);
 
   ndpi_str->custom_categories.ipAddresses = ndpi_patricia_new(32 /* IPv4 */);
   ndpi_str->custom_categories.ipAddresses_shadow = ndpi_patricia_new(32 /* IPv4 */);
+
+  if(ndpi_str->host_automa.ac_automa)
+      ac_automata_feature(ndpi_str->host_automa.ac_automa,AC_FEATURE_LC);
+  if(ndpi_str->custom_categories.hostnames.ac_automa)
+      ac_automata_feature(ndpi_str->custom_categories.hostnames.ac_automa,AC_FEATURE_LC);
+  if(ndpi_str->custom_categories.hostnames_shadow.ac_automa)
+      ac_automata_feature(ndpi_str->custom_categories.hostnames_shadow.ac_automa,AC_FEATURE_LC);
 
   if((ndpi_str->custom_categories.ipAddresses == NULL) || (ndpi_str->custom_categories.ipAddresses_shadow == NULL)) {
     NDPI_LOG_ERR(ndpi_str, "[NDPI] Error allocating Patricia trees\n");
@@ -2435,7 +2442,7 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
       return;
     }
 
-    if(automa && automa->ac_automa) {
+    if(automa && automa->ac_automa && !automa->ac_automa_finalized) {
       ac_automata_finalize((AC_AUTOMATA_t *) automa->ac_automa);
       automa->ac_automa_finalized = 1;
     }
@@ -2446,7 +2453,7 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
 
 /* Wrappers */
 void* ndpi_init_automa(void) {
-  return(ac_automata_init());
+  return(ac_automata_init(ac_match_handler));
 }
 
 /* ****************************************************** */
@@ -2509,7 +2516,6 @@ void *ndpi_automa_host(struct ndpi_detection_module_struct *ndpi_struct)
 int ndpi_match_string(void *_automa, char *string_to_match) {
   AC_REP_t match = { NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED };
   AC_TEXT_t ac_input_text;
-  AC_MATCH_t ac_match;
   AC_AUTOMATA_t *automa = (AC_AUTOMATA_t*)_automa;
   int rc;
 
@@ -2517,11 +2523,10 @@ int ndpi_match_string(void *_automa, char *string_to_match) {
      || (string_to_match == NULL)
      || (string_to_match[0] == '\0'))
     return(-2);
-  memset((char *)&ac_match,0,sizeof(ac_match));
   ac_input_text.astring = string_to_match, ac_input_text.length = strlen(string_to_match);
-  rc = ac_automata_search(automa, &ac_match, &ac_input_text, ac_match_handler,&match);
+  rc = ac_automata_search(automa, &ac_input_text, &match);
 
-  match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
+  match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
 
   /*
     As ac_automata_search can detect partial matches and continue the search process
@@ -2541,7 +2546,6 @@ int ndpi_match_string_protocol_id(void *_automa, char *string_to_match,
 				  ndpi_protocol_category_t *category,
 				  ndpi_protocol_breed_t *breed) {
   AC_TEXT_t ac_input_text;
-  AC_MATCH_t ac_match;
   AC_AUTOMATA_t *automa = (AC_AUTOMATA_t*)_automa;
   AC_REP_t match = { 0, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED };
   int rc;
@@ -2550,11 +2554,10 @@ int ndpi_match_string_protocol_id(void *_automa, char *string_to_match,
   if((automa == NULL) || (string_to_match == NULL) || (string_to_match[0] == '\0'))
     return(-2);
 
-  memset((char *)&ac_match,0,sizeof(ac_match));
   ac_input_text.astring = string_to_match, ac_input_text.length = match_len;
-  rc = ac_automata_search(automa, &ac_match, &ac_input_text, ac_match_handler, &match);
+  rc = ac_automata_search(automa, &ac_input_text, &match);
   
-  match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
+  match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
 
   /*
     As ac_automata_search can detect partial matches and continue the search process
@@ -2579,7 +2582,6 @@ int ndpi_match_string_value(void *_automa, char *string_to_match,
 			    u_int match_len, u_int32_t *num) {
   AC_TEXT_t ac_input_text;
   AC_AUTOMATA_t *automa = (AC_AUTOMATA_t *) _automa;
-  AC_MATCH_t ac_match;
   AC_REP_t match = { 0, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED };
   int rc;
 
@@ -2587,11 +2589,10 @@ int ndpi_match_string_value(void *_automa, char *string_to_match,
   if((automa == NULL) || (string_to_match == NULL) || (string_to_match[0] == '\0'))
     return(-2);
 
-  memset((char *)&ac_match,0,sizeof(ac_match));
   ac_input_text.astring = string_to_match, ac_input_text.length = match_len;
-  rc = ac_automata_search(automa, &ac_match, &ac_input_text, ac_match_handler,&match);
+  rc = ac_automata_search(automa, &ac_input_text, &match);
 
-  match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
+  match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
 
   /*
     As ac_automata_search can detect partial matches and continue the search process
@@ -3120,7 +3121,10 @@ int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, con
 static int ndpi_load_risky_domain(struct ndpi_detection_module_struct *ndpi_str,
 				 char* domain_name) {
   if(ndpi_str->risky_domain_automa.ac_automa == NULL)
-    ndpi_str->risky_domain_automa.ac_automa = ac_automata_init();
+     ndpi_str->risky_domain_automa.ac_automa = ac_automata_init(ac_match_handler);
+
+  if(ndpi_str->risky_domain_automa.ac_automa)
+     ac_automata_feature(ndpi_str->risky_domain_automa.ac_automa,AC_FEATURE_LC);
 
   if(ndpi_str->risky_domain_automa.ac_automa) {
     char buf[64], *str;
@@ -3192,7 +3196,7 @@ int ndpi_load_malicious_ja3_file(struct ndpi_detection_module_struct *ndpi_str, 
   int len, num = 0;
 
   if(ndpi_str->malicious_ja3_automa.ac_automa == NULL)
-    ndpi_str->malicious_ja3_automa.ac_automa = ac_automata_init();
+    ndpi_str->malicious_ja3_automa.ac_automa = ac_automata_init(ac_match_handler);
   
   fd = fopen(path, "r");
 
@@ -3246,7 +3250,7 @@ int ndpi_load_malicious_sha1_file(struct ndpi_detection_module_struct *ndpi_str,
   int num = 0;
 
   if (ndpi_str->malicious_sha1_automa.ac_automa == NULL)
-    ndpi_str->malicious_sha1_automa.ac_automa = ac_automata_init();
+    ndpi_str->malicious_sha1_automa.ac_automa = ac_automata_init(ac_match_handler);
 
   fd = fopen(path, "r");
 
@@ -5043,7 +5047,7 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     /* Swap */
     ndpi_str->custom_categories.hostnames.ac_automa = ndpi_str->custom_categories.hostnames_shadow.ac_automa;
     /* Realloc */
-    ndpi_str->custom_categories.hostnames_shadow.ac_automa = ac_automata_init();
+    ndpi_str->custom_categories.hostnames_shadow.ac_automa = ac_automata_init(ac_match_handler);
     if(ndpi_str->custom_categories.ipAddresses != NULL)
       ndpi_patricia_destroy((ndpi_patricia_tree_t *) ndpi_str->custom_categories.ipAddresses, free_ptree_data);
 
@@ -6817,16 +6821,17 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     return(rc);
   }
 
-  static int ndpi_exact_ac_match(int match_num,AC_MATCH_t *ac_match,int input_text_len) {
-
+  static int ndpi_exact_ac_match(int match_num,const AC_TEXT_t *input_text) {
+    const AC_MATCH_t *ac_match = &(input_text->match);
     if((match_num & NDPI_HOST_MATCH_ALL) == NDPI_HOST_MATCH_ALL) {
-          if(ac_match->patterns->length != input_text_len)
+          if(ac_match->patterns->length != input_text->length)
         	    return 0;
     } else if(match_num & NDPI_HOST_MATCH_START) {
-        	  if(ac_match->position - ac_match->patterns->length != 0)
+	    // FIXME ac_match->position+1 ?
+        	  if(ac_match->position != ac_match->patterns->length)
         	       return 0;
       } else if(match_num & NDPI_HOST_MATCH_END) {
-        	    if(ac_match->position != input_text_len)
+        	    if(ac_match->position != input_text->length)
         		 return 0;
       }
     return match_num & ~NDPI_HOST_MATCH_ALL;
@@ -6838,7 +6843,6 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 				    u_int string_to_match_len, ndpi_protocol_match_result *ret_match,
 				    u_int8_t is_host_match) {
     AC_TEXT_t ac_input_text;
-    AC_MATCH_t ac_match;
     ndpi_automa *automa = is_host_match ? &ndpi_str->host_automa : &ndpi_str->content_automa;
     AC_REP_t match = {NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED};
     int rc;
@@ -6850,19 +6854,18 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
       printf("[%s:%d] [NDPI] Internal error: please call ndpi_finalize_initialization()\n", __FILE__, __LINE__);
       return(0); /* No matches */
     }
-    memset((char *)&ac_match,0,sizeof(ac_match));
 
     if(is_host_match)
       spin_lock_bh(&ndpi_str->host_automa_lock);
 
     ac_input_text.astring = string_to_match, ac_input_text.length = string_to_match_len;
     rc = ac_automata_search(((AC_AUTOMATA_t*)automa->ac_automa), 
-  		  &ac_match, &ac_input_text, ac_match_handler, &match);
+  		  &ac_input_text, &match);
 
     if(is_host_match)
       spin_unlock_bh(&ndpi_str->host_automa_lock);
 
-    match.number = ndpi_exact_ac_match(match.number,&ac_match,ac_input_text.length);
+    match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
 
     /*
       As ac_automata_search can detect partial matches and continue the search process
@@ -7026,7 +7029,6 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
   int ndpi_match_bigram(struct ndpi_detection_module_struct *ndpi_str,
 			ndpi_automa *automa, char *bigram_to_match) {
     AC_TEXT_t ac_input_text;
-    AC_MATCH_t ac_match;
     AC_REP_t match = {NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED};
     int rc;
 
@@ -7042,10 +7044,9 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 #endif
     }
 
-    memset((char *)&ac_match,0,sizeof(ac_match));
     ac_input_text.astring = bigram_to_match, ac_input_text.length = 2;
     rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa),
-		    &ac_match, &ac_input_text, ac_match_handler, &match);
+		    &ac_input_text, &match);
 
     /*
       As ac_automata_search can detect partial matches and continue the search process
@@ -7063,7 +7064,6 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
   int ndpi_match_trigram(struct ndpi_detection_module_struct *ndpi_str,
 			ndpi_automa *automa, char *trigram_to_match) {
     AC_TEXT_t ac_input_text;
-    AC_MATCH_t ac_match;
     AC_REP_t match = {NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_UNRATED};
     int rc;
 
@@ -7079,10 +7079,9 @@ uint8_t ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 #endif
     }
 
-    memset((char *)&ac_match,0,sizeof(ac_match));
     ac_input_text.astring = trigram_to_match, ac_input_text.length = 3;
     rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa),
-		    &ac_match, &ac_input_text, ac_match_handler,&match);
+		    &ac_input_text, &match);
 
     /*
       As ac_automata_search can detect partial matches and continue the search process

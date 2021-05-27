@@ -200,7 +200,7 @@ struct nf_ct_ext_ndpi {
 
 extern unsigned long ndpi_log_debug;
 
-#include "../lib/third_party/include/libahocorasick.h"
+#include "../lib/third_party/include/ahocorasick.h"
 
 const char *acerr2txt(AC_ERROR_t r);
 int str_coll_to_automata(void *host_ac,hosts_str_t *hosts);
