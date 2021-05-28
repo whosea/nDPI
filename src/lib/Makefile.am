@@ -71,6 +71,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/florensia.c \
 		     protocols/ftp_control.c \
 		     protocols/ftp_data.c \
+		     protocols/genshin_impact.c \
 		     protocols/git.c \
 		     protocols/gnutella.c \
 		     protocols/gtp.c \
@@ -78,6 +79,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/hangout.c \
 		     protocols/h323.c \
 		     protocols/halflife2_and_mods.c \
+		     protocols/hpvirtgrp.c \
 		     protocols/http.c \
 		     protocols/iax.c \
 		     protocols/icecast.c \

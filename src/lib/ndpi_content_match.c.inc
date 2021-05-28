@@ -1,7 +1,7 @@
 /*
  * ndpi_content_match.c
  *
- * Copyright (C) 2011-19 - ntop.org
+ * Copyright (C) 2011-21 - ntop.org
  *
  * nDPI is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -9240,6 +9240,7 @@ ndpi_protocol_match host_match[] =
    { ".msocdn.com",                             "Microsoft365",    NDPI_PROTOCOL_MICROSOFT_365, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
    { "officeapps.live.com",                     "Microsoft365",    NDPI_PROTOCOL_MICROSOFT_365, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
    { "outlook.live.com",                        "Microsoft365",    NDPI_PROTOCOL_MICROSOFT_365, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
+   { "mail.live.com",                           "Microsoft365",    NDPI_PROTOCOL_MICROSOFT_365, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
    { "office.live.com",                         "Microsoft365",    NDPI_PROTOCOL_MICROSOFT_365, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
    { ".onenote.",                               "Microsoft365",    NDPI_PROTOCOL_MICROSOFT_365, NDPI_PROTOCOL_CATEGORY_COLLABORATIVE, NDPI_PROTOCOL_ACCEPTABLE },
 
@@ -9418,18 +9419,25 @@ ndpi_protocol_match host_match[] =
    { "dssott.com",                             "DisneyPlus",        NDPI_PROTOCOL_DISNEYPLUS, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
    { "disneyplus.com.ssl.sc.omtrdc.net",       "DisneyPlus",        NDPI_PROTOCOL_DISNEYPLUS, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
    { "search-api-disney.bamgrid.com",          "DisneyPlus",        NDPI_PROTOCOL_DISNEYPLUS, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN },
+   
 
+   /*
+     Activision
+    */
+   { "activision.",           "Activision",        NDPI_PROTOCOL_ACTIVISION, NDPI_PROTOCOL_CATEGORY_GAME, NDPI_PROTOCOL_FUN },
+   { ".activision.com",       "Activision",        NDPI_PROTOCOL_ACTIVISION, NDPI_PROTOCOL_CATEGORY_GAME, NDPI_PROTOCOL_FUN },
    { NULL, NULL, NDPI_PROTOCOL_UNKNOWN, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NDPI_PROTOCOL_SAFE }
   };
 
 /* ******************************************************************** */
 
 static ndpi_tls_cert_name_match tls_certificate_match [] = {
-  { "CN=AnyDesk Client",               NDPI_PROTOCOL_ANYDESK   },
-  { "O=Kakao",                         NDPI_PROTOCOL_KAKAOTALK },
-  { "O=ntop.org",                      NDPI_PROTOCOL_NTOP      },
-  { "CN=simplednscrypt.org",           NDPI_PROTOCOL_DNSCRYPT  },
-  { "CN=*.gateway.messenger.live.com", NDPI_PROTOCOL_SKYPE     },
+  { "CN=AnyDesk Client",               NDPI_PROTOCOL_ANYDESK     },
+  { "O=Kakao",                         NDPI_PROTOCOL_KAKAOTALK   },
+  { "O=ntop.org",                      NDPI_PROTOCOL_NTOP        },
+  { "CN=simplednscrypt.org",           NDPI_PROTOCOL_DNSCRYPT    },
+  { "CN=*.gateway.messenger.live.com", NDPI_PROTOCOL_SKYPE       },
+  { "OU=FortiGate",                    NDPI_PROTOCOL_FORTICLIENT },
 
   { NULL, 0 }
 };

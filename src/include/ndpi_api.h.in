@@ -458,6 +458,14 @@ extern "C" {
   /**
    * Check if the string content passed match with a protocol
    *
+   * @par    flow                = the flow where match the host
+   * @par    subprotocol_id      = subprotocol id
+   */
+  void ndpi_check_subprotocol_risk(struct ndpi_flow_struct *flow, u_int16_t subprotocol_id);
+
+  /**
+   * Check if the string content passed match with a protocol
+   *
    * @par    ndpi_struct         = the detection module
    * @par    flow                = the flow where match the host
    * @par    string_to_match     = the string to match
@@ -597,6 +605,7 @@ extern "C" {
   u_int16_t ndpi_get_proto_by_name(struct ndpi_detection_module_struct *ndpi_mod,
 		  		   const char *name);
 
+#ifndef __KERNEL__
   /**
    * Set protocol category string
    *
@@ -617,7 +626,7 @@ extern "C" {
    */
   ndpi_protocol_category_t ndpi_get_proto_category(struct ndpi_detection_module_struct *ndpi_mod,
 						   ndpi_protocol proto);
-
+#endif
   /**
    * Get the protocol name associated to the ID
    *
@@ -671,6 +680,7 @@ extern "C" {
    */
   int ndpi_get_category_id(struct ndpi_detection_module_struct *ndpi_mod, char *cat);
 
+#ifndef __KERNEL__
   /**
    * Write the list of the supported protocols
    *
@@ -678,6 +688,13 @@ extern "C" {
    */
   void ndpi_dump_protocols(struct ndpi_detection_module_struct *mod);
 
+  /**
+   * Write the list of the scores and their associated risks
+   *
+   * @par  ndpi_mod = the detection module
+   */
+  void ndpi_dump_risks_score();
+#endif
   /**
    * Read a file and load the protocols
    *
@@ -907,6 +924,9 @@ extern "C" {
   ndpi_l4_proto_info ndpi_get_l4_proto_info(struct ndpi_detection_module_struct *ndpi_struct, u_int16_t ndpi_proto_id);
   const char* ndpi_get_l4_proto_name(ndpi_l4_proto_info proto);
 
+  u_int16_t ndpi_get_lower_proto(ndpi_protocol proto);
+  u_int16_t ndpi_get_upper_proto(ndpi_protocol proto);
+  
   ndpi_proto_defaults_t* ndpi_get_proto_defaults(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_num_supported_protocols(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_num_custom_protocols(struct ndpi_detection_module_struct *ndpi_mod);
@@ -1530,7 +1550,10 @@ extern "C" {
 #endif /* KERNEL */
 
   const char* ndpi_risk2str(ndpi_risk_enum risk);
-
+  const char* ndpi_severity2str(ndpi_risk_severity s);
+  ndpi_risk_severity ndpi_risk2severity(ndpi_risk_enum risk);
+  u_int16_t ndpi_risk2score(ndpi_risk risk);
+  
   /* ******************************* */
 
   /* HyperLogLog cardinality estimator */
@@ -1579,8 +1602,11 @@ extern "C" {
   int ndpi_load_geoip(struct ndpi_detection_module_struct *ndpi_str,
 		       const char *ip_city_data, const char *ip_as_data);
   void ndpi_free_geoip(struct ndpi_detection_module_struct *ndpi_str);  
-  int ndpi_get_geoip(struct ndpi_detection_module_struct *ndpi_str, char *ip,
-		     u_int32_t *asn, char *country_code, u_int8_t country_code_len);
+  int ndpi_get_geoip_asn(struct ndpi_detection_module_struct *ndpi_str,
+			 char *ip, u_int32_t *asn);
+int ndpi_get_geoip_country_continent(struct ndpi_detection_module_struct *ndpi_str, char *ip,
+				     char *country_code, u_int8_t country_code_len,
+				     char *continent, u_int8_t continent_len);
 #endif
 
 #ifdef __cplusplus

@@ -1176,6 +1176,8 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       flow->ssh_tls.sha1_cert_fingerprint_set = 1;
     }
 
+    flow->ssh_tls.browser_euristics = flow->ndpi_flow->protos.tls_quic_stun.tls_quic.browser_euristics;
+    
     if(flow->ndpi_flow->protos.tls_quic_stun.tls_quic.alpn) {
       if((flow->ssh_tls.tls_alpn = ndpi_strdup(flow->ndpi_flow->protos.tls_quic_stun.tls_quic.alpn)) != NULL)
 	correct_csv_data_field(flow->ssh_tls.tls_alpn);
@@ -1314,8 +1316,9 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 					   u_int16_t ipsize, u_int16_t rawsize,
 					   const struct pcap_pkthdr *header,
 					   const u_char *packet,
-                       pkt_timeval when,
-                       FILE * csv_fp) {
+					   pkt_timeval when,
+					   ndpi_risk *flow_risk,
+					   FILE * csv_fp) {
   struct ndpi_id_struct *src, *dst;
   struct ndpi_flow_info *flow = NULL;
   struct ndpi_flow_struct *ndpi_flow = NULL;
@@ -1482,10 +1485,10 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 	     || (flow->detected_protocol.master_protocol == NDPI_PROTOCOL_SSH))
 	 ) {
 	if((flow->src2dst_packets+flow->dst2src_packets) < 10 /* MIN_NUM_ENCRYPT_SKIP_PACKETS */)
-	  skip = 1;
+	  skip = 1; /* Skip initial negotiation packets */
       }
 
-      if(!skip) {
+      if((!skip) && ((flow->src2dst_packets+flow->dst2src_packets) < 100)) {
 	if(ndpi_has_human_readeable_string(workflow->ndpi_struct, (char*)packet, header->caplen,
 					   human_readeable_string_len,
 					   flow->human_readeable_string_buffer,
@@ -1579,6 +1582,18 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 	}
   }
 
+#if 0
+  if(flow->risk != 0) {
+    FILE *r = fopen("/tmp/e", "a");
+
+    if(r) {
+      fprintf(r, "->>> %u [%08X]\n", flow->risk, flow->risk);
+      fclose(r);
+    }
+  }
+#endif
+  
+  *flow_risk = flow->risk;
   return(flow->detected_protocol);
 }
 
@@ -1683,6 +1698,7 @@ int ndpi_is_datalink_supported(int datalink_type)
 struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 					       const struct pcap_pkthdr *header_o,
 					       const u_char *packet,
+					       ndpi_risk *flow_risk,
 					       FILE * csv_fp) {
   struct pcap_pkthdr *header,header_c;
   /*
@@ -1736,6 +1752,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   /* counters */
   u_int8_t vlan_packet = 0;
 
+  *flow_risk = 0 /* NDPI_NO_RISK */;
+  
   /* Increment raw packet counter */
   workflow->stats.raw_packet_count++;
 
@@ -1852,7 +1870,6 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     if(h_caplen < (eth_offset + radio_len + sizeof(struct ndpi_wifi_header)))
       return(nproto);
 
-
     /* Calculate 802.11 header length (variable) */
     wifi = (struct ndpi_wifi_header*)( packet + eth_offset + radio_len);
     fc = wifi->fc;
@@ -1891,8 +1908,10 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 #endif
 
   default:
-    /* We shoudn't be here, because we already checked that this datalink is supported.
-       Should ndpi_is_datalink_supported() be updated? */
+    /*
+     * We shoudn't be here, because we already checked that this datalink is supported.
+     * Should ndpi_is_datalink_supported() be updated?
+     */
     printf("Unknown datalink %d\n", datalink_type);
     return(nproto);
   }
@@ -2040,23 +2059,40 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       struct ndpi_udphdr *udp = (struct ndpi_udphdr *)&packet[ip_offset+ip_len];
       u_int16_t sport = ntohs(udp->source), dport = ntohs(udp->dest);
 
-      if((sport == GTP_U_V1_PORT) || (dport == GTP_U_V1_PORT)) {
+      if(((sport == GTP_U_V1_PORT) || (dport == GTP_U_V1_PORT)) &&
+         (ip_offset + ip_len + sizeof(struct ndpi_udphdr) + 8 /* Minimum GTPv1 header len */ < header->caplen)) {
 	/* Check if it's GTPv1 */
 	u_int offset = ip_offset+ip_len+sizeof(struct ndpi_udphdr);
 	u_int8_t flags = packet[offset];
 	u_int8_t message_type = packet[offset+1];
-
-	tunnel_type = ndpi_gtp_tunnel;
+	u_int8_t exts_parsing_error = 0;
 
 	if((((flags & 0xE0) >> 5) == 1 /* GTPv1 */) &&
 	   (message_type == 0xFF /* T-PDU */)) {
 
-	  ip_offset = ip_offset+ip_len+sizeof(struct ndpi_udphdr)+8; /* GTPv1 header len */
-	  if(flags & 0x04) ip_offset += 1; /* next_ext_header is present */
-	  if(flags & 0x02) ip_offset += 4; /* sequence_number is present (it also includes next_ext_header and pdu_number) */
-	  if(flags & 0x01) ip_offset += 1; /* pdu_number is present */
+	  offset += 8; /* GTPv1 header len */
+	  if(flags & 0x07)
+	    offset += 4; /* sequence_number + pdu_number + next_ext_header fields */
+	  /* Extensions parsing */
+	  if(flags & 0x04) {
+	    unsigned int ext_length = 0;
+
+	    while(offset < header->caplen) {
+	      ext_length = packet[offset] << 2;
+	      offset += ext_length;
+	      if(offset >= header->caplen || ext_length == 0) {
+	        exts_parsing_error = 1;
+	        break;
+	      }
+	      if(packet[offset - 1] == 0)
+	        break;
+	    }
+	  }
 
 	  if(ip_offset < h_caplen) {
+	    /* Ok, valid GTP-U */
+	    tunnel_type = ndpi_gtp_tunnel;
+	    ip_offset = offset;
 	    iph = (struct ndpi_iphdr *)&packet[ip_offset];
 	    if(iph->version == 6) {
 	      iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
@@ -2143,7 +2179,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   return(packet_processing(workflow, time_ms, vlan_id, nf_mark, tunnel_type, iph, iph6,
 			   ip_offset, header->caplen - ip_offset,
 			   header->caplen, header, packet, header->ts,
-               csv_fp));
+			   flow_risk, csv_fp));
 }
 
 /* ********************************************************** */

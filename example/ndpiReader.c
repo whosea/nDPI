@@ -59,6 +59,11 @@
 #include "../src/lib/third_party/include/ahocorasick.h"
 extern int bt_parse_debug;
 
+#define ntohl64(x) ( ( (uint64_t)(ntohl( (uint32_t)((x << 32) >> 32) )) << 32) | ntohl( ((uint32_t)(x >> 32)) ) )
+#define htonl64(x) ntohl64(x)
+
+#define EURISTICS_CODE 1
+
 /** Client parameters **/
 
 static char *_pcap_file[MAX_NUM_READER_THREADS]; /**< Ingress pcap file/interfaces */
@@ -173,12 +178,16 @@ struct receiver {
 
 struct receiver *receivers = NULL, *topReceivers = NULL;
 
+#define WIRESHARK_NTOP_MAGIC 0x19680924
 
+PACK_ON
 struct ndpi_packet_trailer {
-  u_int32_t magic; /* 0x19682017 */
+  u_int32_t magic; /* WIRESHARK_NTOP_MAGIC */
   u_int16_t master_protocol /* e.g. HTTP */, app_protocol /* e.g. FaceBook */;
+  ndpi_risk flow_risk;
+  u_int16_t flow_score;
   char name[16];
-};
+} PACK_OFF;
 
 static pcap_dumper_t *extcap_dumper = NULL;
 static pcap_t *extcap_fifo_h = NULL;
@@ -561,7 +570,10 @@ static void help(u_int long_help) {
 	    }
 	}
     }
-}
+
+    printf("\n\nnDPI supported risks:\n");
+    ndpi_dump_risks_score();
+  }
 
   exit(!long_help);
 }
@@ -1483,8 +1495,10 @@ if(!rep_mini) {
 	fprintf(out, "** %s **", ndpi_risk2str(i));
 
     fprintf(out, "]");
-  }
 
+    fprintf(out, "[Risk Score: %u]", ndpi_risk2score(flow->risk));
+  }
+  
   if(flow->ssh_tls.ssl_version != 0) fprintf(out, "[%s]", ndpi_ssl_version2str(flow->ndpi_flow, flow->ssh_tls.ssl_version, &known_tls));
   if(flow->ssh_tls.client_requested_server_name[0] != '\0') fprintf(out, "[Client: %s]", flow->ssh_tls.client_requested_server_name);
 if(!rep_mini) {
@@ -1520,6 +1534,12 @@ if(!rep_mini) {
     }
   }
 
+#ifdef EURISTICS_CODE
+  if(flow->ssh_tls.browser_euristics.is_safari_tls)  fprintf(out, "[Safari]");
+  if(flow->ssh_tls.browser_euristics.is_firefox_tls) fprintf(out, "[Firefox]");
+  if(flow->ssh_tls.browser_euristics.is_chrome_tls)  fprintf(out, "[Chrome]");
+#endif
+  
   if(flow->ssh_tls.notBefore && flow->ssh_tls.notAfter) {
     char notBefore[32], notAfter[32];
     struct tm a, b;
@@ -3224,7 +3244,7 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
       char filename[256] = { 0 };
 
       if(strstr((char*)pcap_file, (char*)".pcap"))
-	printf("ERROR: could not open pcap file %s: %s\n", pcap_file, pcap_error_buffer);
+	printf("ERROR: could not open pcap file: %s\n", pcap_error_buffer);
 
       /* Trying to open as a playlist as last attempt */
       else if((getNextPcapFileFromPlaylist(thread_id, filename, sizeof(filename)) != 0)
@@ -3275,6 +3295,7 @@ static void ndpi_process_packet(u_char *args,
 				const struct pcap_pkthdr *header,
 				const u_char *packet) {
   struct ndpi_proto p;
+  ndpi_risk flow_risk;
   u_int16_t thread_id = *((u_int16_t*)args);
 
   /* allocate an exact size buffer to check overflows */
@@ -3284,7 +3305,7 @@ static void ndpi_process_packet(u_char *args,
     return ;
   }
   memcpy(packet_checked, packet, header->caplen);
-  p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked, csv_fp);
+  p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked, &flow_risk, csv_fp);
 
   if(!pcap_start.tv_sec) pcap_start.tv_sec = header->ts.tv_sec, pcap_start.tv_usec = header->ts.tv_usec;
   pcap_end.tv_sec = header->ts.tv_sec, pcap_end.tv_usec = header->ts.tv_usec;
@@ -3339,7 +3360,9 @@ static void ndpi_process_packet(u_char *args,
     trailer = (struct ndpi_packet_trailer*)&extcap_buf[h.caplen];
     memcpy(extcap_buf, packet, h.caplen);
     memset(trailer, 0, sizeof(struct ndpi_packet_trailer));
-    trailer->magic = htonl(0x19680924);
+    trailer->magic = htonl(WIRESHARK_NTOP_MAGIC);
+    trailer->flow_risk = htonl64(flow_risk);
+    trailer->flow_score = htons(ndpi_risk2score(flow_risk));
     trailer->master_protocol = htons(p.master_protocol), trailer->app_protocol = htons(p.app_protocol);
     ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct, p, trailer->name, sizeof(trailer->name));
     crc = (uint32_t*)&extcap_buf[h.caplen+sizeof(struct ndpi_packet_trailer)];
@@ -3403,7 +3426,8 @@ static void runPcapLoop(u_int16_t thread_id) {
       printf("Unsupported datalink %d. Skip pcap\n", datalink_type);
       return;
     }
-    if(pcap_loop(ndpi_thread_info[thread_id].workflow->pcap_handle, -1, &ndpi_process_packet, (u_char*)&thread_id) < 0)
+    int ret = pcap_loop(ndpi_thread_info[thread_id].workflow->pcap_handle, -1, &ndpi_process_packet, (u_char*)&thread_id);
+    if (ret == -1)
       printf("Error while reading pcap file: '%s'\n", pcap_geterr(ndpi_thread_info[thread_id].workflow->pcap_handle));
   }
 }
@@ -4284,7 +4308,7 @@ int original_main(int argc, char **argv) {
 #else
   int main(int argc, char **argv) {
 #endif
-    int i;
+    int i, skip_unit_tests = 0;
 
 #ifdef DEBUG_TRACE
     trace = fopen("/tmp/ndpiReader.log", "a");
@@ -4306,37 +4330,39 @@ int original_main(int argc, char **argv) {
       return(-1);
     }
 
+    if(!skip_unit_tests) {
 #ifndef DEBUG_TRACE
-    /* Skip tests when debugging */
+      /* Skip tests when debugging */
 
 #ifdef HW_TEST
-    hwUnitTest2();
+      hwUnitTest2();
 #endif
 
 #ifdef STRESS_TEST
-    desUnitStressTest();
-    exit(0);
+      desUnitStressTest();
+      exit(0);
 #endif
 
-    sesUnitTest();
-    desUnitTest();
+      sesUnitTest();
+      desUnitTest();
 
-    /* Internal checks */
-    // binUnitTest();
-    //hwUnitTest();
-    jitterUnitTest();
-    rsiUnitTest();
-    hashUnitTest();
-    dgaUnitTest();
-    hllUnitTest();
-    bitmapUnitTest();
-    automataUnitTest();
-    analyzeUnitTest();
-    ndpi_self_check_host_match();
-    analysisUnitTest();
-    rulesUnitTest();
+      /* Internal checks */
+      // binUnitTest();
+      //hwUnitTest();
+      jitterUnitTest();
+      rsiUnitTest();
+      hashUnitTest();
+      dgaUnitTest();
+      hllUnitTest();
+      bitmapUnitTest();
+      automataUnitTest();
+      analyzeUnitTest();
+      ndpi_self_check_host_match();
+      analysisUnitTest();
+      rulesUnitTest();
 #endif
-
+    }
+    
     gettimeofday(&startup_time, NULL);
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     if(getenv("REP_MINI"))

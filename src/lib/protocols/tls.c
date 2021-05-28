@@ -25,6 +25,7 @@
 #include "ndpi_api.h"
 #include "ndpi_md5.h"
 #include "ndpi_sha1.h"
+#include "ndpi_encryption.h"
 
 extern char *strptime(const char *s, const char *format, struct tm *tm);
 extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
@@ -41,6 +42,8 @@ extern int is_version_with_var_int_transport_params(uint32_t version);
 // #define DEBUG_TLS              1
 // #define DEBUG_TLS_BLOCKS       1
 // #define DEBUG_CERTIFICATE_HASH
+
+// #define DEBUG_HEURISTIC
 
 // #define DEBUG_JA3C 1
 
@@ -108,6 +111,8 @@ extern u_int32_t get_stun_lru_key(struct ndpi_flow_struct *flow, u_int8_t rev);
 static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow, u_int32_t protocol);
 
+static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct,
+				struct ndpi_flow_struct *flow);
 /* **************************************** */
 
 static u_int32_t ndpi_tls_refine_master_protocol(struct ndpi_detection_module_struct *ndpi_struct,
@@ -306,6 +311,36 @@ static int extractRDNSequence(struct ndpi_packet_struct *packet,
 
   return(is_printable);
 }
+#endif
+/* **************************************** */
+
+static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct,
+				struct ndpi_flow_struct *flow) {
+  if(flow->detected_protocol_stack[1] == NDPI_PROTOCOL_UNKNOWN) {
+    /* Subprotocol not yet set */
+
+    if(ndpi_struct->tls_cert_cache && flow->packet.iph && flow->packet.tcp) {
+      u_int32_t key = flow->packet.iph->daddr + flow->packet.tcp->dest;
+      u_int16_t cached_proto;
+
+      if(ndpi_lru_find_cache(ndpi_struct->tls_cert_cache, key,
+			     &cached_proto, 0 /* Don't remove it as it can be used for other connections */)) {
+
+	flow->detected_protocol_stack[0] = cached_proto,
+	flow->detected_protocol_stack[1] = NDPI_PROTOCOL_TLS;
+#ifndef __KERNEL__
+	{
+	  ndpi_protocol ret = NDPI_PROTOCOL_NULL;
+	  flow->category = ndpi_get_proto_category(ndpi_struct, ret);
+	  ndpi_check_subprotocol_risk(flow, cached_proto);
+	}
+#endif
+      }
+    }
+  }
+}
+
+#ifndef __KERNEL__
 
 /* **************************************** */
 
@@ -512,8 +547,20 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 		  if(matched_name == 0) {
 		    if(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name[0] == '\0')
 		      matched_name = 1;	/* No SNI */
-		    else if((dNSName[0] == '*') && strstr(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, &dNSName[1]))
-		      matched_name = 1;
+		    else if (dNSName[0] == '*')
+		    {
+		      char * label = strstr(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, &dNSName[1]);
+
+		      if (label != NULL)
+		      {
+		        char * first_dot = strchr(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, '.');
+
+		        if (first_dot == NULL || first_dot >= label)
+		        {
+		          matched_name = 1;
+		        }
+		      }
+		    }
 		    else if(strcmp(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, dNSName) == 0)
 		      matched_name = 1;
 		  }
@@ -570,9 +617,25 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
       int rc = ndpi_match_string_value(ndpi_struct->tls_cert_subject_automa.ac_automa,
 				       rdnSeqBuf, strlen(rdnSeqBuf),&proto_id);
 
-      if(rc == 0)
+      if(rc == 0) {
+	/* Match found */
+	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, proto_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED};
+
 	flow->detected_protocol_stack[0] = proto_id,
 	  flow->detected_protocol_stack[1] = NDPI_PROTOCOL_TLS;
+
+	flow->category = ndpi_get_proto_category(ndpi_struct, ret);
+	ndpi_check_subprotocol_risk(flow, proto_id);
+
+	if(ndpi_struct->tls_cert_cache == NULL)
+	  ndpi_struct->tls_cert_cache = ndpi_lru_cache_init(1024);
+
+	if(ndpi_struct->tls_cert_cache && flow->packet.iph) {
+	  u_int32_t key = flow->packet.iph->daddr + flow->packet.tcp->dest;
+
+	  ndpi_lru_add_to_cache(ndpi_struct->tls_cert_cache, key, proto_id);
+	}
+      }
     }
   }
 
@@ -691,7 +754,7 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
         u_int16_t rc1 = ndpi_match_string(ndpi_struct->malicious_sha1_automa.ac_automa, sha1_str);
 
         if(rc1 > 0)
-          ndpi_set_risk(flow, NDPI_MALICIOUS_SHA1);
+          ndpi_set_risk(flow, NDPI_MALICIOUS_SHA1_CERTIFICATE);
       }
 
       processCertificateElements(ndpi_struct, flow, certificates_offset, certificate_len);
@@ -743,6 +806,8 @@ static int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
        && (packet->payload[0] == 0x02 /* Server Hello */)) {
       flow->l4.tcp.tls.certificate_processed = 1; /* No Certificate with TLS 1.3+ */
     }
+
+    checkTLSSubprotocol(ndpi_struct, flow);
     break;
 
   case 0x0b: /* Certificate */
@@ -1029,6 +1094,78 @@ static void tlsInitExtraPacketProcessing(struct ndpi_detection_module_struct *nd
 }
 
 /* **************************************** */
+#ifndef __KERNEL__
+static void tlsCheckUncommonALPN(struct ndpi_flow_struct *flow)
+{
+  /* see: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml */
+  static char const * const common_alpns[] = {
+    "http/0.9", "http/1.0", "http/1.1",
+    "spdy/1", "spdy/2", "spdy/3", "spdy/3.1",
+    "stun.turn", "stun.nat-discovery",
+    "h2", "h2c", "h2-16", "h2-15", "h2-14",
+    "webrtc", "c-webrtc",
+    "ftp", "imap", "pop3", "managesieve", "coap",
+    "xmpp-client", "xmpp-server",
+    "acme-tls/1",
+    "mqtt", "dot", "ntske/1", "sunrpc",
+    "h3",
+    "smb",
+    "irc",
+
+    /* QUIC ALPNs */
+    "h3-T051", "h3-T050",
+    "h3-32", "h3-30", "h3-29", "h3-28", "h3-27", "h3-24", "h3-22",
+    "hq-30", "hq-29", "hq-28", "hq-27",
+    "h3-fb-05", "h1q-fb",
+    "doq-i00"
+  };
+
+  /*
+   * If the ALPN list increases in size, iterating over all items for every incoming ALPN may
+   * have a performance impact. A hash map could solve this issue.
+   */
+
+  char * alpn_start = flow->protos.tls_quic_stun.tls_quic.alpn;
+  char * comma_or_nul = alpn_start;
+  char const *alpn;
+  int alpn_found;
+  int alpn_len;
+  size_t i;
+  do {
+
+    comma_or_nul = strchr(comma_or_nul, ',');
+    if (comma_or_nul == NULL)
+    {
+      comma_or_nul = alpn_start + strlen(alpn_start);
+    }
+
+    alpn_len = comma_or_nul - alpn_start;
+    alpn = alpn_start;
+    alpn_found = 0;
+    for (i = 0; i < sizeof(common_alpns)/sizeof(common_alpns[0]); ++i)
+    {
+      if (strlen(common_alpns[i]) == alpn_len &&
+          strncmp(alpn, common_alpns[i], alpn_len) == 0)
+      {
+        alpn_found = 1;
+        break;
+      }
+    }
+
+    if (alpn_found == 0)
+    {
+#ifdef DEBUG_TLS
+      printf("TLS uncommon ALPN found: %.*s\n", alpn_len, alpn);
+#endif
+      ndpi_set_risk(flow, NDPI_TLS_UNCOMMON_ALPN);
+      break;
+    }
+
+    alpn_start = comma_or_nul + 1;
+  } while (*(comma_or_nul++) != '\0');
+}
+#endif
+/* **************************************** */
 
 static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow, u_int32_t protocol) {
@@ -1096,8 +1233,12 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
     u_int16_t version_offset = (!is_dtls) ? 4 : 12;
     u_int16_t offset = (!is_dtls) ? 38 : 46, extension_len, j;
     u_int8_t  session_id_len =  0;
-    if (base_offset < total_len)
-      session_id_len = packet->payload[base_offset];
+
+    if((base_offset >= total_len) ||
+       (version_offset + 1) >= total_len)
+      return 0; /* Not found */
+
+    session_id_len = packet->payload[base_offset];
 
 #ifdef DEBUG_TLS
     printf("TLS [len: %u][handshake_type: %02X]\n", packet->payload_packet_len, handshake_type);
@@ -1109,7 +1250,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
       int i, rc;
 
       ja3.server.tls_handshake_version = tls_version;
-      
+
 #ifdef DEBUG_TLS
       printf("TLS Server Hello [version: 0x%04X]\n", tls_version);
 #endif
@@ -1197,19 +1338,25 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
 
 	      if((alpn_str_len+alpn_len+1) < (sizeof(alpn_str)-1)) {
-		if(alpn_str_len > 0) {
-		  alpn_str[alpn_str_len] = ',';
-		  alpn_str_len++;
-		}
+	        if(alpn_str_len > 0) {
+	          alpn_str[alpn_str_len] = ',';
+	          alpn_str_len++;
+	        }
 
-		for(alpn_i=0; alpn_i<alpn_len; alpn_i++)
-		  alpn_str[alpn_str_len+alpn_i] = packet->payload[s_offset+alpn_i];
+	        for(alpn_i=0; alpn_i<alpn_len; alpn_i++)
+	        {
+	          alpn_str[alpn_str_len+alpn_i] = packet->payload[s_offset+alpn_i];
+	        }
 
-		s_offset += alpn_len, alpn_str_len += alpn_len;;
-	      } else
-		break;
-	    } else
+	        s_offset += alpn_len, alpn_str_len += alpn_len;;
+	      } else {
+	        ndpi_set_risk(flow, NDPI_TLS_UNCOMMON_ALPN);
+	        break;
+	      }
+	    } else {
+	      ndpi_set_risk(flow, NDPI_TLS_UNCOMMON_ALPN);
 	      break;
+	    }
 	  } /* while */
 
 	  alpn_str[alpn_str_len] = '\0';
@@ -1219,6 +1366,9 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
 	  if(flow->protos.tls_quic_stun.tls_quic.alpn == NULL)
 	    flow->protos.tls_quic_stun.tls_quic.alpn = ndpi_strdup(alpn_str);
+
+	  if(flow->protos.tls_quic_stun.tls_quic.alpn != NULL)
+	    tlsCheckUncommonALPN(flow);
 
 	  snprintf(ja3.server.alpn, sizeof(ja3.server.alpn), "%s", alpn_str);
 
@@ -1254,51 +1404,53 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	    printf("Server TLS Invalid len %u vs %u\n", s_offset+extension_len, total_len);
 #endif
 	  }
-	}      
+	}
 
 	i += 4 + extension_len, offset += 4 + extension_len;
       } /* for */
 
-      ja3_str_len = snprintf(ja3_str, sizeof(ja3_str), "%u,", ja3.server.tls_handshake_version);
+      ja3_str_len = snprintf(ja3_str, JA3_STR_LEN, "%u,", ja3.server.tls_handshake_version);
 
-      for(i=0; i<ja3.server.num_cipher; i++) {
-	rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u", (i > 0) ? "-" : "", ja3.server.cipher[i]);
+      for(i=0; (i<ja3.server.num_cipher) && (JA3_STR_LEN > ja3_str_len); i++) {
+	rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u", (i > 0) ? "-" : "", ja3.server.cipher[i]);
 
 	if(rc <= 0) break; else ja3_str_len += rc;
       }
 
-      rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, ",");
-      if(rc > 0 && ja3_str_len + rc < JA3_STR_LEN) ja3_str_len += rc;
+      if(JA3_STR_LEN > ja3_str_len) {
+	rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, ",");
+	if(rc > 0 && ja3_str_len + rc < JA3_STR_LEN) ja3_str_len += rc;
+      }
 
       /* ********** */
 
-      for(i=0; i<ja3.server.num_tls_extension; i++) {
-	int rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u", (i > 0) ? "-" : "", ja3.server.tls_extension[i]);
+      for(i=0; (i<ja3.server.num_tls_extension) && (JA3_STR_LEN > ja3_str_len); i++) {
+	int rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u", (i > 0) ? "-" : "", ja3.server.tls_extension[i]);
 
 	if(rc <= 0) break; else ja3_str_len += rc;
       }
 
       if(ndpi_struct->enable_ja3_plus) {
-	for(i=0; i<ja3.server.num_elliptic_curve_point_format; i++) {
-	  rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u",
+	for(i=0; (i<ja3.server.num_elliptic_curve_point_format) && (JA3_STR_LEN > ja3_str_len); i++) {
+	  rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u",
 			(i > 0) ? "-" : "", ja3.server.elliptic_curve_point_format[i]);
 	  if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc; else break;
 	}
 
-	if(ja3.server.alpn[0] != '\0') {
-	  rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, ",%s", ja3.server.alpn);
+	if((ja3.server.alpn[0] != '\0') && (JA3_STR_LEN > ja3_str_len)) {
+	  rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, ",%s", ja3.server.alpn);
 	  if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc;
 	}
-	
+
 #ifdef DEBUG_TLS
 	printf("[JA3+] Server: %s \n", ja3_str);
 #endif
-      } else {      
+      } else {
 #ifdef DEBUG_TLS
 	printf("[JA3] Server: %s \n", ja3_str);
 #endif
       }
-      
+
       ndpi_MD5Init(&ctx);
       ndpi_MD5Update(&ctx, (const unsigned char *)ja3_str, strlen(ja3_str));
       ndpi_MD5Final(md5_hash, &ctx);
@@ -1319,7 +1471,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
       flow->protos.tls_quic_stun.tls_quic.ssl_version = ja3.client.tls_handshake_version = tls_version;
       if(flow->protos.tls_quic_stun.tls_quic.ssl_version < 0x0302) /* TLSv1.1 */
 	ndpi_set_risk(flow, NDPI_TLS_OBSOLETE_VERSION);
- 
+
       if((session_id_len+base_offset+3) > packet->payload_packet_len)
 	return(0); /* Not found */
 
@@ -1342,30 +1494,96 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
 
       if((cipher_offset+cipher_len) <= total_len) {
+	u_int8_t safari_ciphers = 0, chrome_ciphers = 0, this_is_not_safari = 0, looks_like_safari_on_big_sur = 0;
+
 	for(i=0; i<cipher_len;) {
 	  u_int16_t *id = (u_int16_t*)&packet->payload[cipher_offset+i];
-
-#ifdef DEBUG_TLS
-	  printf("Client TLS [cipher suite: %u/0x%04X] [%d/%u]\n", ntohs(*id), ntohs(*id), i, cipher_len);
-#endif
-	  if((*id == 0) || (packet->payload[cipher_offset+i] != packet->payload[cipher_offset+i+1])) {
+	  u_int16_t cipher_id = ntohs(*id);
+	  
+	  if(packet->payload[cipher_offset+i] != packet->payload[cipher_offset+i+1] /* Skip Grease */) {
 	    /*
 	      Skip GREASE [https://tools.ietf.org/id/draft-ietf-tls-grease-01.html]
 	      https://engineering.salesforce.com/tls-fingerprinting-with-ja3-and-ja3s-247362855967
 	    */
 
+#if defined(DEBUG_TLS) || defined(DEBUG_HEURISTIC)
+	    printf("Client TLS [non-GREASE cipher suite: %u/0x%04X] [%d/%u]\n", cipher_id, cipher_id, i, cipher_len);
+#endif
+
 	    if(ja3.client.num_cipher < MAX_NUM_JA3)
-	      ja3.client.cipher[ja3.client.num_cipher++] = ntohs(*id);
+	      ja3.client.cipher[ja3.client.num_cipher++] = cipher_id;
 	    else {
 	      invalid_ja3 = 1;
 #ifdef DEBUG_TLS
 	      printf("Client TLS Invalid cipher %u\n", ja3.client.num_cipher);
 #endif
 	    }
+
+#if defined(DEBUG_TLS) || defined(DEBUG_HEURISTIC)
+	    printf("Client TLS [cipher suite: %u/0x%04X] [%d/%u]\n", cipher_id, cipher_id, i, cipher_len);
+#endif
+
+	    switch(cipher_id) {
+	    case TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+	    case TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+	      safari_ciphers++;
+	      break;
+
+	    case TLS_AES_128_GCM_SHA256:
+	    case TLS_AES_256_GCM_SHA384:
+	    case TLS_CHACHA20_POLY1305_SHA256:
+	      chrome_ciphers++;
+	      break;
+
+	    case TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:
+	    case TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+	    case TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+	    case TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:
+	    case TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:
+	    case TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:
+	    case TLS_RSA_WITH_AES_128_CBC_SHA:
+	    case TLS_RSA_WITH_AES_256_CBC_SHA:
+	    case TLS_RSA_WITH_AES_128_GCM_SHA256:
+	    case TLS_RSA_WITH_AES_256_GCM_SHA384:
+	      safari_ciphers++, chrome_ciphers++;
+	      break;
+
+	    case TLS_RSA_WITH_3DES_EDE_CBC_SHA:
+	      looks_like_safari_on_big_sur = 1;
+	      break;
+	    }
+	  } else {
+#if defined(DEBUG_TLS) || defined(DEBUG_HEURISTIC)
+	    printf("Client TLS [GREASE cipher suite: %u/0x%04X] [%d/%u]\n", cipher_id, cipher_id, i, cipher_len);
+#endif
+	    
+	    this_is_not_safari = 1; /* NOTE: BugSur and up have grease support */
 	  }
 
 	  i += 2;
-	}
+	} /* for */
+
+	/* NOTE:
+	   we do not check for duplicates as with signatures because
+	   this is time consuming and we want to avoid overhead whem possible
+	*/
+	if(this_is_not_safari)
+	  flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls = 0;
+	else if((safari_ciphers == 12) || (this_is_not_safari && looks_like_safari_on_big_sur))
+	  flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls = 1;
+	
+	if(chrome_ciphers == 13)
+	  flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls = 1;
+
+	/* Note that both Safari and Chrome can overlap */
+#ifdef DEBUG_HEURISTIC
+	printf("[CIPHERS] [is_chrome_tls: %u (%u)][is_safari_tls: %u (%u)][this_is_not_safari: %u]\n",
+	       flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls,
+	       chrome_ciphers,
+	       flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls,
+	       safari_ciphers,
+	       this_is_not_safari);
+#endif
       } else {
 	invalid_ja3 = 1;
 #ifdef DEBUG_TLS
@@ -1374,12 +1592,12 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
       }
 
       offset = base_offset + session_id_len + cookie_len + cipher_len + 2;
+      offset += (!is_dtls) ? 1 : 2;
 
       if(offset < total_len) {
 	u_int16_t compression_len;
 	u_int16_t extensions_len;
 
-	offset += (!is_dtls) ? 1 : 2;
 	compression_len = packet->payload[offset];
 	offset++;
 
@@ -1390,7 +1608,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	// offset += compression_len + 3;
 	offset += compression_len;
 
-	if(offset < total_len) {
+	if(offset+1 < total_len) {
 	  extensions_len = ntohs(*((u_int16_t*)&packet->payload[offset]));
 	  offset += 2;
 
@@ -1404,8 +1622,10 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	    u_int extension_offset = 0;
 	    u_int32_t j;
 
-	    while(extension_offset < extensions_len) {
+	    while(extension_offset < extensions_len &&
+		  offset+extension_offset+4 <= total_len) {
 	      u_int16_t extension_id, extension_len, extn_off = offset+extension_offset;
+
 
 	      extension_id = ntohs(*((u_int16_t*)&packet->payload[offset+extension_offset]));
 	      extension_offset += 2;
@@ -1436,55 +1656,57 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #ifdef DEBUG_TLS
 		printf("[TLS] Extensions: found server name\n");
 #endif
+		if((offset+extension_offset+4) < packet->payload_packet_len) {
 
-		len = (packet->payload[offset+extension_offset+3] << 8) + packet->payload[offset+extension_offset+4];
-		len = (u_int)ndpi_min(len, sizeof(buffer)-1);
+		  len = (packet->payload[offset+extension_offset+3] << 8) + packet->payload[offset+extension_offset+4];
+		  len = (u_int)ndpi_min(len, sizeof(buffer)-1);
 
-		if((offset+extension_offset+5+len) <= packet->payload_packet_len) {
-		  strncpy(buffer, (char*)&packet->payload[offset+extension_offset+5], len);
-		  buffer[len] = '\0';
+		  if((offset+extension_offset+5+len) <= packet->payload_packet_len) {
+		    strncpy(buffer, (char*)&packet->payload[offset+extension_offset+5], len);
+		    buffer[len] = '\0';
 
-		  cleanupServerName(buffer, sizeof(buffer));
+		    cleanupServerName(buffer, sizeof(buffer));
 
-		  snprintf(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name,
-			   sizeof(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name),
-			   "%s", buffer);
+		    snprintf(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name,
+			     sizeof(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name),
+			     "%s", buffer);
 #ifdef DEBUG_TLS
-		  printf("[TLS] SNI: [%s]\n", buffer);
+		    printf("[TLS] SNI: [%s]\n", buffer);
 #endif
-		  if(!is_quic) {
-		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, buffer, strlen(buffer)))
-		      flow->l4.tcp.tls.subprotocol_detected = 1;
+		    if(!is_quic) {
+		      if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, buffer, strlen(buffer)))
+		        flow->l4.tcp.tls.subprotocol_detected = 1;
+		    } else {
+		      if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_QUIC, buffer, strlen(buffer)))
+		        flow->l4.tcp.tls.subprotocol_detected = 1;
+		    }
+
+		    if(ndpi_check_dga_name(ndpi_struct, flow,
+					   flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, 1)) {
+		      char *sni = flow->protos.tls_quic_stun.tls_quic.client_requested_server_name;
+		      int len = strlen(sni);
+
+#ifdef DEBUG_TLS
+		      printf("[TLS] SNI: (DGA) [%s]\n", flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
+#endif
+
+		      if((len >= 4)
+		         /* Check if it ends in .com or .net */
+		         && ((strcmp(&sni[len-4], ".com") == 0) || (strcmp(&sni[len-4], ".net") == 0))
+		         && (strncmp(sni, "www.", 4) == 0)) /* Not starting with www.... */
+		        ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS);
+		    } else {
+#ifdef DEBUG_TLS
+		      printf("[TLS] SNI: (NO DGA) [%s]\n", flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
+#endif
+		    }
 		  } else {
-		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_QUIC, buffer, strlen(buffer)))
-		      flow->l4.tcp.tls.subprotocol_detected = 1;
-		  }
-
-		  if(ndpi_check_dga_name(ndpi_struct, flow,
-					 flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, 1)) {
-		    char *sni = flow->protos.tls_quic_stun.tls_quic.client_requested_server_name;
-		    int len = strlen(sni);
-
 #ifdef DEBUG_TLS
-		    printf("[TLS] SNI: (DGA) [%s]\n", flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
-#endif
-
-		    if((len >= 4)
-		       /* Check if it ends in .com or .net */ 
-		       && ((strcmp(&sni[len-4], ".com") == 0) || (strcmp(&sni[len-4], ".net") == 0))
-		       && (strncmp(sni, "www.", 4) == 0)) /* Not starting with www.... */
-		      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS);
-		  } else {
-#ifdef DEBUG_TLS
-		    printf("[TLS] SNI: (NO DGA) [%s]\n", flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
+		    printf("[TLS] Extensions server len too short: %u vs %u\n",
+			   offset+extension_offset+5+len,
+			   packet->payload_packet_len);
 #endif
 		  }
-		} else {
-#ifdef DEBUG_TLS
-		  printf("[TLS] Extensions server len too short: %u vs %u\n",
-			 offset+extension_offset+5+len,
-			 packet->payload_packet_len);
-#endif
 		}
 	      } else if(extension_id == 10 /* supported groups */) {
 		u_int16_t s_offset = offset+extension_offset + 2;
@@ -1550,7 +1772,8 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
 		}
 	      } else if(extension_id == 13 /* signature algorithms */) {
-		u_int16_t s_offset = offset+extension_offset;
+		u_int16_t s_offset = offset+extension_offset, safari_signature_algorithms = 0, chrome_signature_algorithms = 0,
+		  duplicate_found = 0, last_signature = 0;
 		u_int16_t tot_signature_algorithms_len = ntohs(*((u_int16_t*)&packet->payload[s_offset]));
 
 #ifdef DEBUG_TLS
@@ -1560,11 +1783,108 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		s_offset += 2;
 		tot_signature_algorithms_len = ndpi_min((sizeof(ja3.client.signature_algorithms) / 2) - 1, tot_signature_algorithms_len);
 
+#ifdef TLS_HANDLE_SIGNATURE_ALGORITMS
+		flow->protos.tls_quic_stun.tls_quic.num_tls_signature_algorithms = ndpi_min(tot_signature_algorithms_len / 2, MAX_NUM_TLS_SIGNATURE_ALGORITHMS);
+
+		memcpy(flow->protos.tls_quic_stun.tls_quic.client_signature_algorithms,
+		       &packet->payload[s_offset], 2 /* 16 bit */*flow->protos.tls_quic_stun.tls_quic.num_tls_signature_algorithms);
+#endif
+
 		for(i=0; i<tot_signature_algorithms_len; i++) {
 		  int rc = snprintf(&ja3.client.signature_algorithms[i*2], sizeof(ja3.client.signature_algorithms)-i*2, "%02X", packet->payload[s_offset+i]);
 
 		  if(rc < 0) break;
 		}
+
+		for(i=0; i<tot_signature_algorithms_len; i+=2) {
+		  u_int16_t signature_algo = (u_int16_t)ntohs(*((u_int16_t*)&packet->payload[s_offset+i]));
+
+		  if(last_signature == signature_algo) {
+		    /* Consecutive duplication */
+		    duplicate_found = 1;
+		    continue;
+		  } else {
+		    /* Check for other duplications */
+		    u_int j, all_ok = 1;
+
+		    for(j=0; j<tot_signature_algorithms_len; j+=2) {
+		      if(j != i) {
+			u_int16_t j_signature_algo = (u_int16_t)ntohs(*((u_int16_t*)&packet->payload[s_offset+j]));
+
+			if((signature_algo == j_signature_algo)
+			   && (i < j) /* Don't skip both of them */) {
+#ifdef DEBUG_HEURISTIC
+			  printf("[SIGNATURE] [TLS Signature Algorithm] Skipping duplicate 0x%04X\n", signature_algo);
+#endif
+			  
+			  duplicate_found = 1, all_ok = 0;
+			  break;
+			}
+		      }
+		    }
+
+		    if(!all_ok)
+		      continue;
+		  }
+
+		  last_signature = signature_algo;
+
+#ifdef DEBUG_HEURISTIC
+		  printf("[SIGNATURE] [TLS Signature Algorithm] 0x%04X\n", signature_algo);
+#endif
+		  switch(signature_algo) {
+		  case ECDSA_SECP521R1_SHA512:
+		    flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_firefox_tls = 1;
+		    break;
+
+		  case ECDSA_SECP256R1_SHA256:
+		  case ECDSA_SECP384R1_SHA384:
+		  case RSA_PKCS1_SHA256:
+		  case RSA_PKCS1_SHA384:
+		  case RSA_PKCS1_SHA512:
+		  case RSA_PSS_RSAE_SHA256:
+		  case RSA_PSS_RSAE_SHA384:
+		  case RSA_PSS_RSAE_SHA512:
+		    chrome_signature_algorithms++, safari_signature_algorithms++;
+#ifdef DEBUG_HEURISTIC
+		    printf("[SIGNATURE] [Chrome/Safari] Found 0x%04X [chrome: %u][safari: %u]\n",
+			   signature_algo, chrome_signature_algorithms, safari_signature_algorithms);
+#endif
+
+		    break;
+		  }
+		}
+
+#ifdef DEBUG_HEURISTIC
+		printf("[SIGNATURE] [safari_signature_algorithms: %u][chrome_signature_algorithms: %u]\n",
+		       safari_signature_algorithms, chrome_signature_algorithms);
+#endif
+
+		if(flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_firefox_tls)
+		  flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls = 0,
+		    flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls = 0;
+
+		if(safari_signature_algorithms != 8)
+		   flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls = 0;
+
+		if((chrome_signature_algorithms != 8) || duplicate_found)
+		   flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls = 0;
+
+		/* Avoid Chrome and Safari overlaps, thing that cannot happen with Firefox */
+		if(flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls)
+		  flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls = 0;
+
+		if((flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls == 0)
+		   && duplicate_found)
+		  flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls = 1; /* Safari */
+		
+#ifdef DEBUG_HEURISTIC
+		printf("[SIGNATURE] [is_firefox_tls: %u][is_chrome_tls: %u][is_safari_tls: %u][duplicate_found: %u]\n",
+		       flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_firefox_tls,
+		       flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_chrome_tls,
+		       flow->protos.tls_quic_stun.tls_quic.browser_euristics.is_safari_tls,
+		       duplicate_found);
+#endif
 
 		ja3.client.signature_algorithms[i*2] = '\0';
 
@@ -1586,7 +1906,8 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		while(s_offset < tot_alpn_len && s_offset < total_len) {
 		  u_int8_t alpn_i, alpn_len = packet->payload[s_offset++];
 
-		  if((s_offset + alpn_len) <= tot_alpn_len) {
+		  if((s_offset + alpn_len) <= tot_alpn_len &&
+		     (s_offset + alpn_len) <= total_len) {
 #ifdef DEBUG_TLS
 		    printf("Client TLS [ALPN: %u]\n", alpn_len);
 #endif
@@ -1792,47 +2113,47 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	      int rc;
 
 	    compute_ja3c:
-	      ja3_str_len = snprintf(ja3_str, sizeof(ja3_str), "%u,", ja3.client.tls_handshake_version);
+	      ja3_str_len = snprintf(ja3_str, JA3_STR_LEN, "%u,", ja3.client.tls_handshake_version);
 
 	      for(i=0; i<ja3.client.num_cipher; i++) {
-		rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u",
+		rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u",
 			      (i > 0) ? "-" : "", ja3.client.cipher[i]);
 		if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc; else break;
 	      }
 
-	      rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, ",");
+	      rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, ",");
 	      if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc;
 
 	      /* ********** */
 
 	      for(i=0; i<ja3.client.num_tls_extension; i++) {
-		rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u",
+		rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u",
 			      (i > 0) ? "-" : "", ja3.client.tls_extension[i]);
 		if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc; else break;
 	      }
 
-	      rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, ",");
+	      rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, ",");
 	      if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc;
 
 	      /* ********** */
 
 	      for(i=0; i<ja3.client.num_elliptic_curve; i++) {
-		rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u",
+		rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u",
 			      (i > 0) ? "-" : "", ja3.client.elliptic_curve[i]);
 		if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc; else break;
 	      }
 
-	      rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, ",");
+	      rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, ",");
 	      if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc;
 
 	      for(i=0; i<ja3.client.num_elliptic_curve_point_format; i++) {
-		rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len, "%s%u",
+		rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u",
 			      (i > 0) ? "-" : "", ja3.client.elliptic_curve_point_format[i]);
 		if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc; else break;
 	      }
 
 	      if(ndpi_struct->enable_ja3_plus) {
-		rc = snprintf(&ja3_str[ja3_str_len], sizeof(ja3_str)-ja3_str_len,
+		rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len,
 			      ",%s,%s,%s", ja3.client.signature_algorithms, ja3.client.supported_versions, ja3.client.alpn);
 		if((rc > 0) && (ja3_str_len + rc < JA3_STR_LEN)) ja3_str_len += rc;
 	      }

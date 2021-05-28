@@ -76,7 +76,10 @@ if test -d ".git" || test -f ".git" ; then :
 else
      GIT_RELEASE="${PACKAGE_VERSION}"
      GIT_DATE=`date -u -r CHANGELOG.md`
-     NDPI_API_VERSION=`date +%s | cut -c7-10`
+     if test -z "$SOURCE_DATE_EPOCH" ; then :
+         SOURCE_DATE_EPOCH=`date +%s`
+     fi
+     NDPI_API_VERSION=`echo $SOURCE_DATE_EPOCH | cut -c7-10`
 fi
 
 NDPI_API_VERSION=`echo $NDPI_API_VERSION | sed 's/^0*//'`
@@ -123,6 +126,10 @@ CUSTOM_NDPI=
 if test -d ../nDPI-custom; then :
    CUSTOM_NDPI="-DCUSTOM_NDPI_PROTOCOLS"
    AC_MSG_RESULT([Compiling with custom nDPI protocols])
+fi
+
+if test -d ../ndpi-pro; then :
+   with_maxminddb=1
 fi
 
 case "$host" in
@@ -228,10 +235,6 @@ if test "${with_maxminddb+set}" = set; then :
     AC_DEFINE_UNQUOTED(HAVE_MAXMINDDB, 1, [MaxMind DB support])
   fi
 fi
-
-dnl> TCP segments management (buffer, sort and reassembly the segments)
-dnl> FRAG_MAN_ENABLED=1
-dnl> AC_DEFINE_UNQUOTED(FRAG_MAN, ${FRAG_MAN_ENABLED}, [Enable the TCP segments fragmentation management])
 
 AC_CONFIG_FILES([Makefile example/Makefile example/Makefile.dpdk tests/Makefile tests/unit/Makefile tests/dga/Makefile libndpi.pc src/include/ndpi_define.h src/lib/Makefile python/Makefile fuzz/Makefile src/include/ndpi_api.h])
 AC_CONFIG_FILES([tests/do.sh], [chmod +x tests/do.sh])
