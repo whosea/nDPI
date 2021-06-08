@@ -1487,7 +1487,7 @@ if(!rep_mini) {
 
   if(flow->risk) {
     u_int i;
-
+    u_int16_t cli_score, srv_score;
     fprintf(out, "[Risk: ");
 
     for(i=0; i<NDPI_MAX_RISK; i++)
@@ -1496,7 +1496,7 @@ if(!rep_mini) {
 
     fprintf(out, "]");
 
-    fprintf(out, "[Risk Score: %u]", ndpi_risk2score(flow->risk));
+    fprintf(out, "[Risk Score: %u]", ndpi_risk2score(flow->risk, &cli_score, &srv_score));
   }
   
   if(flow->ssh_tls.ssl_version != 0) fprintf(out, "[%s]", ndpi_ssl_version2str(flow->ndpi_flow, flow->ssh_tls.ssl_version, &known_tls));
@@ -2338,16 +2338,18 @@ void printPortStats(struct port_stats *stats) {
 static void node_flow_risk_walker(const void *node, ndpi_VISIT which, int depth, void *user_data) {
   struct ndpi_flow_info *f = *(struct ndpi_flow_info**)node;
 
-  if(f->risk) {
-    u_int j;
+  if((which == ndpi_preorder) || (which == ndpi_leaf)) { /* Avoid walking the same node multiple times */
+    if(f->risk) {
+      u_int j;
 
-    flows_with_risks++;
+      flows_with_risks++;
 
-    for(j = 0; j < NDPI_MAX_RISK; j++) {
-      ndpi_risk_enum r = (ndpi_risk_enum)j;
+      for(j = 0; j < NDPI_MAX_RISK; j++) {
+        ndpi_risk_enum r = (ndpi_risk_enum)j;
 
-      if(NDPI_ISSET_BIT(f->risk, r))
-	risks_found++, risk_stats[r]++;
+        if(NDPI_ISSET_BIT(f->risk, r))
+	  risks_found++, risk_stats[r]++;
+      }
     }
   }
 }
@@ -3347,9 +3349,10 @@ static void ndpi_process_packet(u_char *args,
        )
     ) {
     struct pcap_pkthdr h;
-    uint32_t *crc, delta = sizeof(struct ndpi_packet_trailer) + 4 /* ethernet trailer */;
+    u_int32_t *crc, delta = sizeof(struct ndpi_packet_trailer) + 4 /* ethernet trailer */;
     struct ndpi_packet_trailer *trailer;
-
+    u_int16_t cli_score, srv_score;
+    
     memcpy(&h, header, sizeof(h));
 
     if(h.caplen > (sizeof(extcap_buf)-sizeof(struct ndpi_packet_trailer) - 4)) {
@@ -3362,7 +3365,7 @@ static void ndpi_process_packet(u_char *args,
     memset(trailer, 0, sizeof(struct ndpi_packet_trailer));
     trailer->magic = htonl(WIRESHARK_NTOP_MAGIC);
     trailer->flow_risk = htonl64(flow_risk);
-    trailer->flow_score = htons(ndpi_risk2score(flow_risk));
+    trailer->flow_score = htons(ndpi_risk2score(flow_risk, &cli_score, &srv_score));
     trailer->master_protocol = htons(p.master_protocol), trailer->app_protocol = htons(p.app_protocol);
     ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct, p, trailer->name, sizeof(trailer->name));
     crc = (uint32_t*)&extcap_buf[h.caplen+sizeof(struct ndpi_packet_trailer)];

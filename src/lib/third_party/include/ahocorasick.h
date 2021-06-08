@@ -54,7 +54,8 @@ typedef char AC_ALPHABET_t;
  **/
 typedef struct {
   uint32_t number; /* Often used to store procotolId */
-  uint16_t category, breed;
+  uint16_t breed,
+           category:14,from_start:1,at_end:1;
 } AC_REP_t;
 
 /* AC_PATTERN_t:
@@ -73,9 +74,9 @@ typedef struct {
 typedef struct
 {
   AC_ALPHABET_t * astring; /* String of alphabets */
-  uint16_t length, /* Length of pattern */
-	    is_existing; /* not union_matchstr */
-  AC_REP_t rep; /* Representative string (optional) */
+  uint16_t        length,  /* Length of pattern */
+	          is_existing; /* not union_matchstr */
+  AC_REP_t rep;   /* Representative string (optional) */
 } AC_PATTERN_t;
 
 typedef struct {
@@ -102,10 +103,11 @@ typedef struct {
 
 typedef struct
 {
-  AC_PATTERN_t * patterns; /* Array of matched pattern */
-  long position; /* The end position of matching pattern(s) in the text */
-  unsigned int match_num; /* Number of matched patterns */
-  unsigned int match_counter; /* Counter of found matches */
+  AC_PATTERN_t *matched[4];   /* for ac_automata_exact_match() */
+  AC_PATTERN_t *patterns;     /* Array of matched pattern */
+  unsigned int  position;     /* The end position of matching pattern(s) in the text */
+  unsigned short int match_num;     /* Number of matched patterns */
+  unsigned short int match_counter; /* Counter of found matches */
 } AC_MATCH_t;
 
 /* AC_TEXT_t:
@@ -115,9 +117,10 @@ typedef struct
  **/
 typedef struct
 {
-  AC_ALPHABET_t * astring; /* String of alphabets */
-  unsigned int length; /* Length of string */
   AC_MATCH_t match;
+  AC_ALPHABET_t * astring;    /* String of alphabets */
+  unsigned short int  length, /* Length of string */
+	              ignore_case;
 } AC_TEXT_t;
 
 
@@ -160,7 +163,7 @@ struct edge;
 
 /*
  * automata node
- * 3 pointers + 8 bytes : 32/20 bytes for 64/32 bit
+ * 4 pointers + 8 bytes : 40/24 bytes for 64/32 bit
  */
 typedef struct ac_node
 {
@@ -174,11 +177,11 @@ typedef struct ac_node
 		 ff:1;		       /* finalized node */
   unsigned short depth;                /* depth: distance between this node and the root */
 
-  AC_PATTERNS_t  * matched_patterns;   /* Array of matched patterns */
-  struct edge   * outgoing;           /* Array of outgoing edges */
+  AC_PATTERNS_t  *matched_patterns;   /* Array of matched patterns */
+  struct edge    *outgoing;           /* Array of outgoing edges */
 
-  struct ac_node * failure_node;       /* The failure node of this node */
-  AC_ALPHABET_t *a_ptr;
+  struct ac_node *failure_node;       /* The failure node of this node */
+  AC_ALPHABET_t  *a_ptr;
 } AC_NODE_t;
 
 #ifndef __SIZEOF_POINTER__
@@ -226,9 +229,15 @@ typedef struct
 
   unsigned long max_str_len; /* largest pattern length. Update by ac_automata_finalize() */
 
-  struct ac_path ac_path[AC_PATTRN_MAX_LENGTH+4];
-  int id;
+  struct ac_path ac_path[AC_PATTRN_MAX_LENGTH+4]; /* for ac_automata_walk */
+  int id;	/* node id */
+  int add_to_range; /* for convert to range */
+  int n_oc,n_range,n_find; /* statistics */
 } AC_AUTOMATA_t;
+
+typedef AC_ERROR_t (*NODE_CALLBACK_f)(AC_AUTOMATA_t *, AC_NODE_t *,int idx, void *);
+
+typedef void (*ALPHA_CALLBACK_f)(AC_AUTOMATA_t *, AC_NODE_t *,AC_NODE_t *,int ,void *);
 
 #define AC_FEATURE_LC 1
 #define AC_FEATURE_NO_ROOT_RANGE 2
@@ -237,9 +246,13 @@ AC_AUTOMATA_t * ac_automata_init     (MATCH_CALLBACK_f mc);
 AC_ERROR_t      ac_automata_feature  (AC_AUTOMATA_t * thiz, unsigned int feature);
 AC_ERROR_t      ac_automata_add      (AC_AUTOMATA_t * thiz, AC_PATTERN_t * str);
 AC_ERROR_t      ac_automata_finalize (AC_AUTOMATA_t * thiz);
+AC_ERROR_t      ac_automata_walk     (AC_AUTOMATA_t * thiz, NODE_CALLBACK_f node_cb,
+						ALPHA_CALLBACK_f alpha_cb, void *);
+
 int             ac_automata_search   (AC_AUTOMATA_t * thiz,
 						AC_TEXT_t * str, 
 						AC_REP_t * param);
+int             ac_automata_exact_match(AC_PATTERNS_t *mp,int pos, AC_TEXT_t *);
 void            ac_automata_clean    (AC_AUTOMATA_t * thiz);
 void            ac_automata_release  (AC_AUTOMATA_t * thiz, uint8_t free_pattern);
 #ifndef __KERNEL__

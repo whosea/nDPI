@@ -52,21 +52,28 @@ static AC_NODE_t * node_create_next       (AC_NODE_t * thiz, AC_ALPHABET_t alpha
 static int         node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str, int is_existing);
 static int         node_register_outgoing (AC_NODE_t * thiz, AC_NODE_t * next, AC_ALPHABET_t alpha);
 static AC_NODE_t * node_find_next         (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
-static AC_NODE_t * node_findbs_next       (AC_NODE_t * thiz, AC_ALPHABET_t alpha);
-static void        node_release           (AC_NODE_t * thiz);
+static AC_NODE_t * node_findbs_next       (AC_NODE_t * thiz, uint8_t alpha);
+static AC_NODE_t * node_findbs_next_ac    (AC_NODE_t * thiz, uint8_t alpha,int icase);
+static void        node_release           (AC_NODE_t * thiz, int free_pattern);
 static void        node_release_pattern   (AC_NODE_t * thiz);
 static int         node_range_edges       (AC_AUTOMATA_t *thiz, AC_NODE_t * node);
 static inline void node_sort_edges        (AC_NODE_t * thiz);
 
 #ifndef __KERNEL__
-static void dump_node_header(AC_NODE_t * n, size_t *mc,
-                size_t *node_oc,size_t *node_8c,size_t *node_xc, size_t *node_xr);
+struct aho_dump_info {
+  size_t memcnt,node_oc,node_8c,node_xc,node_xr;
+  int    buf_pos,ip;
+  char   *bufstr;
+  size_t bufstr_len;
+};
+
+static void dump_node_header(AC_NODE_t * n, struct aho_dump_info *);
 #endif
 
 /* Private function prototype */
 static int ac_automata_union_matchstrs (AC_NODE_t * node);
 static void ac_automata_set_failure
-        (AC_AUTOMATA_t * thiz, AC_NODE_t * node, struct ac_path * path);
+        (AC_AUTOMATA_t * thiz, AC_NODE_t * node, AC_NODE_t * next, int idx, void *);
 static void ac_automata_traverse_setfailure
         (AC_AUTOMATA_t * thiz);
 
@@ -118,6 +125,26 @@ static uint8_t aho_lc[256] = {
 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255
 };
 
+/* toupper() from glibc */
+static uint8_t aho_xc[256] = {
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,
+ 32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,   0,   0,   0,   0,   0,
+  0,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,
+ 32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
+};
+
 /******************************************************************************
  * FUNCTION: ac_automata_init
  * Initialize automata; allocate memories and set initial values
@@ -128,7 +155,7 @@ static uint8_t aho_lc[256] = {
 AC_AUTOMATA_t * ac_automata_init (MATCH_CALLBACK_f mc)
 {
   AC_AUTOMATA_t * thiz;
-  if(!mc) return NULL;
+//  if(!mc) return NULL;
   thiz = (AC_AUTOMATA_t *)acho_calloc(1,sizeof(AC_AUTOMATA_t));
   if(!thiz) return NULL;
   thiz->root = node_create ();
@@ -136,12 +163,14 @@ AC_AUTOMATA_t * ac_automata_init (MATCH_CALLBACK_f mc)
       acho_free(thiz);
       return NULL;
   }
+  thiz->root->id = 1;
   thiz->root->root = 1;
   thiz->total_patterns = 0;
   thiz->automata_open = 1;
   thiz->match_handler = mc;
   thiz->to_lc = 0;
   thiz->no_root_range = 0;
+  thiz->add_to_range = REALLOC_CHUNK_OUTGOING*2;
   return thiz;
 }
 /******************************************************************************
@@ -157,8 +186,8 @@ AC_ERROR_t ac_automata_feature (AC_AUTOMATA_t * thiz, unsigned int feature)
 {
   if(!thiz) return ACERR_ERROR;
   if(thiz->all_nodes_num || thiz->total_patterns) return ACERR_ERROR;
-  thiz->to_lc = feature & AC_FEATURE_LC ? 1:0;
-  thiz->no_root_range = feature & AC_FEATURE_NO_ROOT_RANGE ? 1:0;
+  thiz->to_lc = (feature & AC_FEATURE_LC) != 0;
+  thiz->no_root_range = (feature & AC_FEATURE_NO_ROOT_RANGE) != 0;
   return ACERR_SUCCESS;
 }
 
@@ -189,18 +218,18 @@ AC_ERROR_t ac_automata_add (AC_AUTOMATA_t * thiz, AC_PATTERN_t * patt)
 
   for (i=0; i<patt->length; i++) {
       alpha = patt->astring[i];
-      if(thiz->to_lc) alpha = (AC_ALPHABET_t)aho_lc[(uint8_t)alpha];
-      if ((next = node_find_next(n, alpha))) {
+      if(thiz->to_lc)
+           alpha = (AC_ALPHABET_t)aho_lc[(uint8_t)alpha];
+
+      if((next = node_find_next(n, alpha)) != 0) {
           n = next;
           continue;
-      } else {
-          next = node_create_next(n, alpha);
-          if(!next)
-              return ACERR_ERROR;
-          next->id = ++thiz->id;
-          thiz->all_nodes_num++;
-          n = next;
       }
+      if(!(next = node_create_next(n, alpha))) 
+              return ACERR_ERROR;
+      next->id = ++thiz->id;
+      thiz->all_nodes_num++;
+      n = next;
     }
   if(thiz->max_str_len < patt->length)
      thiz->max_str_len = patt->length;
@@ -210,8 +239,6 @@ AC_ERROR_t ac_automata_add (AC_AUTOMATA_t * thiz, AC_PATTERN_t * patt)
     return ACERR_DUPLICATE_PATTERN;
   }
 
-  n->final = 1;
- 
   if(node_register_matchstr(n, patt, 0))
       return ACERR_ERROR;
  
@@ -219,6 +246,93 @@ AC_ERROR_t ac_automata_add (AC_AUTOMATA_t * thiz, AC_PATTERN_t * patt)
 
   return ACERR_SUCCESS;
 }
+
+AC_ERROR_t ac_automata_walk(AC_AUTOMATA_t * thiz,
+        NODE_CALLBACK_f node_cb, ALPHA_CALLBACK_f alpha_cb, void *data)
+{
+  unsigned int ip;
+  AC_NODE_t *next, *n;
+  struct ac_path * path = thiz->ac_path;
+  AC_ERROR_t r;
+
+  ip = 1;
+  path[1].n = thiz->root;
+  path[1].idx = 0;
+
+  while(ip) {
+    unsigned int i,last;
+    n = path[ip].n;
+    i = path[ip].idx;
+    last = !n->outgoing || (n->one && i > 0) || (!n->one && i >= n->outgoing->degree);
+    if(node_cb && (!i || last)) {
+            r = node_cb(thiz, n, i, data);
+            if(r != ACERR_SUCCESS) return r;
+    }
+    if(last) {
+        ip--; continue;
+    }
+    next = NULL;
+    if(n->one) {
+        next = (AC_NODE_t *)n->outgoing;
+    } else {
+        while(i < n->outgoing->degree) {
+            next = n->outgoing->next[i];
+            if(next) break;
+            i++;
+        }
+    }
+    if(!next) {
+        if(!n->range || i >= n->outgoing->degree) {
+            r = node_cb ? node_cb(thiz, n, i, data):ACERR_SUCCESS;
+            if(r != ACERR_SUCCESS) return r;
+        }
+        ip--; continue;
+    }
+
+    if(n->depth < AC_PATTRN_MAX_LENGTH) {
+            path[n->depth].l = n->one ? n->one_alpha:
+                                    edge_get_alpha(n->outgoing)[i];
+            if(alpha_cb)
+                alpha_cb(thiz, n, next, i, data);
+    }
+
+    path[ip].idx = i+1;
+    if(ip >= AC_PATTRN_MAX_LENGTH)
+        continue;
+
+    ip++;
+
+    path[ip].n = next;
+    path[ip].idx = 0;
+
+  }
+  return ACERR_SUCCESS;
+}
+
+
+static AC_ERROR_t ac_finalize_node(AC_AUTOMATA_t * thiz,AC_NODE_t * n, int idx, void *data) {
+    if(!n->ff) {
+        n->id = ++(thiz->id);
+        n->ff = 1;
+        if(ac_automata_union_matchstrs (n))
+            return ACERR_ERROR;
+        if(n->use) {
+            if(!n->one) {
+                if(node_range_edges (thiz,n)) {
+                    node_sort_edges (n);
+                    thiz->n_range++;
+                } else
+                    thiz->n_find++;
+            } else
+                thiz->n_oc++;
+        }
+    }
+    if(!n->a_ptr && n->outgoing && !n->one) {
+        n->a_ptr = edge_get_alpha(n->outgoing);
+    }
+    return ACERR_SUCCESS;
+}
+
 
 /******************************************************************************
  * FUNCTION: ac_automata_finalize
@@ -229,71 +343,51 @@ AC_ERROR_t ac_automata_add (AC_AUTOMATA_t * thiz, AC_PATTERN_t * patt)
  * PARAMS:
  * AC_AUTOMATA_t * thiz: the pointer to the automata
  ******************************************************************************/
-AC_ERROR_t ac_automata_finalize (AC_AUTOMATA_t * thiz)
-{
-  unsigned int ip, i, node_id = 0;
-  AC_NODE_t * n, *next;
-  struct ac_path *path;
 
-  if(!thiz->automata_open) return ACERR_SUCCESS;
+AC_ERROR_t ac_automata_finalize (AC_AUTOMATA_t * thiz) {
 
-  path  = thiz->ac_path;
+    AC_ERROR_t r = ACERR_SUCCESS;
+    if(!thiz->automata_open) return r;
 
-  ac_automata_traverse_setfailure (thiz);
+    ac_automata_traverse_setfailure (thiz);
+    thiz->id=0;
+    thiz->n_oc = 0;
+    thiz->n_range = 0;
+    thiz->n_find = 0;
+    r = ac_automata_walk(thiz,ac_finalize_node,NULL,NULL);
+    if(r == ACERR_SUCCESS)
+        thiz->automata_open = 0;
+    return r;
+}
 
-  path[1].n = thiz->root;
-  path[1].idx = 0;
-  ip = 1;
-
-  while(ip != 0) {
-
-        n = path[ip].n;
-        if(!n->ff) {
-            n->id = ++node_id;
-            n->ff = 1;
-            if(ac_automata_union_matchstrs (n))
-                return ACERR_ERROR;
-            if(n->use && !n->one && n->outgoing) {
-                if(node_range_edges (thiz,n))
-                    node_sort_edges (n);
-            }
+int ac_automata_exact_match(AC_PATTERNS_t *mp,int pos, AC_TEXT_t *txt) {
+    AC_PATTERN_t *patterns = mp->patterns;
+    AC_PATTERN_t **matched = txt->match.matched;
+    int i;
+    for(i=0; i < mp->num; i++,patterns++) {
+      do {
+        if(patterns->rep.from_start && patterns->rep.at_end) {
+            if(pos == txt->length && patterns->length == pos)
+                matched[0] = patterns;
+            break;
         }
-        if(!n->a_ptr && n->outgoing && !n->one) {
-            n->a_ptr = edge_get_alpha(n->outgoing);
+        if(patterns->rep.from_start) {
+            if(patterns->length == pos) 
+                if(!matched[1] || patterns->length > matched[1]->length)
+                    matched[1] = patterns;
+            break;
         }
-
-        i = path[ip].idx;
-
-        if(!n->use || (n->one && i > 0) || !n->outgoing) {
-            ip--; continue;
+        if(patterns->rep.at_end) {
+            if(pos == txt->length)
+                if(!matched[2] || patterns->length > matched[2]->length)
+                    matched[2] = patterns;
+            break;
         }
-        if(n->one && !i) {
-            next = (AC_NODE_t *)n->outgoing;
-        } else {
-            if(i >= n->outgoing->degree) {
-                ip--; continue;
-            }
-            for(next = n->outgoing->next[i]; 
-                !next && n->range && i < n->outgoing->degree; 
-                i++, next = n->outgoing->next[i]);
-        }
-
-        if(!next) {
-            ip--;
-            continue;
-        }
-
-        path[ip].idx = i+1;
-        if(ip >= AC_PATTRN_MAX_LENGTH)
-            continue;
-        ip++;
-
-        path[ip].n = next;
-        path[ip].idx = 0;
-  }
-
-  thiz->automata_open = 0; /* do not accept patterns any more */
-  return ACERR_SUCCESS;
+        if(!matched[3] || patterns->length > matched[3]->length)
+            matched[3] = patterns;
+      } while(0);
+    }
+    return 0;
 }
 
 /******************************************************************************
@@ -315,8 +409,8 @@ AC_ERROR_t ac_automata_finalize (AC_AUTOMATA_t * thiz)
 int ac_automata_search (AC_AUTOMATA_t * thiz,
         AC_TEXT_t * txt, AC_REP_t * param)
 {
-  AC_ALPHABET_t alpha;
   unsigned long position;
+  int icase = 0,i;
   AC_MATCH_t *match;
   AC_NODE_t *curr;
   AC_NODE_t *next;
@@ -327,17 +421,21 @@ int ac_automata_search (AC_AUTOMATA_t * thiz,
     return -1;
   position = 0;
   curr = thiz->root;
-  match = &txt->match;
   apos = txt->astring;
-  memset((char *)match,0,sizeof(AC_MATCH_t));
-  
+  match = &txt->match;
+  memset((char*)match,0,sizeof(*match));
+
+  icase = !thiz->to_lc;
+  /* The 'txt->ignore_case' option is checked
+   * separately otherwise clang will detect
+   * uninitialized memory usage much later. */
+  if(txt->ignore_case == 1) icase = 1;
   /* This is the main search loop.
    * it must be keep as lightweight as possible. */
-  while (position < txt->length)
-    {
-      alpha = apos[position];
-      if(thiz->to_lc) alpha = (AC_ALPHABET_t)aho_lc[(uint8_t)alpha];
-      if(!(next = node_findbs_next(curr, alpha))) {
+  while (position < txt->length) {
+      uint8_t alpha = (uint8_t)apos[position];
+      if(thiz->to_lc) alpha = aho_lc[alpha];
+      if(!(next = node_findbs_next_ac(curr, (uint8_t)alpha, icase))) {
           if(curr->failure_node) /* we are not in the root node */
             curr = curr->failure_node;
           else
@@ -345,26 +443,32 @@ int ac_automata_search (AC_AUTOMATA_t * thiz,
       } else {
           curr = next;
           position++;
-      }
-
-      if(curr->final && next) {
-          match->match_counter++; /* we have a matching */
-          if(thiz->match_handler) {
-              /* We check 'next' to find out if we came here after a alphabet
-               * transition or due to a fail. in second case we should not report
-               * matching because it was reported in previous node */
-              match->position = position; // + thiz->base_position;
-              match->match_num = curr->matched_patterns->num;
-              match->patterns = curr->matched_patterns->patterns;
-              /* we found a match! do call-back */
-              if (thiz->match_handler(match, txt, param))
-                  return 1;
-          } else {
-              return 1;
+          if(curr->final) {
+              match->match_counter++; /* we have a matching */
+              /* select best match */
+              ac_automata_exact_match(curr->matched_patterns,position,txt);
+              if(thiz->match_handler) {
+                  /* We check 'next' to find out if we came here after a alphabet
+                   * transition or due to a fail. in second case we should not report
+                   * matching because it was reported in previous node */
+                  match->position = position;
+                  match->match_num = curr->matched_patterns->num;
+                  match->patterns = curr->matched_patterns->patterns;
+                  if (thiz->match_handler(match, txt, param))
+                      return 1;
+              }
           }
       }
-    }
-  return match->match_counter > 0 ? 1:0;
+  }
+  if(thiz->match_handler)
+    return match->match_counter > 0 ? 1:0;
+
+  for(i = 0; i < 4; i++)
+      if(txt->match.matched[i]) {
+            *param = (txt->match.matched[i])->rep;
+            return 1;
+      }
+  return 0;
 }
 
 /******************************************************************************
@@ -378,101 +482,69 @@ int ac_automata_search (AC_AUTOMATA_t * thiz,
  *  2 - clean struct w/o free pattern
  ******************************************************************************/
 
-void ac_automata_release (AC_AUTOMATA_t * thiz, uint8_t free_pattern)
-{
-  struct ac_path *path;
-  AC_NODE_t *n,*next;
-  unsigned int i,ip;
+static AC_ERROR_t ac_automata_release_node(AC_AUTOMATA_t * thiz,
+        AC_NODE_t *n, int idx, void *data) {
 
-  path  = thiz->ac_path;
-
-  ip = 1;
-  path[1].n = thiz->root;
-
-  while(ip) {
-    n = path[ip].n;
-
-    if(!n->outgoing) {
-        if(n != thiz->root) {
-                if(free_pattern == 1) node_release_pattern(n);
-                node_release(n);
+    if(!n->outgoing || idx) {
+        if(n->outgoing) {
+          if(n->one) thiz->n_oc--;
+            else if(n->range) thiz->n_range--;
+                  else thiz->n_find--;
         }
-        ip--; continue;
+        node_release(n,data != NULL);
     }
-    if(n->one) {
-        next = (AC_NODE_t *)n->outgoing;
-        n->outgoing = NULL;
+
+    return ACERR_SUCCESS;
+}
+void ac_automata_release (AC_AUTOMATA_t * thiz, uint8_t free_pattern) {
+
+    ac_automata_walk(thiz,ac_automata_release_node,NULL,free_pattern ? (void *)1:NULL);
+
+    if(free_pattern <= 1) {
+        node_release(thiz->root,free_pattern | 0x4);
+        thiz->root = NULL;
+        acho_free(thiz);
     } else {
-        if(n->outgoing->degree != 0) {
-            i = --n->outgoing->degree;
-            next = n->outgoing->next[i];
-            n->outgoing->next[i] = NULL;
-        } else {
-            if(n != thiz->root) {
-                    if(free_pattern == 1) node_release_pattern(n);
-                    node_release(n);
-            }
-            ip--; continue;
+        AC_NODE_t *n;
+        thiz->all_nodes_num  = 0;
+        thiz->total_patterns = 0;
+        thiz->max_str_len    = 0;
+        thiz->automata_open  = 1;
+
+        n = thiz->root;
+        n->failure_node = NULL;
+        n->id    = 0;
+        n->final = 0;
+        n->depth = 0;
+        if(n->outgoing) {
+            acho_free(n->outgoing);
+            n->outgoing = NULL;
         }
+        if(n->matched_patterns) {
+            acho_free(n->matched_patterns);
+            n->matched_patterns=NULL;
+        }
+        n->use = 0;
+        n->one = 0;
     }
-
-    if(!next) {
-        if(!n->range) ip--;
-        continue;
-    }
-
-    if(ip >= AC_PATTRN_MAX_LENGTH)
-        continue;
-    ip++;
-    path[ip].n = next;
-  }
-
-  if(free_pattern <= 1) {
-    if(free_pattern == 1) node_release_pattern(thiz->root);
-    node_release(thiz->root);
-    thiz->root = NULL;
-    acho_free(thiz);
-  } else {
-    thiz->all_nodes_num  = 0;
-    thiz->total_patterns = 0;
-    thiz->max_str_len    = 0;
-    thiz->automata_open  = 1;
-
-    n = thiz->root;
-    n->failure_node = NULL;
-    n->id    = 0;
-    n->final = 0;
-    n->depth = 0;
-    if(n->outgoing) {
-        acho_free(n->outgoing);
-        n->outgoing = NULL;
-    }
-    if(n->matched_patterns) {
-        acho_free(n->matched_patterns);
-        n->matched_patterns=NULL;
-    }
-    n->use = 0;
-    n->one = 0;
-  }
 }
 
 #ifndef __KERNEL__
 
-static void dump_node_header(AC_NODE_t * n, size_t *mc,
-                size_t *node_oc,size_t *node_8c,size_t *node_xc, size_t *node_xr) {
+static void dump_node_header(AC_NODE_t * n, struct aho_dump_info *ai) {
     char *c;
     int i;
     printf("%04d: ",n->id);
     if(n->failure_node) printf(" failure %04d:",n->failure_node->id);
     printf(" d:%d %c",n->depth, n->use ? '+':'-');
-    *mc += sizeof(*n);
+    ai->memcnt += sizeof(*n);
     if(n->matched_patterns) {
-        *mc += sizeof(n->matched_patterns) + 
+        ai->memcnt += sizeof(n->matched_patterns) + 
                 n->matched_patterns->max*sizeof(n->matched_patterns->patterns[0]);
     }
     if(!n->use) { printf("\n"); return; }
     if(n->one) {
-            (*node_oc)++;
+            (ai->node_oc)++;
             printf(" '%c' next->%d\n",n->one_alpha,
                 n->outgoing ? ((AC_NODE_t *)n->outgoing)->id : -1);
             return;
@@ -484,17 +556,48 @@ static void dump_node_header(AC_NODE_t * n, size_t *mc,
     printf("%s\n",n->range ? " RANGE":"");
     c = (char *)edge_get_alpha(n->outgoing);
     if(n->outgoing->degree <= 8)
-            (*node_8c)++;
+            (ai->node_8c)++;
        else
-            (*node_xc)++;
+            (ai->node_xc)++;
     if(n->range)
-            (*node_xr)++;
+            (ai->node_xr)++;
     for(i=0; i < n->outgoing->degree; i++) {
             printf("  %d: \"%c\" -> %d\n",i,c[i],
                     n->outgoing->next[i] ? n->outgoing->next[i]->id:-1);
     }
-    *mc += sizeof(n->outgoing) + edge_data_size(n->outgoing->max);
+    ai->memcnt += sizeof(n->outgoing) + edge_data_size(n->outgoing->max);
+}
 
+static AC_ERROR_t dump_node_common(AC_AUTOMATA_t * thiz,
+        AC_NODE_t * n, int idx, void *data) {
+    struct aho_dump_info *ai = (struct aho_dump_info *)data;
+    char *rstr = ai->bufstr;
+
+    if(idx) return ACERR_SUCCESS;
+    dump_node_header(n,ai);
+    if (n->matched_patterns && n->matched_patterns->num && n->final) {
+        char lbuf[300];
+        int nl = 0,j;
+
+        nl = snprintf(lbuf,sizeof(lbuf),"'%.100s' N:%d{",rstr,n->matched_patterns->num);
+        for (j=0; j<n->matched_patterns->num; j++) {
+            AC_PATTERN_t *sid = &n->matched_patterns->patterns[j];
+            if(j) nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,", ");
+            nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %c%.100s%c",
+                            sid->rep.number & 0x3fff,
+                            sid->rep.number & 0x8000 ? '^':' ',
+                            sid->astring,
+                            sid->rep.number & 0x4000 ? '$':' ');
+        }
+        printf("%s}\n",lbuf);
+      }
+    return ACERR_SUCCESS;
+}
+static void dump_node_str(AC_AUTOMATA_t * thiz, AC_NODE_t * node,
+        AC_NODE_t * next, int idx, void *data) {
+    struct aho_dump_info *ai = (struct aho_dump_info *)data;
+    ai->bufstr[node->depth] = thiz->ac_path[node->depth].l;
+    ai->bufstr[node->depth+1] = 0;
 }
 
 /******************************************************************************
@@ -509,97 +612,22 @@ static void dump_node_header(AC_NODE_t * n, size_t *mc,
  ******************************************************************************/
 
 void ac_automata_dump(AC_AUTOMATA_t * thiz, char *rstr, size_t rstr_size, char repcast) {
-  unsigned int i, j, ip, l;
-  struct ac_path *path;
-  AC_NODE_t * n, *next;
-  AC_PATTERN_t sid;
-  AC_ALPHABET_t alpha;
-  size_t memcnt = 0,memnode,node_oc=0,node_8c=0,node_xc=0,node_xr=0;
+  struct aho_dump_info ai;
 
-  path  = thiz->ac_path;
+  memset((char *)&ai,0,sizeof(ai));
 
   printf("---DUMP- all nodes %u - max strlen %u -%s---\n",
           (unsigned int)thiz->all_nodes_num,
           (unsigned int)thiz->max_str_len,
           thiz->automata_open ? "open":"ready");
   printf("root: %px\n",thiz->root);
-  path[1].n = thiz->root;
-  path[1].idx = 0;
-  path[1].l = 0;
-  ip = 1;
   *rstr = '\0';
-  while(ip != 0) {
+  ai.bufstr = rstr;
+  ai.bufstr_len = rstr_size;
 
-    n = path[ip].n;
-    /* for debug */
-    if(1 && !path[ip].idx) {
-        memnode = 0;
-        dump_node_header(n,&memnode,&node_oc,&node_8c,&node_xc,&node_xr);
-        memcnt += memnode;
-    }
-    
-    if (n->matched_patterns && n->matched_patterns->num && n->final) {
-        char lbuf[300];
-        int nl = 0;
-        nl = snprintf(lbuf,sizeof(lbuf),"'%.100s' N:%d{",rstr,n->matched_patterns->num);
-        for (j=0; j<n->matched_patterns->num; j++)
-          {
-            sid = n->matched_patterns->patterns[j];
-            if(j) nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,", ");
-            nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %c%.100s%c",
-                            sid.rep.number & 0x3fff,
-                            sid.rep.number & 0x8000 ? '^':' ',
-                            sid.astring,
-                            sid.rep.number & 0x4000 ? '$':' ');
-          }
-        printf("%s}\n",lbuf);
-        if(!n->use) {
-            ip--;
-            continue;
-        }
-    }
-    l = path[ip].l;
-
-    if( l >= rstr_size-1) {
-        ip--; continue;
-    }
-
-    i = path[ip].idx;
-
-    if(!n->use || (n->one && i > 0) || !n->outgoing) {
-        ip--; continue;
-    }
-    if(n->one && !i) {
-        next = (AC_NODE_t *)n->outgoing;
-        alpha = n->one_alpha;
-    } else {
-        if(i >= n->outgoing->degree) {
-            ip--; continue;
-        }
-        for(next = n->outgoing->next[i]; 
-                !next && n->range && i < n->outgoing->degree; 
-                i++, next = n->outgoing->next[i]);
-        if(!next) {
-            ip--; continue;
-        }
-        alpha = edge_get_alpha(n->outgoing)[i];
-    }
-
-    path[ip].idx = i+1;
-
-    if(ip >= AC_PATTRN_MAX_LENGTH)
-        continue;
-    ip++;
-
-    rstr[l] = alpha;
-    rstr[l+1] = '\0';
-
-    path[ip].n = next;
-    path[ip].idx = 0;
-    path[ip].l = l+1;
-  }
+  ac_automata_walk(thiz,dump_node_common,dump_node_str,(void *)&ai);
   printf("---\n mem size %zu avg node size %d, node one char %d, <=8c %d, >8c %d, range %d\n---DUMP-END-\n",
-              memcnt,(int)memcnt/(thiz->all_nodes_num+1),(int)node_oc,(int)node_8c,(int)node_xc,(int)node_xr);
+              ai.memcnt,(int)ai.memcnt/(thiz->all_nodes_num+1),(int)ai.node_oc,(int)ai.node_8c,(int)ai.node_xc,(int)ai.node_xr);
 }
 #endif
 
@@ -631,23 +659,24 @@ static int ac_automata_union_matchstrs (AC_NODE_t * node)
  * find failure node for the given node.
  ******************************************************************************/
 static void ac_automata_set_failure
-(AC_AUTOMATA_t * thiz, AC_NODE_t * node, struct ac_path * path)
+(AC_AUTOMATA_t * thiz, AC_NODE_t * node, AC_NODE_t * next, int idx, void *data)
 {
   unsigned int i, j;
   AC_NODE_t * m;
+  struct ac_path * path = thiz->ac_path;
 
-  for (i=1; i < node->depth; i++) {
+  for (i=1; i < next->depth; i++) {
         m = thiz->root;
-        for (j=i; j < node->depth && m; j++) {
+        for (j=i; j < next->depth && m; j++) {
             m = node_find_next (m, path[j].l);
         }
         if (m) {
-          node->failure_node = m;
+          next->failure_node = m;
           break;
         }
   }
-  if (!node->failure_node)
-    node->failure_node = thiz->root;
+  if (!next->failure_node)
+    next->failure_node = thiz->root;
 }
 
 /******************************************************************************
@@ -657,55 +686,10 @@ static void ac_automata_set_failure
  * called after adding last pattern to automata. i.e. after calling this you
  * can not add further pattern to automata.
  ******************************************************************************/
-static void ac_automata_traverse_setfailure
-(AC_AUTOMATA_t * thiz)
+static inline void ac_automata_traverse_setfailure (AC_AUTOMATA_t * thiz)
 {
-  unsigned int i,ip;
-  AC_NODE_t *next, *node;
-  struct ac_path * path = thiz->ac_path;
-
-  ip = 1;
-  path[1].n = thiz->root;
-  path[1].idx = 0;
-
-  while(ip) {
-    node = path[ip].n;
-    i = path[ip].idx;
-
-    if(!node->use || (node->one && i > 0) || !node->outgoing) {
-        ip--; continue;
-    }
-    if(node->one && !i) {
-        next = (AC_NODE_t *)node->outgoing;
-    } else {
-        if(i >= node->outgoing->degree) {
-            ip--; continue;
-        }
-        for(next = node->outgoing->next[i]; 
-                !next && node->range && i < node->outgoing->degree; 
-                i++, next = node->outgoing->next[i]);
-        if(!next) {
-            ip--; continue;
-        }
-    }
-
-    if(node->depth < AC_PATTRN_MAX_LENGTH) {
-            path[node->depth].l = node->one ? node->one_alpha:
-                                    edge_get_alpha(node->outgoing)[i];
-            /* At every node look for its failure node */
-            ac_automata_set_failure (thiz, next, path);
-    }
-
-    path[ip].idx = i+1;
-    if(ip >= AC_PATTRN_MAX_LENGTH)
-        continue;
-    ip++;
-
-    path[ip].n = next;
-    path[ip].idx = 0;
-  }
+    ac_automata_walk(thiz,NULL,ac_automata_set_failure,NULL);
 }
-
 
 /******************************************************************************
  * FUNCTION: node_create
@@ -739,8 +723,12 @@ static void node_release_pattern(AC_NODE_t * thiz)
  * FUNCTION: node_release
  * Release node
  ******************************************************************************/
-static void node_release(AC_NODE_t * thiz)
+static void node_release(AC_NODE_t * thiz, int free_pattern)
 {
+  if(thiz->root && (free_pattern & 0x4) == 0) return;
+
+  if(free_pattern & 1) node_release_pattern(thiz);
+ 
   if(thiz->matched_patterns) {
     acho_free(thiz->matched_patterns);
     thiz->matched_patterns = NULL;
@@ -767,8 +755,8 @@ static inline size_t bsf(uint32_t bits)
 #else
     size_t i=0;
     if(!bits) return i;
-    if((int16_t)bits == 0) { i+=16; bits >>=16; }
-    if((int8_t)bits == 0) i+=8;
+    if((bits & 0xffff)bits == 0) { i+=16; bits >>=16; }
+    if((bits & 0xff) == 0) i+=8;
     return i;
 #endif
 }
@@ -784,9 +772,9 @@ static inline size_t bsf(uint64_t bits)
 #else
     size_t i=0;
     if(!bits) return i;
-    if((int32_t)bits == 0) { i+=32; bits >>=32; }
-    if((int16_t)bits == 0) { i+=16; bits >>=16; }
-    if((int8_t)bits == 0) i+=8;
+    if((bits & 0xffffffff) == 0) { i+=32; bits >>=32; }
+    if((bits & 0xffff) == 0) { i+=16; bits >>=16; }
+    if((bits & 0xff) == 0) i+=8;
     return i;
 #endif
 }
@@ -799,11 +787,11 @@ xmemchr(char *s, char i,int n)
 
   while(n > 0) {
     if (n >= LBLOCKSIZE && !UNALIGNED (s)) {
-      unsigned long int mask,nc;
+      unsigned long int mask;
       mask = c * DUPC;
 
       while (n >= LBLOCKSIZE) {
-        nc = DETECTNULL((*(unsigned long int *)s) ^ mask);
+        unsigned long int nc = DETECTNULL((*(unsigned long int *)s) ^ mask);
         if(nc)
             return s + (bsf(nc) >> 3);
         s += LBLOCKSIZE;
@@ -844,24 +832,34 @@ static AC_NODE_t * node_find_next(AC_NODE_t * thiz, AC_ALPHABET_t alpha)
  * pre-processing stage in which we sort edges. so it uses Binary Search.
  ******************************************************************************/
 
-// static AC_NODE_t * __attribute__ ((noinline)) node_findbs_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
-static AC_NODE_t *node_findbs_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
+static inline AC_NODE_t *node_findbs_next (AC_NODE_t * thiz, uint8_t alpha)
 {
-  AC_ALPHABET_t *alphas;
-
-  if(!thiz->outgoing) return NULL;
 
   if(thiz->one)
         return alpha == thiz->one_alpha ? (AC_NODE_t *)thiz->outgoing:NULL;
 
-  if(!(thiz->outgoing->cmap[(uint8_t)alpha >> 5] & (1 << (alpha & 0x1f))))
+  if(!(thiz->outgoing->cmap[(uint8_t)alpha >> 5] & (1u << (alpha & 0x1f))))
         return NULL;
 
   if(thiz->range)
         return thiz->outgoing->next[(uint8_t)alpha - (uint8_t)thiz->one_alpha];
 
-  alphas = xmemchr((char *)thiz->a_ptr,(char)alpha,thiz->outgoing->degree);
-  return alphas ? thiz->outgoing->next[alphas-thiz->a_ptr]:NULL;
+  return thiz->outgoing->next[
+      xmemchr((char *)thiz->a_ptr,(char)alpha,thiz->outgoing->degree) - thiz->a_ptr];
+}
+
+static AC_NODE_t *node_findbs_next_ac (AC_NODE_t * thiz, uint8_t alpha,int icase) {
+  AC_NODE_t *next;
+  uint8_t alpha_c;
+
+  if(!thiz->outgoing) return NULL;
+
+  next = node_findbs_next(thiz,alpha);
+  if(next || !icase) return next;
+
+  alpha_c = aho_xc[alpha];
+  if(!alpha_c) return NULL;
+  return  node_findbs_next(thiz, alpha ^ alpha_c);
 }
 
 /******************************************************************************
@@ -903,7 +901,7 @@ static AC_NODE_t * node_create_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
   next = node_create ();
   if(next) {
     if(node_register_outgoing(thiz, next, alpha)) {
-        node_release(next);
+        node_release(next,0);
         return NULL;
     }
     next->depth = thiz->depth+1;
@@ -912,7 +910,7 @@ static AC_NODE_t * node_create_next (AC_NODE_t * thiz, AC_ALPHABET_t alpha)
   return next;
 }
 
-static inline int mp_data_size(int n) {
+static inline size_t mp_data_size(int n) {
     return sizeof(AC_PATTERNS_t) + n*sizeof(AC_PATTERN_t);
 }
 
@@ -940,6 +938,9 @@ AC_PATTERNS_t *new_m;
 static int node_register_matchstr (AC_NODE_t * thiz, AC_PATTERN_t * str,int is_existing)
 {
   AC_PATTERN_t *l;
+
+  if(!is_existing)
+      thiz->final = 1;
   /* Check if the new pattern already exists in the node list */
   if (thiz->matched_patterns && node_has_matchstr(thiz, str))
     return 0;
@@ -1008,6 +1009,7 @@ static int node_register_outgoing
         *edge_get_alpha(o) = thiz->one_alpha;
         o->degree = 1;
         thiz->one = 0;
+        thiz->one_alpha = 0;
         thiz->outgoing = o;
   } else
         o = thiz->outgoing;
@@ -1059,7 +1061,7 @@ static void acho_2range(AC_NODE_t * thiz,uint8_t low, uint8_t high) {
     thiz->one_alpha = (AC_ALPHABET_t)low;
     e = thiz->outgoing;
     for (i=0; low <= high && i < e->max; i++,low++) {
-      if(e->cmap[low >> 5] & (1 << (low & 0x1f))) continue;
+      if(e->cmap[(low >> 5) & 0x7] & (1u << (low & 0x1f))) continue;
       c[e->degree] = low;
       e->next[e->degree] = NULL;
       e->degree++;
@@ -1074,17 +1076,16 @@ static int node_range_edges (AC_AUTOMATA_t *thiz, AC_NODE_t * node)
 {
     struct edge *e = node->outgoing;
     uint8_t *c = (uint8_t *)edge_get_alpha(node->outgoing);
-    uint8_t low = 0xff,high = 0, cc;
+    uint8_t low = 0xff,high = 0;
     int i;
 
     memset((char *)&e->cmap,0,sizeof(e->cmap));
     for(i = 0; i < e->degree; i++) {
-      cc = c[i];
+      uint8_t cc = c[i];
       if(cc < low) low = cc;
       if(cc > high) high = cc;
-      e->cmap[cc >> 5] |= 1 << (cc & 0x1f);
+      e->cmap[(cc >> 5) & 0x7] |= 1u << (cc & 0x1f);
     }
-
     if(high - low + 1 == e->degree) {
         node->range = 1;
         node->one_alpha = (AC_ALPHABET_t)low;
@@ -1095,10 +1096,14 @@ static int node_range_edges (AC_AUTOMATA_t *thiz, AC_NODE_t * node)
         return 1;
     }
 
-    if(e->degree < 4) return 0;
+    i = (high - low)/8;
+    if (i < thiz->add_to_range) i = thiz->add_to_range;
+    i += REALLOC_CHUNK_OUTGOING-1;
+    i -= i % REALLOC_CHUNK_OUTGOING;
 
-    if(high - low + 1 < e->max + REALLOC_CHUNK_OUTGOING) {
-        struct edge *new_o = node_resize_outgoing(node->outgoing,0);
+    if(high - low + 1 < e->max + i || (node->root && !thiz->no_root_range)) {
+        int added = (high - low + 1) - e->max;
+        struct edge *new_o = node_resize_outgoing(node->outgoing,added);
         if(new_o) {
             node->outgoing = new_o;
             acho_2range(node,low,high);
@@ -1106,16 +1111,7 @@ static int node_range_edges (AC_AUTOMATA_t *thiz, AC_NODE_t * node)
         }
         return 0;
     }
-    if(node->root && !thiz->no_root_range) {
-        struct edge *new_o;
-        int added = (high - low + 1) - e->max;
-        new_o = node_resize_outgoing(node->outgoing,added);
-        if(new_o) {
-            node->outgoing = new_o;
-            acho_2range(node,low,high);
-            return 1;
-        }
-    }
+
     return 0;
 }
 /******************************************************************************

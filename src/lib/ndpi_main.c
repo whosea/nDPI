@@ -101,6 +101,46 @@ static u_int32_t _ticks_per_second = 1000;
 
 /* ****************************************** */
 
+static ndpi_risk_info ndpi_known_risks[] = {
+  { NDPI_NO_RISK,                               NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }, 
+  { NDPI_URL_POSSIBLE_XSS,                      NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_URL_POSSIBLE_SQL_INJECTION,            NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_URL_POSSIBLE_RCE_INJECTION,            NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_BINARY_APPLICATION_TRANSFER,           NDPI_RISK_SEVERE, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT,   NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_TLS_SELFSIGNED_CERTIFICATE,            NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_OBSOLETE_VERSION,                  NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_WEAK_CIPHER,                       NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_CERTIFICATE_EXPIRED,               NDPI_RISK_HIGH,   CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_TLS_CERTIFICATE_MISMATCH,              NDPI_RISK_HIGH,   CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_USER_AGENT,            NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_HTTP_NUMERIC_IP_HOST,                  NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_URL,                   NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_HEADER,                NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_NOT_CARRYING_HTTPS,                NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_SUSPICIOUS_DGA_DOMAIN,                 NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_MALFORMED_PACKET,                      NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_SSH_OBSOLETE_CLIENT_VERSION_OR_CIPHER, NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_SSH_OBSOLETE_SERVER_VERSION_OR_CIPHER, NDPI_RISK_MEDIUM, CLIENT_LOW_RISK_PERCENTAGE  },
+  { NDPI_SMB_INSECURE_VERSION,                  NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_SUSPICIOUS_ESNI_USAGE,             NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_UNSAFE_PROTOCOL,                       NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_DNS_SUSPICIOUS_TRAFFIC,                NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_MISSING_SNI,                       NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_CONTENT,               NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_RISKY_ASN,                             NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_RISKY_DOMAIN,                          NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_MALICIOUS_JA3,                         NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_MALICIOUS_SHA1_CERTIFICATE,            NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_DESKTOP_OR_FILE_SHARING_SESSION,       NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_TLS_UNCOMMON_ALPN,                     NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+
+  /* Leave this as last member */
+  { NDPI_MAX_RISK,                              NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }
+};
+
+/* ****************************************** */
+
 /* Forward */
 static void addDefaultPort(struct ndpi_detection_module_struct *ndpi_str, ndpi_port_range *range,
                            ndpi_proto_defaults_t *def, u_int8_t customUserProto, ndpi_default_ports_tree_node_t **root,
@@ -785,6 +825,7 @@ int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_str
 
 static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_struct *ndpi_str) {
   int i,j;
+  u_int val;
 
   for(i = 0; i < (int) ndpi_str->ndpi_num_supported_protocols; i++) {
     if(ndpi_str->proto_defaults[i].protoName == NULL) {
@@ -808,7 +849,13 @@ static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_st
   	return 1;
       }
   }
-  return 0;
+
+  /* Sanity check for risks initialization */
+  val = (sizeof(ndpi_known_risks) / sizeof(ndpi_risk_info)) - 1;
+  if(val != NDPI_MAX_RISK) {
+    NDPI_LOG_ERR(ndpi_str,  "[NDPI] INTERNAL ERROR Invalid ndpi_known_risks[] initialization [%u != %u]\n", val, NDPI_MAX_RISK);
+    return 1;
+  }
 }
 
 /* ******************************************************************** */
@@ -990,8 +1037,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "BitTorrent", NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
 			  ndpi_build_default_ports(ports_a, 51413, 53646, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 6771, 51413, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SKYPE,
-			  "Skype", NDPI_PROTOCOL_CATEGORY_VOIP,
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SKYPE_TEAMS,
+			  "Skype_Teams", NDPI_PROTOCOL_CATEGORY_VOIP,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SKYPE_CALL,
@@ -1060,12 +1107,12 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_XBOX,
 			  "Xbox", NDPI_PROTOCOL_CATEGORY_GAME,
-			  ndpi_build_default_ports(ports_a, 3074, 3076, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 3074, 3076, 500, 4500, 0) /* UDP */);
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_PLAYSTATION,
 			  "Playstation", NDPI_PROTOCOL_CATEGORY_GAME,
-			  ndpi_build_default_ports(ports_a, 1935, 3478, 3479, 3480, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 3478, 3479, 0, 0, 0) /* UDP */);
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_QQ,
 			  "QQ", NDPI_PROTOCOL_CATEGORY_CHAT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
@@ -2537,6 +2584,7 @@ int ndpi_match_string(void *_automa, char *string_to_match) {
      || (string_to_match[0] == '\0'))
     return(-2);
   ac_input_text.astring = string_to_match, ac_input_text.length = strlen(string_to_match);
+  ac_input_text.ignore_case = 0;
   rc = ac_automata_search(automa, &ac_input_text, &match);
 
   match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
@@ -2568,6 +2616,7 @@ int ndpi_match_string_protocol_id(void *_automa, char *string_to_match,
     return(-2);
 
   ac_input_text.astring = string_to_match, ac_input_text.length = match_len;
+  ac_input_text.ignore_case = 0;
   rc = ac_automata_search(automa, &ac_input_text, &match);
   
   match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
@@ -2603,6 +2652,7 @@ int ndpi_match_string_value(void *_automa, char *string_to_match,
     return(-2);
 
   ac_input_text.astring = string_to_match, ac_input_text.length = match_len;
+  ac_input_text.ignore_case = 0;
   rc = ac_automata_search(automa, &ac_input_text, &match);
 
   match.number = ndpi_exact_ac_match(match.number,&ac_input_text);
@@ -3136,11 +3186,11 @@ int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, con
 
 static int ndpi_load_risky_domain(struct ndpi_detection_module_struct *ndpi_str,
 				  char* domain_name) {
-  if(ndpi_str->risky_domain_automa.ac_automa == NULL)
-     ndpi_str->risky_domain_automa.ac_automa = ac_automata_init(ac_match_handler);
-
-  if(ndpi_str->risky_domain_automa.ac_automa)
-     ac_automata_feature(ndpi_str->risky_domain_automa.ac_automa,AC_FEATURE_LC);
+  if(ndpi_str->risky_domain_automa.ac_automa == NULL) {
+    ndpi_str->risky_domain_automa.ac_automa = ac_automata_init(ac_match_handler);
+    if(ndpi_str->risky_domain_automa.ac_automa)
+	    ac_automata_feature(ndpi_str->risky_domain_automa.ac_automa,AC_FEATURE_LC);
+  }
 
   if(ndpi_str->risky_domain_automa.ac_automa) {
     char buf[64], *str;
@@ -5153,7 +5203,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
     }
     break;
 
-  case NDPI_PROTOCOL_SKYPE:
+  case NDPI_PROTOCOL_SKYPE_TEAMS:
   case NDPI_PROTOCOL_SKYPE_CALL:
     if(flow->packet.iph
        && flow->packet.udp
@@ -6434,12 +6484,12 @@ ndpi_protocol ndpi_guess_undetected_protocol(struct ndpi_detection_module_struct
 
   check_guessed_skype:
     addr.s_addr = htonl(shost);
-    if(ndpi_network_ptree_match(ndpi_str, &addr) == NDPI_PROTOCOL_SKYPE) {
-      ret.app_protocol = NDPI_PROTOCOL_SKYPE;
+    if(ndpi_network_ptree_match(ndpi_str, &addr) == NDPI_PROTOCOL_SKYPE_TEAMS) {
+      ret.app_protocol = NDPI_PROTOCOL_SKYPE_TEAMS;
     } else {
       addr.s_addr = htonl(dhost);
-      if(ndpi_network_ptree_match(ndpi_str, &addr) == NDPI_PROTOCOL_SKYPE)
-	ret.app_protocol = NDPI_PROTOCOL_SKYPE;
+      if(ndpi_network_ptree_match(ndpi_str, &addr) == NDPI_PROTOCOL_SKYPE_TEAMS)
+	ret.app_protocol = NDPI_PROTOCOL_SKYPE_TEAMS;
     }
   } else
     ret.app_protocol = ndpi_guess_protocol_id(ndpi_str, flow, proto, sport, dport, &user_defined_proto);
@@ -6693,36 +6743,21 @@ void ndpi_dump_protocols(struct ndpi_detection_module_struct *ndpi_str) {
 void ndpi_dump_risks_score() {
   u_int i;
 
-  printf("%3s %-48s %-8s %s\n",
-	 "Id", "Risk", "Severity", "Score");
+  printf("%3s %-48s %-8s %s %-8s %-8s\n",
+	 "Id", "Risk", "Severity", "Score", "CliScore", "SrvScore");
 	 
   for(i = 1; i < NDPI_MAX_RISK; i++) {
     ndpi_risk_enum r = (ndpi_risk_enum)i;
-    ndpi_risk_severity s = ndpi_risk2severity(r);
-    u_int16_t score = 0;
-    
-    switch(s) {
-    case NDPI_RISK_LOW:
-      score = NDPI_SCORE_RISK_LOW;
-      break;
-      
-    case NDPI_RISK_MEDIUM:
-      score = NDPI_SCORE_RISK_MEDIUM;
-      break;
-      
-    case NDPI_RISK_HIGH:
-      score = NDPI_SCORE_RISK_HIGH;
-      break;
-      
-    case NDPI_RISK_SEVERE:
-      score = NDPI_SCORE_RISK_SEVERE;
-      break;
-    }
-        
-    printf("%3d %-48s %-8s %u\n",
+    ndpi_risk risk   = 2 << (r-1);
+    ndpi_risk_severity s = ndpi_risk2severity(r)->severity;
+    u_int16_t client_score, server_score;
+    u_int16_t score = ndpi_risk2score(risk, &client_score, &server_score);
+
+    printf("%3d %-48s %-8s %-8u %-8u %-8u\n",
 	   i, ndpi_risk2str(r),
 	   ndpi_severity2str(s),
-	   score);
+	   score,
+	   client_score, server_score);
   }
 }
 #endif
@@ -6825,6 +6860,7 @@ int ndpi_match_string_subprotocol(struct ndpi_detection_module_struct *ndpi_str,
     spin_lock_bh(&ndpi_str->host_automa_lock);
 
   ac_input_text.astring = string_to_match, ac_input_text.length = string_to_match_len;
+  ac_input_text.ignore_case = 0;
   rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa), &ac_input_text, &match);
 
   if(is_host_match)
@@ -7021,6 +7057,7 @@ int ndpi_match_bigram(struct ndpi_detection_module_struct *ndpi_str,
   }
 
   ac_input_text.astring = bigram_to_match, ac_input_text.length = 2;
+  ac_input_text.ignore_case = 0;
   rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa), &ac_input_text, &match);
 
   /*
@@ -7055,6 +7092,7 @@ int ndpi_match_trigram(struct ndpi_detection_module_struct *ndpi_str,
   }
 
   ac_input_text.astring = trigram_to_match, ac_input_text.length = 3;
+  ac_input_text.ignore_case = 0;
   rc = ac_automata_search(((AC_AUTOMATA_t *) automa->ac_automa), &ac_input_text, &match);
 
   /*
@@ -7301,7 +7339,7 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
       return(1);
     break;
 
-  case NDPI_PROTOCOL_SKYPE:
+  case NDPI_PROTOCOL_SKYPE_TEAMS:
     if(flow->extra_packets_func)
       return(1);
     break;
@@ -7817,3 +7855,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 }
   
 /* ******************************************************************** */
+
+ndpi_risk_info* ndpi_risk2severity(ndpi_risk_enum risk) {
+  return(&ndpi_known_risks[risk]);
+}
