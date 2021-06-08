@@ -856,6 +856,8 @@ static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_st
     NDPI_LOG_ERR(ndpi_str,  "[NDPI] INTERNAL ERROR Invalid ndpi_known_risks[] initialization [%u != %u]\n", val, NDPI_MAX_RISK);
     return 1;
   }
+
+  return 0;
 }
 
 /* ******************************************************************** */
@@ -2678,11 +2680,10 @@ int ndpi_match_string_value(void *_automa, char *string_to_match,
 int ndpi_match_custom_category(struct ndpi_detection_module_struct *ndpi_str,
 			       char *name, u_int name_len,
                                ndpi_protocol_category_t *category) {
-  ndpi_protocol_breed_t breed;
+  ndpi_protocol_breed_t breed =0;
   u_int16_t id;
   int rc = ndpi_match_string_protocol_id(ndpi_str->custom_categories.hostnames.ac_automa,
 					 name, name_len, &id, category, &breed);
-
   return(rc);
 }
 
@@ -7265,7 +7266,7 @@ u_int8_t ndpi_lru_find_cache(struct ndpi_lru_cache *c, u_int32_t key,
 			     u_int16_t *value, u_int8_t clean_key_when_found) {
   u_int32_t slot = key % c->num_entries;
 
-  if(c->entries[slot].is_full) {
+  if(c->entries[slot].is_full && c->entries[slot].key == key) {
     *value = c->entries[slot].value;
     if(clean_key_when_found)
       c->entries[slot].is_full = 0;

@@ -613,7 +613,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
     if(flow->detected_protocol_stack[1] == NDPI_PROTOCOL_UNKNOWN) {
       /* No idea what is happening behind the scenes: let's check the certificate */
-      u_int32_t proto_id;
+      u_int32_t proto_id = 0;
       int rc = ndpi_match_string_value(ndpi_struct->tls_cert_subject_automa.ac_automa,
 				       rdnSeqBuf, strlen(rdnSeqBuf),&proto_id);
 
