@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 #
 #
+use POSIX qw(strftime);
 
 open(F,"wget -q -4 -Y off -O - https://torstatus.rueckgr.at/ip_list_all.php/Tor_ip_list_ALL.csv|") || die "wget";
 
@@ -14,11 +15,13 @@ while(<F>) {
 	push @IP,$_;
 }
 close(F);
+my $date = strftime "%d.%m.%Y", localtime;
+
 print "TOR:
 	source:
 	  - Tor
 	  - https://torstatus.rueckgr.at/ip_list_all.php/Tor_ip_list_ALL.csv
-	  - From 09.09.2019
+	  - From $date
 	  -
 	  - https://panwdbl.appspot.com/lists/ettor.txt
 	  -
