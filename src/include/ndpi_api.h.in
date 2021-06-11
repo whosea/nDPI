@@ -1027,7 +1027,7 @@ extern "C" {
 
   /* Utility functions to fill prefix (used by the patricia tree) */
   int ndpi_fill_prefix_v4(ndpi_prefix_t *p, const struct in_addr *a, int b, int mb);
-  int ndpi_fill_prefix_v6(ndpi_prefix_t *prefix, const struct ndpi_in6_addr *addr, int bits, int maxbits);
+  int ndpi_fill_prefix_v6(ndpi_prefix_t *prefix, const struct in6_addr *addr, int bits, int maxbits);
   int ndpi_fill_prefix_mac(ndpi_prefix_t *prefix, u_int8_t *mac, int bits, int maxbits);
 
   /* Patricia tree API (radix tree supporting IPv4/IPv6/MAC) */

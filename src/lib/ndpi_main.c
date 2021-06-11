@@ -1865,7 +1865,7 @@ int ndpi_fill_prefix_v4(ndpi_prefix_t *p, const struct in_addr *a, int b, int mb
 
 /* ******************************************* */
 
-int ndpi_fill_prefix_v6(ndpi_prefix_t *prefix, const struct ndpi_in6_addr *addr, int bits, int maxbits) {
+int ndpi_fill_prefix_v6(ndpi_prefix_t *prefix, const struct in6_addr *addr, int bits, int maxbits) {
   if(bits < 0 || bits > maxbits)
     return -1;
 
@@ -7441,7 +7441,7 @@ int ndpi_ptree_insert(ndpi_ptree_t *tree, const ndpi_ip_addr_t *addr,
     return(-1);
 
   if(is_v6)
-    ndpi_fill_prefix_v6(&prefix, (const struct ndpi_in6_addr *) &addr->ipv6, bits, ptree->maxbits);
+    ndpi_fill_prefix_v6(&prefix, (const struct in6_addr *) &addr->ipv6, bits, ptree->maxbits);
   else
     ndpi_fill_prefix_v4(&prefix, (const struct in_addr *) &addr->ipv4, bits, ptree->maxbits);
 
@@ -7473,7 +7473,7 @@ int ndpi_ptree_match_addr(ndpi_ptree_t *tree,
   int bits = ptree->maxbits;
 
   if(is_v6)
-    ndpi_fill_prefix_v6(&prefix, (const struct ndpi_in6_addr *) &addr->ipv6, bits, ptree->maxbits);
+    ndpi_fill_prefix_v6(&prefix, (const struct in6_addr *) &addr->ipv6, bits, ptree->maxbits);
   else
     ndpi_fill_prefix_v4(&prefix, (const struct in_addr *) &addr->ipv4, bits, ptree->maxbits);
 
