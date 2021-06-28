@@ -363,14 +363,11 @@ ndpi_mt_check (unsigned int flags)
 	if(flags & 0x60) flags |= 1;
 
 	flags &= 7;
-	if (flags == 1 || flags == 2 || flags == 4) return;
-	if ((flags & 6) == 6) {
-	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant check error and master protocol ");
-	}
-	if ((flags & 3) == 3)
-	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant check error and protocol ");
 
-	xtables_error(PARAMETER_PROBLEM, "xt_ndpi: unknown error! ");
+	if ((flags & 2) != 0 && flags != 2)
+	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--error'  with other options");
+	if ((flags & 4) != 0 && flags != 4)
+	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master'  with other options");
 }
 
 static int cmp_pname(const void *p1, const void *p2) {
