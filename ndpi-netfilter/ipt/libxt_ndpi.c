@@ -356,18 +356,26 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 static void
 ndpi_mt_check (unsigned int flags)
 {
-	if (!(flags & 0x63))
-	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to "
-                              "specify at least one protocol on host/cert name");
+	if (!flags)
+		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: missing options.");
+	
+	if (flags & 2) {
+	   if (flags != 2)
+		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--error' with other options");
+	    else
+		return;
+	}
+	if (flags & 4) {
+	   if(flags & 0x19)
+		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master' with options match-master,match-proto,proto");
+	      else
+		 return;
+	}
 
-	if(flags & 0x60) flags |= 1;
-
-	flags &= 7;
-
-	if ((flags & 2) != 0 && flags != 2)
-	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--error'  with other options");
-	if ((flags & 4) != 0 && flags != 4)
-	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master'  with other options");
+	if (flags & 0x18) {
+	    if(!(flags & 0x1))
+		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
+	}
 }
 
 static int cmp_pname(const void *p1, const void *p2) {
