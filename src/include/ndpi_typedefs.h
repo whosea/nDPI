@@ -936,27 +936,27 @@ struct ndpi_packet_struct {
 #define last_hdr_idx (18)
 
   struct ndpi_int_one_line_struct line[NDPI_MAX_PARSE_LINES_PER_PACKET];
-  struct ndpi_int_one_line_struct null_line,
-				  host_line,
-				  forwarded_line,
-				  referer_line,
-				  content_line,
-				  content_disposition_line,
-				  accept_line,
-				  user_agent_line,
-				  http_url_name,
-				  http_encoding,
-				  http_transfer_encoding,
-				  http_contentlen,
-				  http_cookie,
-				  http_origin,
-				  http_x_session_type,
-				  server_line,
-				  http_method,
-				  http_response;
+  /* HTTP headers */
+  struct ndpi_int_one_line_struct null_line;
+  struct ndpi_int_one_line_struct host_line;
+  struct ndpi_int_one_line_struct forwarded_line;
+  struct ndpi_int_one_line_struct referer_line;
+  struct ndpi_int_one_line_struct content_line;
+  struct ndpi_int_one_line_struct content_disposition_line;
+  struct ndpi_int_one_line_struct accept_line;
+  struct ndpi_int_one_line_struct user_agent_line;
+  struct ndpi_int_one_line_struct http_url_name;
+  struct ndpi_int_one_line_struct http_encoding;
+  struct ndpi_int_one_line_struct http_transfer_encoding;
+  struct ndpi_int_one_line_struct http_contentlen;
+  struct ndpi_int_one_line_struct http_cookie;
+  struct ndpi_int_one_line_struct http_origin;
+  struct ndpi_int_one_line_struct http_x_session_type;
+  struct ndpi_int_one_line_struct server_line;
+  struct ndpi_int_one_line_struct http_method;
+  struct ndpi_int_one_line_struct http_response; /* the first "word" in this pointer is the
+                                                   response code in the packet (200, etc) */
   struct ndpi_int_one_line_struct *hdr_line;
-/* !!!! */
-
   u_int16_t http_num_headers; /* number of found (valid) header lines in HTTP request or response */
 
   u_int16_t l3_packet_len;
@@ -1195,10 +1195,6 @@ struct ndpi_detection_module_struct {
   const char *ndpi_debug_print_function;
   u_int32_t ndpi_debug_print_line;
   NDPI_PROTOCOL_BITMASK debug_bitmask;
-
-  //fixme
-  //#define NDPI_IP_STRING_SIZE 48
-  //  char ip_string[NDPI_IP_STRING_SIZE];
 
   /* misc parameters */
   u_int32_t tcp_max_retransmission_window_size;

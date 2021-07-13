@@ -44,14 +44,13 @@ void ndpi_search_eaq(struct ndpi_detection_module_struct *ndpi_struct, struct nd
   struct ndpi_packet_struct *packet;
   u_int16_t sport,dport;
 
-  if (!flow) {
+  if (!flow) 
     return;
-  }
 
   packet = &flow->packet;
-  if (!packet) {
-    return;
-  }
+
+  if (!packet->udp)
+     return;
 
   sport = ntohs(packet->udp->source);
   dport = ntohs(packet->udp->dest);

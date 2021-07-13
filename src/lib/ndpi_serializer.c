@@ -63,7 +63,6 @@ u_int64_t ndpi_ntohll(u_int64_t v) {
 }
 
 #ifndef __KERNEL__
-
 /* ********************************** */
 
 u_int64_t ndpi_htonll(u_int64_t v) {
@@ -74,7 +73,6 @@ u_int64_t ndpi_htonll(u_int64_t v) {
   
   return(u.llv);
 }
-
 
 /* ********************************** */
 

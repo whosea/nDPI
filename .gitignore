@@ -64,3 +64,8 @@ stamp-h1
 /tests/unit/Makefile
 /tests/unit/unit
 /tests/dga
+/tests/do.sh
+/tests/do_debug.sh
+/tests/do_valgrind.sh
+.gdbinit
+*.diff

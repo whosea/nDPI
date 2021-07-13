@@ -626,6 +626,7 @@ extern "C" {
    */
   ndpi_protocol_category_t ndpi_get_proto_category(struct ndpi_detection_module_struct *ndpi_mod,
 						   ndpi_protocol proto);
+
 #endif
   /**
    * Get the protocol name associated to the ID
@@ -694,6 +695,7 @@ extern "C" {
    * @par  ndpi_mod = the detection module
    */
   void ndpi_dump_risks_score();
+
 #endif
   /**
    * Read a file and load the protocols
@@ -844,6 +846,11 @@ extern "C" {
    */
   void ndpi_free_automa(void *_automa);
 
+  int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
+                           void *ac_automa, const char *value,
+                           u_int16_t protocol_id, ndpi_protocol_category_t category,
+                           ndpi_protocol_breed_t breed, uint8_t level,
+                           u_int8_t add_ends_with);
   /**
    * Add a string to match to an automata
    *
@@ -873,17 +880,8 @@ extern "C" {
    */
   void ndpi_finalize_automa(void *_automa);
 
-  /**
-   * Open the automa for change
-   *
-   * @par     The automata initialized with ndpi_init_automa();
-   *
-   */
-  void ndpi_open_automa(void *_automa);
-  int  ndpi_is_open_automa(void *_automa);
   void *ndpi_automa_host(struct ndpi_detection_module_struct *ndpi_struct);
   void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str);
-
 
   /**
    * Add a string to match to an automata
@@ -1020,6 +1018,7 @@ extern "C" {
 		     ndpi_protocol l7_protocol,
 		     ndpi_serializer *serializer);
 #endif
+
   void ndpi_md5(const u_char *data, size_t data_len, u_char hash[16]);
   u_int32_t ndpi_quick_hash(unsigned char *str, u_int str_len);
 
@@ -1486,6 +1485,7 @@ extern "C" {
 
   int ndpi_deserialize_clone_item(ndpi_deserializer *deserializer, ndpi_serializer *serializer);
   int ndpi_deserialize_clone_all(ndpi_deserializer *deserializer, ndpi_serializer *serializer);
+
   /* Data analysis */
   struct ndpi_analyze_struct* ndpi_alloc_data_analysis(u_int16_t _max_series_len);
   void ndpi_init_data_analysis(struct ndpi_analyze_struct *s, u_int16_t _max_series_len);

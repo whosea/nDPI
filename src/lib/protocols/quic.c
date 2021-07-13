@@ -315,6 +315,7 @@ typedef struct quic_decrypt_result {
   uint32_t data_len;   /* Size of decrypted data. */
 } quic_decrypt_result_t;
 
+
 /*
  * From wsutil/wsgcrypt.{c,h}
  */

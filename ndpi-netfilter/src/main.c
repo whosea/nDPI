@@ -1927,12 +1927,12 @@ AC_ERROR_t ac_automata_add_exact(AC_AUTOMATA_t *thiz, AC_PATTERN_t *ac_pattern) 
 	if( ac_pattern->astring[0] == '|') {
 		ac_pattern->astring++;
 		ac_pattern->length --;
-		ac_pattern->rep.number |= NDPI_HOST_MATCH_START;
+		ac_pattern->rep.from_start = 1;
 	}	
 	if( ac_pattern->length > 4 &&
 	    ac_pattern->astring[ac_pattern->length-1] == '|') {
 		ac_pattern->length --;
-		ac_pattern->rep.number |= NDPI_HOST_MATCH_END;
+		ac_pattern->rep.at_end = 1;
 	}
 	return ac_automata_add(thiz,ac_pattern);
 }
@@ -2278,21 +2278,17 @@ const char *acerr2txt(AC_ERROR_t r) {
 	return r >= ACERR_SUCCESS && r <= ACERR_ERROR ? __acerr2txt[r]:"UNKNOWN";
 }
 
-int str_coll_to_automata(void *host_ac,hosts_str_t *hosts) {
+int str_coll_to_automata(struct ndpi_detection_module_struct *ndpi_str,
+		void *host_ac,hosts_str_t *hosts) {
 str_collect_t *ph;
-AC_PATTERN_t ac_pattern;
-AC_ERROR_t r;
 int np,nh,err=0;
 
     for(np = 0; np < NDPI_NUM_BITS; np++) {
         ph = hosts->p[np];
         if(!ph) continue;
         for(nh = 0 ; nh < ph->last && ph->s[nh] ; nh += (uint8_t)ph->s[nh] + 2) {
-            ac_pattern.astring = &ph->s[nh+1];
-            ac_pattern.length = (uint8_t)ph->s[nh];
-            ac_pattern.rep.number = np;
-            r = ac_automata_add_exact(host_ac, &ac_pattern);
-            if(r != ACERR_SUCCESS)
+	    if(ndpi_string_to_automa(ndpi_str,(AC_AUTOMATA_t *)host_ac,
+			&ph->s[nh+1], np,0,0,0,1) < 0) 
 		err++;
         }
     }
@@ -2687,9 +2683,9 @@ static int __net_init ndpi_net_init(struct net *net)
 				break;
 			}
 		}
-		if(hm && str_coll_to_automata(n->host_ac,n->hosts)) hm = NULL;
+		if(hm && str_coll_to_automata(n->ndpi_struct,n->host_ac,n->hosts)) hm = NULL;
 		if(hm) {
-			ac_automata_release(n->ndpi_struct->host_automa.ac_automa,0);
+			ac_automata_release(n->ndpi_struct->host_automa.ac_automa,1);
 			n->ndpi_struct->host_automa.ac_automa = n->host_ac;
 			n->host_ac = NULL;
 		} else break;
@@ -2728,7 +2724,7 @@ static int __net_init ndpi_net_init(struct net *net)
 	if(n->hosts)
 		str_hosts_done(n->hosts);
 	if(n->host_ac)
-		ac_automata_release(n->host_ac,0);
+		ac_automata_release(n->host_ac,1);
 
 	if(n->pe_hostdef)
 		remove_proc_entry(hostdef_name,n->pde);

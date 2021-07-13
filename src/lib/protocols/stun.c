@@ -486,12 +486,10 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   printf("==>> NDPI_PROTOCOL_WHATSAPP_CALL\n");
 #endif
 
-  if(packet->iph) {
   if(is_messenger_ip_address(ntohl(packet->iph->saddr)) || is_messenger_ip_address(ntohl(packet->iph->daddr)))      
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_MESSENGER;
   else if(is_google_ip_address(ntohl(packet->iph->saddr)) || is_google_ip_address(ntohl(packet->iph->daddr)))
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
-  }
   
   rc = (flow->protos.tls_quic_stun.stun.num_udp_pkts < MAX_NUM_STUN_PKTS) ? NDPI_IS_NOT_STUN : NDPI_IS_STUN;
 

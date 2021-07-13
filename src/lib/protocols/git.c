@@ -22,9 +22,6 @@
 
 #define NDPI_CURRENT_PROTO NDPI_PROTOCOL_GIT
 
-#ifndef __KERNEL__
-#include <stdlib.h>
-#endif
 #include "ndpi_api.h"
 
 

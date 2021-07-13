@@ -385,21 +385,21 @@ return ret;
 
 static inline bool match_utp_query(uint32_t payload, uint32_t len) {
 
-	//if (MATCH(payload, 0x01, 0x00, ANY, ANY))
+	//if(MATCH(payload, 0x01, 0x00, ANY, ANY))
         //        return true;
-        if (MATCH(payload, 0x11, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x11, 0x00, ANY, ANY) && len == 20)
                 return true;
-	if (MATCH(payload, 0x21, 0x02, ANY, ANY) && len == 30)
+	if(MATCH(payload, 0x21, 0x02, ANY, ANY) && len == 30)
                 return true;
-        if (MATCH(payload, 0x21, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x21, 0x00, ANY, ANY) && len == 20)
                 return true;
-	if (MATCH(payload, 0x31, 0x02, ANY, ANY) && len == 30)
+	if(MATCH(payload, 0x31, 0x02, ANY, ANY) && len == 30)
                 return true;
-        if (MATCH(payload, 0x31, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x31, 0x00, ANY, ANY) && len == 20)
                 return true;
-	if (MATCH(payload, 0x41, 0x02, ANY, ANY) && len == 30)
+	if(MATCH(payload, 0x41, 0x02, ANY, ANY) && len == 30)
                 return true;
-        if (MATCH(payload, 0x41, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x41, 0x00, ANY, ANY) && len == 20)
                 return true;
         return false;	
 
@@ -407,21 +407,21 @@ static inline bool match_utp_query(uint32_t payload, uint32_t len) {
 
 static inline bool match_utp_reply(uint32_t payload, uint32_t len) {
 
-	if (len == 0)
+	if(len == 0)
 		return true;
-        if (MATCH(payload, 0x11, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x11, 0x00, ANY, ANY) && len == 20)
                 return true;
-	if (MATCH(payload, 0x21, 0x02, ANY, ANY) && (len == 30 || len == 33))
+	if(MATCH(payload, 0x21, 0x02, ANY, ANY) && (len == 30 || len == 33))
                 return true;
-        if (MATCH(payload, 0x21, 0x01, ANY, ANY) && (len == 26 || len == 23))
+        if(MATCH(payload, 0x21, 0x01, ANY, ANY) && (len == 26 || len == 23))
                 return true;
-        if (MATCH(payload, 0x21, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x21, 0x00, ANY, ANY) && len == 20)
                 return true;
-	if (MATCH(payload, 0x31, 0x02, ANY, ANY) && len == 30)
+	if(MATCH(payload, 0x31, 0x02, ANY, ANY) && len == 30)
                 return true;
-        if (MATCH(payload, 0x31, 0x00, ANY, ANY) && len == 20)
+        if(MATCH(payload, 0x31, 0x00, ANY, ANY) && len == 20)
                 return true;
-	if (MATCH(payload, 0x41, 0x02, ANY, ANY) && (len == 33 || len == 30))
+	if(MATCH(payload, 0x41, 0x02, ANY, ANY) && (len == 33 || len == 30))
                 return true;
 
 	return false;
@@ -443,21 +443,6 @@ static inline bool match_utp_query_reply(uint32_t *ppayload, uint32_t *bt_seq,
 		uint32_t len, uint32_t *reply) {
 	uint32_t payload = htonl(*ppayload);
 	if(match_utp_query(payload,len)) {
-/*		if (MATCH(payload, 0x01, 0x00, ANY, ANY)) {
-			if (len <= 20 ||
-			    (payload == 0x1000004ul && 
-			     (htonl(ppayload[3]) & 0xffff0000ul) == 0x1030000ul)) {
-				*reply = 0xffff;
-				return false; // WoT
-			}
-			if (!*bt_seq) {
-				*bt_seq = payload;
-				return false;
-			}
-			if (!*bt_seq || !num_seq_match(payload,*bt_seq)) {
-                                return false;
-			}
-		} */
 		*reply = 0;
 		return true;
 	}
@@ -968,7 +953,7 @@ static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
     	return f1 != NULL || f2 != NULL;
     }
 #endif
-    if(ndpi_struct->bt_ht) {
+    if(ndpi_struct->bt_ht && packet->iph) {
 	f1 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,source,
 			    flow->packet.current_time);
 	f2 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,dest,
@@ -1033,14 +1018,14 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
   struct ndpi_packet_struct *packet = &flow->packet;
   u_int16_t a = 0;
 
-  if (packet->payload_packet_len == 1 && packet->payload[0] == 0x13) {
+  if(packet->payload_packet_len == 1 && packet->payload[0] == 0x13) {
     /* reset stage back to 0 so we will see the next packet here too */
     flow->bittorrent_stage = 0;
     return 0;
   }
-  if (flow->packet_counter == 2 && packet->payload_packet_len > 20) {
+  if(flow->packet_counter == 2 && packet->payload_packet_len > 20) {
 
-    if (memcmp(&packet->payload[0], "BitTorrent protocol", 19) == 0) {
+    if(memcmp(&packet->payload[0], "BitTorrent protocol", 19) == 0) {
       bt_save_hash(ndpi_struct, flow, 19+8);
       NDPI_LOG_INFO(ndpi_struct, "BT: plain BitTorrent protocol detected\n");
       ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
@@ -1051,10 +1036,10 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
   }
 
 
-  if (packet->payload_packet_len > 20) {
+  if(packet->payload_packet_len > 20) {
     /* test for match 0x13+"BitTorrent protocol" */
-    if (packet->payload[0] == 0x13) {
-      if (memcmp(&packet->payload[1], "BitTorrent protocol", 19) == 0) {
+    if(packet->payload[0] == 0x13) {
+      if(memcmp(&packet->payload[1], "BitTorrent protocol", 19) == 0) {
         bt_save_hash(ndpi_struct, flow, 20+8);
 	NDPI_LOG_INFO(ndpi_struct, "BT: plain BitTorrent protocol detected\n");
 	ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
@@ -1065,7 +1050,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     }
   }
 
-  if (packet->payload_packet_len > 23 && memcmp(packet->payload, "GET /webseed?info_hash=", 23) == 0) {
+  if(packet->payload_packet_len > 23 && memcmp(packet->payload, "GET /webseed?info_hash=", 23) == 0) {
     bt_save_hash(ndpi_struct, flow, -1);
     NDPI_LOG_INFO(ndpi_struct, "BT: plain webseed BitTorrent protocol detected\n");
     ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
@@ -1076,7 +1061,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
   /* seen Azureus as server for webseed, possibly other servers existing, to implement */
   /* is Server: hypertracker Bittorrent? */
   /* no asymmetric detection possible for answer of pattern "GET /data?fid=". */
-  if (packet->payload_packet_len > 60
+  if(packet->payload_packet_len > 60
       && memcmp(packet->payload, "GET /data?fid=", 14) == 0 && memcmp(&packet->payload[54], "&size=", 6) == 0) {
     bt_save_hash(ndpi_struct, flow, -1);
     NDPI_LOG_INFO(ndpi_struct, "BT: plain Bitcomet persistent seed protocol detected\n");
@@ -1087,7 +1072,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
   }
 
 
-  if (packet->payload_packet_len > 90 && (memcmp(packet->payload, "GET ", 4) == 0
+  if(packet->payload_packet_len > 90 && (memcmp(packet->payload, "GET ", 4) == 0
 					  || memcmp(packet->payload, "POST ", 5) == 0)) {
     const u_int8_t *ptr = &packet->payload[4];
     u_int16_t len = packet->payload_packet_len - 4;
@@ -1097,7 +1082,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     /* parse complete get packet here into line structure elements */
     ndpi_parse_packet_line_info(ndpi_struct, flow);
     /* answer to this pattern is HTTP....Server: hypertracker */
-    if (    memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Azureus "), 0) == 0
+    if(     memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Azureus "), 0) == 0
 	 || memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("BitTorrent"), 0) == 0
 	 || memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("BTWebClient"), 0) == 0) {
       bt_save_hash(ndpi_struct, flow, -1);
@@ -1108,7 +1093,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
       return 1;
     }
 
-    if ( memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Shareaza "),0) == 0 &&
+    if( memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Shareaza "),0) == 0 &&
 	 memcmp_packet_line(packet,8, NDPI_STATICSTRING("X-Queue: "), 0) == 0) {
       bt_save_hash(ndpi_struct, flow, -1);
       NDPI_LOG_INFO(ndpi_struct, "Bittorrent Shareaza detected.\n");
@@ -1119,7 +1104,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     }
 
     /* this is a self built client, not possible to catch asymmetrically */
-    if (   memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Mozilla/4.0 "), 0) == 0
+    if(    memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Mozilla/4.0 "), 0) == 0
 	&& memcmp_packet_line(packet,2, NDPI_STATICSTRING("Keep-Alive: 300"), 0) == 0
 	&& memcmp_packet_line(packet,3, NDPI_STATICSTRING("Connection: Keep-alive"), 0) == 0
 	&& memcmp_packet_line(packet,4, NDPI_STATICSTRING("Accpet: */*"), 0) == 0
@@ -1137,7 +1122,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     }
 
     /* FlashGet pattern */
-    if (packet->parsed_lines == 8
+    if(packet->parsed_lines == 8
 	&& memcmp_packet_hdr(packet,user_agent_line_idx, 
 				NDPI_STATICSTRING("Mozilla/4.0 (compatible; MSIE 6.0;"),0) == 0
 	&& memcmp_packet_line(packet,2, NDPI_STATICSTRING("Accept: */*"), 0) == 0
@@ -1153,7 +1138,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
       return 1;
 
     }
-    if (packet->parsed_lines == 7
+    if(packet->parsed_lines == 7
 	&& memcmp_packet_hdr(packet,user_agent_line_idx,
 		NDPI_STATICSTRING("Mozilla/4.0 (compatible; MSIE 6.0;"),0) == 0
 	&& memcmp_packet_line(packet,2, NDPI_STATICSTRING("Accept: */*"),0) == 0
@@ -1171,10 +1156,10 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 
     /* answer to this pattern is not possible to implement asymmetrically */
     while (1) {
-      if (len < 50 || ptr[0] == 0x0d) {
+      if(len < 50 || ptr[0] == 0x0d) {
 	goto ndpi_end_bt_tracker_check;
       }
-      if (memcmp(ptr, "info_hash=", 10) == 0) {
+      if(memcmp(ptr, "info_hash=", 10) == 0) {
 	break;
       }
       len--;
@@ -1189,40 +1174,40 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 
     /* parse bt hash */
     for (a = 0; a < 20; a++) {
-      if (len < 3) {
+      if(len < 3) {
 	goto ndpi_end_bt_tracker_check;
       }
-      if (*ptr == '%') {
+      if(*ptr == '%') {
 	u_int8_t x1 = 0xFF;
 	u_int8_t x2 = 0xFF;
 
 
-	if (ptr[1] >= '0' && ptr[1] <= '9') {
+	if(ptr[1] >= '0' && ptr[1] <= '9') {
 	  x1 = ptr[1] - '0';
 	}
-	if (ptr[1] >= 'a' && ptr[1] <= 'f') {
+	if(ptr[1] >= 'a' && ptr[1] <= 'f') {
 	  x1 = 10 + ptr[1] - 'a';
 	}
-	if (ptr[1] >= 'A' && ptr[1] <= 'F') {
+	if(ptr[1] >= 'A' && ptr[1] <= 'F') {
 	  x1 = 10 + ptr[1] - 'A';
 	}
 
-	if (ptr[2] >= '0' && ptr[2] <= '9') {
+	if(ptr[2] >= '0' && ptr[2] <= '9') {
 	  x2 = ptr[2] - '0';
 	}
-	if (ptr[2] >= 'a' && ptr[2] <= 'f') {
+	if(ptr[2] >= 'a' && ptr[2] <= 'f') {
 	  x2 = 10 + ptr[2] - 'a';
 	}
-	if (ptr[2] >= 'A' && ptr[2] <= 'F') {
+	if(ptr[2] >= 'A' && ptr[2] <= 'F') {
 	  x2 = 10 + ptr[2] - 'A';
 	}
 
-	if (x1 == 0xFF || x2 == 0xFF) {
+	if(x1 == 0xFF || x2 == 0xFF) {
 	  goto ndpi_end_bt_tracker_check;
 	}
 	ptr += 3;
 	len -= 3;
-      } else if (*ptr >= 32 && *ptr < 127) {
+      } else if(*ptr >= 32 && *ptr < 127) {
 	ptr++;
 	len--;
       } else {
@@ -1240,7 +1225,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 
  ndpi_end_bt_tracker_check:
 
-  if (packet->payload_packet_len == 80) {
+  if(packet->payload_packet_len == 80) {
     /* Warez 80 Bytes Packet
      * +----------------+---------------+-----------------+-----------------+
      * |20 BytesPattern | 32 Bytes Value| 12 BytesPattern | 16 Bytes Data   |
@@ -1258,7 +1243,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     };
 
     /* did not see this pattern anywhere */
-    if ((memcmp(&packet->payload[0], pattern_20_bytes, 20) == 0)
+    if((memcmp(&packet->payload[0], pattern_20_bytes, 20) == 0)
 	&& (memcmp(&packet->payload[52], pattern_12_bytes, 12) == 0)) {
       bt_save_hash(ndpi_struct, flow, -1);
       NDPI_LOG_INFO(ndpi_struct, "BT: Warez - Plain BitTorrent protocol detected\n");
@@ -1269,12 +1254,12 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     }
   }
 
-  else if (packet->payload_packet_len > 50) {
-    if (memcmp(packet->payload, "GET", 3) == 0) {
+  else if(packet->payload_packet_len > 50) {
+    if(memcmp(packet->payload, "GET", 3) == 0) {
 
       ndpi_parse_packet_line_info(ndpi_struct, flow);
       /* haven't fount this pattern anywhere */
-      if ( memcmp_packet_hdr(packet,host_line_idx, NDPI_STATICSTRING("ip2p.com:"),0) == 0) {
+      if( memcmp_packet_hdr(packet,host_line_idx, NDPI_STATICSTRING("ip2p.com:"),0) == 0) {
         bt_save_hash(ndpi_struct, flow, -1);
 	NDPI_LOG_INFO(ndpi_struct, "BT: Warez - Plain BitTorrent protocol detected due to Host: ip2p.com: pattern\n");
 	ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
@@ -1300,14 +1285,14 @@ static void ndpi_int_search_bittorrent_tcp(struct ndpi_detection_module_struct *
     ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
     return;
   }
-  if (packet->payload_packet_len == 0) {
+  if(packet->payload_packet_len == 0) {
     return;
   }
 
-  if (flow->bittorrent_stage == 0 && packet->payload_packet_len != 0) {
+  if(flow->bittorrent_stage == 0 && packet->payload_packet_len != 0) {
     /* exclude stage 0 detection from next run */
     flow->bittorrent_stage = 1;
-    if (ndpi_int_search_bittorrent_tcp_zero(ndpi_struct, flow) != 0) {
+    if(ndpi_int_search_bittorrent_tcp_zero(ndpi_struct, flow) != 0) {
       NDPI_LOG_DBG2(ndpi_struct, "stage 0 has detected something, returning\n");
       return;
     }
@@ -1358,7 +1343,7 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
   	   if(bt_parse_debug)
 		   dump_hex((u_int8_t *)packet->payload,packet->payload_packet_len,128);
 #endif
-  if (packet->detected_protocol_stack[0] == NDPI_PROTOCOL_BITTORRENT) {
+  if(packet->detected_protocol_stack[0] == NDPI_PROTOCOL_BITTORRENT) {
 	if(packet->udp != NULL &&  packet->payload_packet_len > 28 ) {
 	    if(bt_utp2(packet->payload, packet->payload_packet_len,ndpi_struct,flow,&utp_type))
 		    return;
@@ -1370,7 +1355,7 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
   }
     /* check for tcp retransmission here */
 
-    if ( (packet->tcp != NULL) &&
+    if( (packet->tcp != NULL) &&
 	 (packet->tcp_retransmission == 0 || packet->num_retried_bytes)) {
 	ndpi_int_search_bittorrent_tcp(ndpi_struct, flow);
 	return;

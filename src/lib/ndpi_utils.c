@@ -1066,6 +1066,7 @@ char* ndpi_base64_encode(unsigned char const* bytes_to_encode, size_t in_len) {
 }
 
 /* ********************************** */
+
 #ifndef __KERNEL__
 void ndpi_serialize_risk(ndpi_serializer *serializer,
 			 struct ndpi_flow_struct *flow) {
@@ -1088,6 +1089,7 @@ void ndpi_serialize_risk(ndpi_serializer *serializer,
 
 /* ********************************** */
 /* ********************************** */
+
 #ifndef __KERNEL__
 /* NOTE: serializer must have been already initialized */
 int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
@@ -1405,6 +1407,7 @@ const char* ndpi_tunnel2str(ndpi_packet_tunnel tt) {
 }
 
 /* ********************************** */
+
 /*
   /dv/vulnerabilities/xss_r/?name=%3Cscript%3Econsole.log%28%27JUL2D3WXHEGWRAFJE2PI7OS71Z4Z8RFUHXGNFLUFYVP6M3OL55%27%29%3Bconsole.log%28document.cookie%29%3B%3C%2Fscript%3E
   /dv/vulnerabilities/sqli/?id=1%27+and+1%3D1+union+select+null%2C+table_name+from+information_schema.tables%23&Submit=Submit
@@ -1453,7 +1456,6 @@ static int ndpi_is_xss_injection(char* query) {
   size_t qlen = strlen(query);
   return libinjection_xss(query, qlen);
 }
-
 
 /* ********************************** */
 
@@ -1630,6 +1632,7 @@ ndpi_risk_enum ndpi_validate_url(char *url) {
 
   return(rc);
 }
+
 #endif
 /* ******************************************************************** */
 

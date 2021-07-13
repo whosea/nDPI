@@ -26,7 +26,6 @@
 #endif
 
 #ifndef __KERNEL__
-
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -34,6 +33,7 @@
 
 #include "ndpi_api.h"
 #include "ndpi_config.h"
+
 /* ********************************************************************************* */
 
 int ndpi_load_geoip(struct ndpi_detection_module_struct *ndpi_str,

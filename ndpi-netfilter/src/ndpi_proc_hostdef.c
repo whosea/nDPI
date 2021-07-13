@@ -180,7 +180,7 @@ int n_hostdef_proc_close(struct inode *inode, struct file *file)
 
 	if(n->host_ac) { // open for write
 	    if(n->host_upd) {
-		if(!n->host_error && str_coll_to_automata(n->host_ac,n->hosts_tmp))
+		if(!n->host_error && str_coll_to_automata(nstr,n->host_ac,n->hosts_tmp))
 			n->host_error++;
 		if(!n->host_error) {
 			spin_lock_bh(&nstr->host_automa_lock);

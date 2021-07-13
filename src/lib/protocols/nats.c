@@ -23,9 +23,6 @@
 #define NDPI_CURRENT_PROTO NDPI_PROTOCOL_NATS
 #include "ndpi_api.h"
 
-#include "ndpi_api.h"
-
-
 static const char* commands[] =
   {
    "INFO {",

@@ -3,7 +3,7 @@ NDPI_SRC := ../../src
 NDPI_PRO := ${NDPI_SRC}/lib/protocols
 
 ccflags-y += -I${src}/${NDPI_SRC}/include -I${src}/${NDPI_SRC}/lib -I${src}/../libre -I${src}/${NDPI_SRC}/lib/third_party/include 
-ccflags-y += -DHAVE_CONFIG_H -DNDPI_LIB_COMPILATION -DOPENDPI_NETFILTER_MODULE -g
+ccflags-y += -DHAVE_CONFIG_H -DNDPI_LIB_COMPILATION -DOPENDPI_NETFILTER_MODULE -DNDPI_DETECTION_SUPPORT_IPV6 -g
 # Needed for pahole
 # -femit-struct-debug-detailed=any
 
@@ -49,4 +49,4 @@ clean:
 	make -C ${KERNEL_DIR} M=$$PWD $@;
 	rm -rf modules.order
 distclean:
-	find ../../src/lib/ -type f \( -name \*.o -o -name \*.cmd \) | xargs -r rm
+	find ../../src/lib/ ../libre/ -type f \( -name \*.o -o -name \*.cmd \) | xargs -r rm

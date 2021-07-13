@@ -616,8 +616,8 @@ static u_int8_t ndpi_domain_level(const char *name) {
 
 /* ****************************************************** */
 
-static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
-				 AC_AUTOMATA_t *ac_automa, const char *value,
+int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
+				 void *ac_automa, const char *value,
                                  u_int16_t protocol_id, ndpi_protocol_category_t category,
 				 ndpi_protocol_breed_t breed, uint8_t level,
                                  u_int8_t add_ends_with) {
@@ -671,7 +671,7 @@ static int ndpi_string_to_automa(struct ndpi_detection_module_struct *ndpi_str,
 	 ac_pattern.astring,ac_pattern.rep.at_end? "$":"", protocol_id, category, breed,ac_pattern.rep.level);
 #endif
 
-  rc = ac_automata_add(ac_automa, &ac_pattern);
+  rc = ac_automata_add((AC_AUTOMATA_t *)ac_automa, &ac_pattern);
 
   if(rc != ACERR_SUCCESS) {
         ndpi_free(value_dup);
@@ -729,11 +729,11 @@ int ndpi_init_protocol_match(struct ndpi_detection_module_struct *ndpi_str,
   ndpi_port_range ports_a[MAX_DEFAULT_PORTS], ports_b[MAX_DEFAULT_PORTS];
 
   if(ndpi_str->proto_defaults[match->protocol_id].protoName == NULL) {
-    ndpi_str->proto_defaults[match->protocol_id].protoName    = ndpi_strdup(match->proto_name);
+    ndpi_str->proto_defaults[match->protocol_id].protoName = ndpi_strdup(match->proto_name);
 
-    ndpi_str->proto_defaults[match->protocol_id].protoId       = match->protocol_id;
+    ndpi_str->proto_defaults[match->protocol_id].protoId = match->protocol_id;
     ndpi_str->proto_defaults[match->protocol_id].protoCategory = match->protocol_category;
-    ndpi_str->proto_defaults[match->protocol_id].protoBreed    = match->protocol_breed;
+    ndpi_str->proto_defaults[match->protocol_id].protoBreed = match->protocol_breed;
 
     ndpi_set_proto_defaults(ndpi_str, ndpi_str->proto_defaults[match->protocol_id].protoBreed,
 			    ndpi_str->proto_defaults[match->protocol_id].protoId,
@@ -2616,14 +2616,6 @@ void ndpi_free_automa(void *_automa)
 void ndpi_finalize_automa(void *_automa)
 {
     ac_automata_finalize((AC_AUTOMATA_t*)_automa);
-}
-void ndpi_open_automa(void *_automa)
-{ 
-    ((AC_AUTOMATA_t*)_automa)->automata_open = 1;
-}
-int ndpi_is_open_automa(void *_automa)
-{ 
-    return ((AC_AUTOMATA_t*)_automa)->automata_open;
 }
 void *ndpi_automa_host(struct ndpi_detection_module_struct *ndpi_struct)
 {
@@ -5422,8 +5414,6 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 
   if(ndpi_init_packet_header(ndpi_str, flow, packetlen) != 0)
     goto invalidate_ptr;
-  if(!flow->packet.iph && !flow->packet.iphv6)
-    goto invalidate_ptr;
 
   /* detect traffic for tcp or udp only */
   flow->src = src, flow->dst = dst;
@@ -6552,6 +6542,7 @@ int ndpi_is_custom_category(ndpi_protocol_category_t category) {
     break;
   }
 }
+
 /* ****************************************************** */
 
 void ndpi_category_set_name(struct ndpi_detection_module_struct *ndpi_str,
@@ -6764,6 +6755,7 @@ void ndpi_dump_risks_score() {
 	   client_score, server_score);
   }
 }
+
 #endif
 /* ****************************************************** */
 
