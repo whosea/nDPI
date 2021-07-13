@@ -17,8 +17,7 @@ libndpi_a_include_HEADERS = ../include/ndpi_api.h \
 			     ../include/ndpi_typedefs.h     \
 			     third_party/include/ndpi_md5.h \
 			     third_party/include/ndpi_sha1.h \
-			     third_party/include/libcache.h \
-			     third_party/include/ht_hash.h
+			     third_party/include/libcache.h
 
 libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     ndpi_network_list.c.inc \
@@ -187,12 +186,12 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/someip.c \
 		     protocols/whatsapp.c \
 		     protocols/wireguard.c \
+		     protocols/z3950.c \
 		     protocols/zabbix.c \
 		     third_party/include/ahocorasick.h \
 		     third_party/include/ndpi_patricia.h \
 		     third_party/include/libcache.h \
 		     third_party/src/ahocorasick.c \
-		     third_party/src/ht_hash.c \
 		     third_party/src/ndpi_md5.c \
 		     third_party/src/ndpi_sha1.c \
 		     third_party/src/libinjection_html5.c \

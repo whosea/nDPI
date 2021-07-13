@@ -33,6 +33,7 @@ ndpi_fds.name                 = ProtoField.new("nDPI Protocol Name", "ndpi.proto
 ndpi_fds.flow_risk            = ProtoField.new("nDPI Flow Risk", "ndpi.flow_risk", ftypes.UINT64, nil, base.HEX)
 ndpi_fds.flow_score           = ProtoField.new("nDPI Flow Score", "ndpi.flow_score", ftypes.UINT32)
 
+
 local flow_risks = {}
 local num_bits_flow_risks = 64 -- 64 is the "right" value; if you want a more compact visualization you can lower it to max used bits
 flow_risks[0]  = ProtoField.bool("ndpi.flow_risk.unused0", "Unused", num_bits_flow_risks, nil, bit(0), "nDPI Flow Risk: Unused bit")
@@ -138,6 +139,8 @@ local tot_http_ua_flows      = 0
 
 local flows                  = {}
 local tot_flows              = 0
+
+local flows_with_risks       = {}
 
 local dhcp_fingerprints      = {}
 
@@ -382,6 +385,9 @@ function ndpi_proto.init()
    -- Flows
    flows                  = {}
    tot_flows              = 0
+
+   -- Risks
+   flows_with_risks      = {}
    
    -- DHCP
    dhcp_fingerprints      = {}
@@ -602,6 +608,55 @@ end
 -- ###############################################
 
 function timeseries_dissector(tvb, pinfo, tree)
+   if(pinfo.dst_port ~= 0) then
+      local rev_key = getstring(pinfo.dst)..":"..getstring(pinfo.dst_port).."-"..getstring(pinfo.src)..":"..getstring(pinfo.src_port)
+      local k
+            
+      if(flows[rev_key] ~= nil) then
+	 flows[rev_key][2] = flows[rev_key][2] + pinfo.len
+	 k = rev_key
+      else
+	 local key = getstring(pinfo.src)..":"..getstring(pinfo.src_port).."-"..getstring(pinfo.dst)..":"..getstring(pinfo.dst_port)
+	 
+	 k = key
+	 if(flows[key] == nil) then
+	    flows[key] = { pinfo.len, 0 } -- src -> dst  / dst -> src
+	    tot_flows = tot_flows + 1
+	 else
+	    flows[key][1] = flows[key][1] + pinfo.len
+	 end
+      end
+      
+      --k = pinfo.curr_proto..","..k
+      
+      local bytes = flows[k][1]+flows[k][2]
+      local row
+
+      -- Prometheus
+      -- row = "wireshark {metric=\"bytes\", flow=\""..k.."\"} ".. bytes .. " ".. (tonumber(pinfo.abs_ts)*10000).."00000"
+
+      -- Influx      
+      row = "wireshark,flow="..k.." bytes=".. pinfo.len .. " ".. (tonumber(pinfo.abs_ts)*10000).."00000"   
+      file:write(row.."\n")
+
+      row = "wireshark,ndpi="..ndpi.protocol_name.." bytes=".. pinfo.len .. " ".. (tonumber(pinfo.abs_ts)*10000).."00000"   
+      file:write(row.."\n")
+
+      row = "wireshark,host="..getstring(pinfo.src).." sent=".. pinfo.len .. " ".. (tonumber(pinfo.abs_ts)*10000).."00000"   
+      file:write(row.."\n")
+
+      row = "wireshark,host="..getstring(pinfo.dst).." rcvd=".. pinfo.len .. " ".. (tonumber(pinfo.abs_ts)*10000).."00000"   
+      file:write(row.."\n")
+   
+      -- print(row)
+
+      file:flush()
+   end
+end
+
+-- ###############################################
+
+function risk_dissector(tvb, pinfo, tree)
    if(pinfo.dst_port ~= 0) then
       local rev_key = getstring(pinfo.dst)..":"..getstring(pinfo.dst_port).."-"..getstring(pinfo.src)..":"..getstring(pinfo.src_port)
       local k
@@ -973,7 +1028,6 @@ function ndpi_proto.dissector(tvb, pinfo, tree)
 	    local len                  = tvb:len()
 	    local name                 = ""
 	    local flow_risk_tree
-
 	    
 	    for i=16,31 do
 	       name = name .. string.char(tonumber(elems[i], 16))
@@ -984,18 +1038,43 @@ function ndpi_proto.dissector(tvb, pinfo, tree)
 
 	    flow_risk_tree = ndpi_subtree:add(ndpi_fds.flow_risk, tvb(len-30, 8))
 	    if (flow_risk ~= 0) then
-	      for i=0,63 do
+	       local rev_key = getstring(pinfo.dst)..":"..getstring(pinfo.dst_port).." - "..getstring(pinfo.src)..":"..getstring(pinfo.src_port)
+
+	       if(flows_with_risks[rev_key] == nil) then
+		  local key = getstring(pinfo.src)..":"..getstring(pinfo.src_port).." - "..getstring(pinfo.dst)..":"..getstring(pinfo.dst_port)
+		  
+		  if(flows_with_risks[key] == nil) then
+		     flows_with_risks[key] = flow_score
+		  end
+	       end
+	       
+	       for i=0,63 do
 	        --If you want to visualize only proto fields of detected risks, enable the next "if" block
                 --if hasbit(flow_risk, bit(i)) then
-	          if flow_risks[i] ~= nil then
+
+		 if flow_risks[i] ~= nil then
 	            flow_risk_tree:add(flow_risks[i], flow_risk)
-	        --end
-	        end
+		    --end
+		 end
+
 	      end
 	    end
-
-	    ndpi_subtree:add(ndpi_fds.flow_score, tvb(len-22, 2))
+	    
+	    ndpi_subtree:add(ndpi_fds.flow_score, tvb(len-22, 2))	    
 	    ndpi_subtree:add(ndpi_fds.name, tvb(len-20, 16))
+
+	    if(flow_score > 0) then
+	       local level
+	       if(flow_score <= 10) then     -- NDPI_SCORE_RISK_LOW
+		  level = PI_NOTE
+	       elseif(flow_score <= 50) then -- NDPI_SCORE_RISK_MEDIUM
+		  level = PI_WARN
+	       else
+		  level = PI_ERROR
+	       end
+	       
+	       ndpi_subtree:add_expert_info(PI_MALFORMED, PI_WARN, "Non zero score")
+	    end
 
 	    if(application_protocol ~= 0) then	       
 	       -- Set protocol name in the wireshark protocol column (if not Unknown)
@@ -1066,6 +1145,7 @@ function ndpi_proto.dissector(tvb, pinfo, tree)
    if(dump_timeseries) then
       timeseries_dissector(tvb, pinfo, tree)
    end
+   
    mac_dissector(tvb, pinfo, tree)
    arp_dissector(tvb, pinfo, tree)
    vlan_dissector(tvb, pinfo, tree)
@@ -1077,6 +1157,29 @@ function ndpi_proto.dissector(tvb, pinfo, tree)
 end
 
 register_postdissector(ndpi_proto)
+
+-- ###############################################
+
+local function flow_score_dialog_menu()
+   local win = TextWindow.new("nDPI Flow Risks");
+   local label = ""
+   local i
+
+   for k,v in pairsByValues(flows_with_risks, asc) do
+      if(label == "") then
+	 label = "Flows with positive score value:\n"
+      end
+      
+      label = label .. "- " .. k .." [score: ".. v .."]\n"
+   end
+
+   if(label == "") then
+      label = "No flows with score > 0 found"
+   end
+   
+   win:set(label)
+   win:add_button("Clear", function() win:clear() end)
+end
 
 -- ###############################################
 
@@ -1555,4 +1658,5 @@ register_menu("ntop/Latency/Application",  appl_rtt_dialog_menu, MENU_TOOLS_UNSO
 
 if(compute_flows_stats) then
    register_menu("ntop/nDPI", ndpi_dialog_menu, MENU_TOOLS_UNSORTED)
+   register_menu("ntop/nDPI Flow Score", flow_score_dialog_menu, MENU_TOOLS_UNSORTED)
 end

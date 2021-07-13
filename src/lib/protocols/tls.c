@@ -613,12 +613,13 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
     if(flow->detected_protocol_stack[1] == NDPI_PROTOCOL_UNKNOWN) {
       /* No idea what is happening behind the scenes: let's check the certificate */
-      u_int32_t proto_id = 0;
+      u_int32_t val;
       int rc = ndpi_match_string_value(ndpi_struct->tls_cert_subject_automa.ac_automa,
-				       rdnSeqBuf, strlen(rdnSeqBuf),&proto_id);
+				       rdnSeqBuf, strlen(rdnSeqBuf), &val);
 
       if(rc == 0) {
 	/* Match found */
+	u_int16_t proto_id = (u_int16_t)val;
 	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, proto_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED};
 
 	flow->detected_protocol_stack[0] = proto_id,
@@ -1886,7 +1887,11 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		       duplicate_found);
 #endif
 
-		ja3.client.signature_algorithms[i*2] = '\0';
+		if (i >= tot_signature_algorithms_len) {
+		  ja3.client.signature_algorithms[i*2 - 1] = '\0';
+		} else {
+		  ja3.client.signature_algorithms[i*2] = '\0';
+		}
 
 #ifdef DEBUG_TLS
 		printf("Client TLS [SIGNATURE_ALGORITHMS: %s]\n", ja3.client.signature_algorithms);

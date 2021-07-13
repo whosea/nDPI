@@ -428,7 +428,9 @@ extern "C" {
    * @par    string_to_match_len = the length of the string
    * @par    ret_match           = completed returned match information
    * @par    is_host_match       = value of the second field of struct ndpi_automa
-   * @return the ID of the matched subprotocol
+   * @return the ID of the matched subprotocol;
+   *         -1 if automa is not finalized;
+   *         -2 if automa==NULL or string_to_match==NULL or empty string_to_match
    *
    */
   int ndpi_match_string_subprotocol(struct ndpi_detection_module_struct *ndpi_struct,
@@ -502,9 +504,7 @@ extern "C" {
    * @return  0
    *
    */
-  int ndpi_match_bigram(struct ndpi_detection_module_struct *ndpi_mod,
-			ndpi_automa *automa,
-			char *bigram_to_match);
+  int ndpi_match_bigram(const char *bigram_to_match);
 
   /**
    * Write the protocol name in the buffer -buf- as master_protocol.protocol
@@ -848,18 +848,18 @@ extern "C" {
    * Add a string to match to an automata
    *
    * @par     The automata initialized with ndpi_init_automa();
-   * @par     The (sub)string to search
+   * @par     The (sub)string to search (malloc'ed memory)
    * @par     The number associated with this string
    * @return  0 in case of no error, or -1 if an error occurred.
    *
    */
-  int ndpi_add_string_value_to_automa(void *_automa, char *str, u_int32_t num, int atend);
+  int ndpi_add_string_value_to_automa(void *_automa, char *str, u_int32_t num);
 
   /**
    * Add a string to match to an automata. Same as ndpi_add_string_value_to_automa() with num set to 1
    *
    * @par     The automata initialized with ndpi_init_automa();
-   * @par     The (sub)string to search
+   * @par     The (sub)string to search (malloc'ed memory)
    * @return  0 in case of no error, or -1 if an error occurred.
    *
    */
@@ -989,6 +989,7 @@ extern "C" {
 				      char *outbuf, u_int outbuf_len);
   char* ndpi_ssl_version2str(struct ndpi_flow_struct *flow,
                              u_int16_t version, u_int8_t *unknown_tls_version);
+  int ndpi_netbios_name_interpret(u_char *in, u_int in_len, u_char *out, u_int out_len);
   void ndpi_patchIPv6Address(char *str);
   void ndpi_user_pwd_payload_copy(u_int8_t *dest, u_int dest_len, u_int offset,
 				  const u_int8_t *src, u_int src_len);
@@ -1518,17 +1519,17 @@ extern "C" {
   int  ndpi_hw_init(struct ndpi_hw_struct *hw, u_int16_t num_periods, u_int8_t additive_seeasonal,
 		    double alpha, double beta, double gamma, float significance);
   void ndpi_hw_free(struct ndpi_hw_struct *hw);
-  int  ndpi_hw_add_value(struct ndpi_hw_struct *hw, const u_int32_t value, double *forecast,  double *confidence_band);
+  int  ndpi_hw_add_value(struct ndpi_hw_struct *hw, const u_int64_t value, double *forecast,  double *confidence_band);
 
   /* ******************************* */
 
   int ndpi_ses_init(struct ndpi_ses_struct *ses, double alpha, float significance);
-  int ndpi_ses_add_value(struct ndpi_ses_struct *ses, const u_int32_t _value, double *forecast, double *confidence_band);
+  int ndpi_ses_add_value(struct ndpi_ses_struct *ses, const u_int64_t _value, double *forecast, double *confidence_band);
 
   /* ******************************* */
 
   int ndpi_des_init(struct ndpi_des_struct *des, double alpha, double beta, float significance);
-  int ndpi_des_add_value(struct ndpi_des_struct *des, const u_int32_t _value, double *forecast, double *confidence_band);
+  int ndpi_des_add_value(struct ndpi_des_struct *des, const u_int64_t _value, double *forecast, double *confidence_band);
 
   /* ******************************* */
 

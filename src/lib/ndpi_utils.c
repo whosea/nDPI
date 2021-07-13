@@ -52,7 +52,6 @@
 
 
 #include "third_party/include/ndpi_patricia.h"
-#include "third_party/include/ht_hash.h"
 
 #ifndef __KERNEL__
 #include "third_party/include/libinjection.h"
@@ -740,7 +739,7 @@ const char* ndpi_cipher2str(u_int32_t cipher) {
 
 /* ******************************************************************** */
 
-static int ndpi_is_other_char(char c) {
+static inline int ndpi_is_other_char(char c) {
   return((c == '.')
 	 || (c == ' ')
 	 || (c == '@')
@@ -750,13 +749,25 @@ static int ndpi_is_other_char(char c) {
 
 /* ******************************************************************** */
 
-static int ndpi_is_valid_char(char c) {
+static int _ndpi_is_valid_char(char c) {
   if(ispunct(c) && (!ndpi_is_other_char(c)))
     return(0);
   else
     return(isdigit(c)
 	   || isalpha(c)
 	   || ndpi_is_other_char(c));
+}
+static char ndpi_is_valid_char_tbl[256],ndpi_is_valid_char_tbl_init=0;
+
+static void _ndpi_is_valid_char_init(void) {
+  int c;
+  for(c=0; c < 256; c++) ndpi_is_valid_char_tbl[c] = _ndpi_is_valid_char(c);
+  ndpi_is_valid_char_tbl_init = 1;
+}
+static inline int ndpi_is_valid_char(char c) {
+	if(!ndpi_is_valid_char_tbl_init)
+		_ndpi_is_valid_char_init();
+	return ndpi_is_valid_char_tbl[(unsigned char)c];
 }
 
 /* ******************************************************************** */
@@ -773,7 +784,7 @@ static int ndpi_find_non_eng_bigrams(struct ndpi_detection_module_struct *ndpi_s
 
   s[0] = tolower(str[0]), s[1] = tolower(str[1]), s[2] = '\0';
 
-  return(ndpi_match_bigram(ndpi_struct, &ndpi_struct->bigrams_automa, s));
+  return(ndpi_match_bigram(s));
 }
 
 /* ******************************************************************** */

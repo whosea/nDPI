@@ -1,7 +1,7 @@
 /*
  * ndpi_analyze.c
  *
- * Copyright (C) 2019 - ntop.org
+ * Copyright (C) 2019-21 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library.
@@ -39,20 +39,16 @@
 void ndpi_init_data_analysis(struct ndpi_analyze_struct *ret, u_int16_t _max_series_len) {
   u_int32_t len;
 
-  memset(ret, 0, sizeof(struct ndpi_analyze_struct));
+  memset(ret, 0, sizeof(*ret));
 
   if(_max_series_len > MAX_SERIES_LEN) _max_series_len = MAX_SERIES_LEN;
   ret->num_values_array_len = _max_series_len;
 
   if(ret->num_values_array_len > 0) {
-    len = sizeof(u_int32_t)*ret->num_values_array_len;
-    if((ret->values = ndpi_malloc(len)) == NULL) {
-      ndpi_free(ret);
-      ret = NULL;
-    } else
+    len = sizeof(u_int32_t) * ret->num_values_array_len;
+    if((ret->values = ndpi_malloc(len)) != NULL)
       memset(ret->values, 0, len);
-  } else
-    ret->values = NULL;
+  }
 }
 
 /* ********************************************************************************* */
@@ -76,9 +72,15 @@ void ndpi_free_data_analysis(struct ndpi_analyze_struct *d, u_int8_t free_pointe
 /* ********************************************************************************* */
 
 void ndpi_reset_data_analysis(struct ndpi_analyze_struct *d) {
+  u_int32_t *values_bkp = d->values;
+  u_int32_t num_values_array_len_bpk = d->num_values_array_len;
+
   memset(d, 0, sizeof(struct ndpi_analyze_struct));
+
+  d->values = values_bkp;
+  d->num_values_array_len = num_values_array_len_bpk;
+
   memset(d->values, 0, sizeof(u_int32_t)*d->num_values_array_len);
-  d->num_data_entries = 0;
 }
 
 /* ********************************************************************************* */
@@ -932,7 +934,7 @@ static double ndpi_normal_cdf_inverse(double p) {
   }
 }
 
-double ndpi_avg_inline(u_int32_t *v, u_int num) {
+double ndpi_avg_inline(u_int64_t *v, u_int num) {
   double avg = 0;
   u_int i;
 
@@ -981,7 +983,7 @@ int ndpi_hw_init(struct ndpi_hw_struct *hw,
   if((significance < 0) || (significance > 1)) significance = 0.05;
   hw->params.ro         = ndpi_normal_cdf_inverse(1 - (significance / 2.));
 
-  if((hw->y = (u_int32_t*)ndpi_calloc(hw->params.num_season_periods, sizeof(u_int32_t))) == NULL)
+  if((hw->y = (u_int64_t*)ndpi_calloc(hw->params.num_season_periods, sizeof(u_int64_t))) == NULL)
     return(-1);
 
   if((hw->s = (double*)ndpi_calloc(hw->params.num_season_periods, sizeof(double))) == NULL) {
@@ -1017,7 +1019,7 @@ void ndpi_hw_free(struct ndpi_hw_struct *hw) {
    0                Too early: we're still in the learning phase. Output values are zero.
    1                Normal processing: forecast and confidence_band are meaningful
 */
-int ndpi_hw_add_value(struct ndpi_hw_struct *hw, const u_int32_t _value, double *forecast,  double *confidence_band) {
+int ndpi_hw_add_value(struct ndpi_hw_struct *hw, const u_int64_t _value, double *forecast,  double *confidence_band) {
   if(hw->num_values < hw->params.num_season_periods) {
     hw->y[hw->num_values++] = _value;
 
@@ -1193,7 +1195,7 @@ int ndpi_ses_init(struct ndpi_ses_struct *ses, double alpha, float significance)
    0                Too early: we're still in the learning phase. Output values are zero.
    1                Normal processing: forecast and confidence_band are meaningful
 */
-int ndpi_ses_add_value(struct ndpi_ses_struct *ses, const u_int32_t _value, double *forecast, double *confidence_band) {
+int ndpi_ses_add_value(struct ndpi_ses_struct *ses, const u_int64_t _value, double *forecast, double *confidence_band) {
   double value = (double)_value, error, sq_error;
   int rc;
 
@@ -1265,7 +1267,7 @@ int ndpi_des_init(struct ndpi_des_struct *des, double alpha, double beta, float 
    0                Too early: we're still in the learning phase. Output values are zero.
    1                Normal processing: forecast and confidence_band are meaningful
 */
-int ndpi_des_add_value(struct ndpi_des_struct *des, const u_int32_t _value, double *forecast, double *confidence_band) {
+int ndpi_des_add_value(struct ndpi_des_struct *des, const u_int64_t _value, double *forecast, double *confidence_band) {
   double value = (double)_value, error, sq_error;
   int rc;
 

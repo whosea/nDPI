@@ -37,11 +37,25 @@ struct netbios_header {
 
 /* ****************************************************************** */
 
+static int is_printable_char(unsigned char c) {
+  return(((c >= 0x20) && (c <= 0x7e)) ? 1 : 0);
+}
+
+/* ****************************************************************** */
+
+static int is_stop_char(u_char c) {
+  return(((c < 'A') || (c > 'P')) ? 1 : 0);
+}
+
+/* ****************************************************************** */
+
 /* The function below has been inherited by tcpdump */
-int ndpi_netbios_name_interpret(char *in, size_t in_len, char *out, u_int out_len) {
+int ndpi_netbios_name_interpret(u_char *in, u_int in_len, u_char *out, u_int out_len) {
   u_int ret = 0, len, idx = in_len, out_idx = 0;
 
-  len = (*in++)/2, in_len--;
+  len = in[0] / 2;
+  in++, in_len--;
+  
   out_len--;
   out[out_idx] = 0;
 
@@ -49,7 +63,7 @@ int ndpi_netbios_name_interpret(char *in, size_t in_len, char *out, u_int out_le
     return(-1);
 
   while((len--) && (out_idx < out_len)) {
-    if((idx < 2) || (in[0] < 'A') || (in[0] > 'P') || (in[1] < 'A') || (in[1] > 'P')) {
+    if((idx < 2) || is_stop_char(in[0]) || is_stop_char(in[1])) {
       out[out_idx] = 0;
       break;
     }
@@ -57,7 +71,7 @@ int ndpi_netbios_name_interpret(char *in, size_t in_len, char *out, u_int out_le
     out[out_idx] = ((in[0] - 'A') << 4) + (in[1] - 'A');
     in += 2, idx -= 2;
 
-    if(isprint(out[out_idx]))
+    if(is_printable_char(out[out_idx]))
       out_idx++, ret++;
   }
 
@@ -70,7 +84,6 @@ int ndpi_netbios_name_interpret(char *in, size_t in_len, char *out, u_int out_le
       out[out_idx] = 0;
       out_idx--;
     }
-
   }
 
   return(ret);
@@ -81,12 +94,12 @@ int ndpi_netbios_name_interpret(char *in, size_t in_len, char *out, u_int out_le
 static void ndpi_int_netbios_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					    struct ndpi_flow_struct *flow,
 					    u_int16_t sub_protocol) {
-  char name[64];
+  unsigned char name[64];
   u_int off = flow->packet.payload[12] == 0x20 ? 12 : 14;
 
   if((off < flow->packet.payload_packet_len)
-     && ndpi_netbios_name_interpret((char*)&flow->packet.payload[off],
-				 flow->packet.payload_packet_len - off, name, sizeof(name)) > 0) {
+     && ndpi_netbios_name_interpret((unsigned char*)&flow->packet.payload[off],
+		 (u_int)(flow->packet.payload_packet_len - off), name, sizeof(name)-1) > 0) {
       snprintf((char*)flow->host_server_name, sizeof(flow->host_server_name)-1, "%s", name);
 
       ndpi_check_dga_name(ndpi_struct, flow, (char*)flow->host_server_name, 1);

@@ -869,6 +869,10 @@ struct ndpi_flow_udp_struct {
   /* NDPI_PROTOCOL_WIREGUARD */
   u_int8_t wireguard_stage;
   u_int32_t wireguard_peer_index[2];
+
+  /* NDPI_PROTOCOL_QUIC */
+  u_int8_t *quic_reasm_buf;
+  u_int32_t quic_reasm_buf_len;
 };
 
 /* ************************************************** */
@@ -975,11 +979,11 @@ struct ndpi_detection_module_struct;
 struct ndpi_flow_struct;
 
 struct ndpi_call_function_struct {
-  u_int16_t ndpi_protocol_id;
   NDPI_PROTOCOL_BITMASK detection_bitmask;
   NDPI_PROTOCOL_BITMASK excluded_protocol_bitmask;
-  NDPI_SELECTION_BITMASK_PROTOCOL_SIZE ndpi_selection_bitmask;
   void (*func) (struct ndpi_detection_module_struct *, struct ndpi_flow_struct *flow);
+  NDPI_SELECTION_BITMASK_PROTOCOL_SIZE ndpi_selection_bitmask;
+  u_int16_t ndpi_protocol_id;
   u_int8_t detection_feature;
 };
 
@@ -1108,7 +1112,6 @@ typedef struct ndpi_default_ports_tree_node {
 
 typedef struct _ndpi_automa {
   void *ac_automa; /* Real type is AC_AUTOMATA_t */
-  u_int8_t ac_automa_finalized;
 } ndpi_automa;
 
 typedef struct ndpi_proto {
@@ -1208,11 +1211,11 @@ struct ndpi_detection_module_struct {
   u_int ndpi_num_supported_protocols;
   u_int ndpi_num_custom_protocols;
 
+  int ac_automa_finalized;
   /* HTTP/DNS/HTTPS/QUIC host matching */
   ndpi_automa host_automa,                     /* Used for DNS/HTTPS */
     content_automa,                            /* Used for HTTP subprotocol_detection */
     subprotocol_automa,                        /* Used for HTTP subprotocol_detection */
-    bigrams_automa, trigrams_automa, impossible_bigrams_automa, /* TOR */
     risky_domain_automa, tls_cert_subject_automa,
     malicious_ja3_automa, malicious_sha1_automa;
   /* IMPORTANT: please update ndpi_finalize_initialization() whenever you add a new automa */
@@ -1546,6 +1549,9 @@ struct ndpi_flow_struct {
   /* NDPI_PROTOCOL_STARCRAFT */
   u_int8_t starcraft_udp_stage : 3;	// 0-7
 
+  /* NDPI_PROTOCOL_Z3950 */
+  u_int8_t z3950_stage : 2; // 0-3
+
   /* NDPI_PROTOCOL_OPENVPN */
   u_int8_t ovpn_session_id[8];
   u_int8_t ovpn_counter;
@@ -1570,6 +1576,7 @@ typedef struct {
   u_int16_t protocol_id;
   ndpi_protocol_category_t protocol_category;
   ndpi_protocol_breed_t protocol_breed;
+  int level; /* 0 by default */
 } ndpi_protocol_match;
 
 typedef struct {
@@ -1599,7 +1606,7 @@ typedef enum
   } ndpi_prefs;
 
 typedef struct {
-  int protocol_id;
+  u_int32_t protocol_id;
   ndpi_protocol_category_t protocol_category;
   ndpi_protocol_breed_t protocol_breed;
 } ndpi_protocol_match_result;
@@ -1793,7 +1800,7 @@ struct ndpi_hw_struct {
   double    u, v, sum_square_error;
 
   /* These two values need to store the signal history */
-  u_int32_t *y;
+  u_int64_t *y;
   double    *s;
 };
 

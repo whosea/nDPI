@@ -49,6 +49,7 @@
 #include <math.h>
 #include "ndpi_api.h"
 #include "../src/lib/third_party/include/uthash.h"
+#include "../src/lib/third_party/include/ahocorasick.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -100,6 +101,7 @@ static struct timeval startup_time, begin, end;
 static int core_affinity[MAX_NUM_READER_THREADS];
 #endif
 static struct timeval pcap_start = { 0, 0}, pcap_end = { 0, 0 };
+static struct bpf_program bpf_code,*bpf_cfilter = NULL;
 /** Detection parameters **/
 static time_t capture_for = 0;
 static time_t capture_until = 0;
@@ -227,7 +229,7 @@ extern void ndpi_report_payload_stats();
 static int rep_mini = 0; 
 /* ********************************** */
 
-#define DEBUG_TRACE
+// #define DEBUG_TRACE
 
 #ifdef DEBUG_TRACE
 FILE *trace = NULL;
@@ -539,19 +541,14 @@ static void help(u_int long_help) {
 
     ndpi_dump_protocols(ndpi_info_mod);
     if(getenv("DUMP_HOST")) {
-	char buf[256];
 	ndpi_finalize_initialization(ndpi_info_mod);
-  	ac_automata_dump( ndpi_automa_host(ndpi_info_mod), buf, sizeof(buf)-1,'n');
+  	ac_automata_dump( ndpi_automa_host(ndpi_info_mod), NULL);
 	exit(0);
     }
     if(getenv("DUMP_AUTOMA")) {
-	char buf[256];
 	char *ac_name[] = {
 		"host",
 		"content",
-		"bigrams",
-		"impossible",
-		"trigrams",
 		"tls_cert_subject",
 		"malicious_ja3",
 		"malicious_sha1",
@@ -566,7 +563,7 @@ static void help(u_int long_help) {
 	for(i=0; ac_list[i] != (void *)1; i++) {
 	    if(ac_list[i]) {
 		printf("====== %s\n",ac_name[i]);
-	  	ac_automata_dump( ac_list[i], buf, sizeof(buf)-1,'n');
+	  	ac_automata_dump( ac_list[i], NULL);
 	    }
 	}
     }
@@ -1227,7 +1224,7 @@ void print_bin(FILE *fout, const char *label, struct ndpi_bin *b) {
 /**
  * @brief Print the flow
  */
-static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t thread_id) {
+static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t thread_id) {
   FILE *out = results_file ? results_file : stdout;
   u_int8_t known_tls;
   char buf[32], buf1[64];
@@ -2181,7 +2178,7 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
   if(_maliciousSHA1Path)
     ndpi_load_malicious_sha1_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _maliciousSHA1Path);
 
-  set_ndpi_debug_function(ndpi_thread_info[thread_id].workflow->ndpi_struct, debug_printf);
+//  set_ndpi_debug_function(ndpi_thread_info[thread_id].workflow->ndpi_struct, debug_printf);
   ndpi_finalize_initialization(ndpi_thread_info[thread_id].workflow->ndpi_struct);
 
   if(enable_doh_dot_detection)
@@ -3197,14 +3194,17 @@ next_line:
 static void configurePcapHandle(pcap_t * pcap_handle) {
 
   if(bpfFilter != NULL) {
-    struct bpf_program fcode;
 
-    if(pcap_compile(pcap_handle, &fcode, bpfFilter, 1, 0xFFFFFF00) < 0) {
-      printf("pcap_compile error: '%s'\n", pcap_geterr(pcap_handle));
-    } else {
-      if(pcap_setfilter(pcap_handle, &fcode) < 0) {
+    if(!bpf_cfilter) {
+      if(pcap_compile(pcap_handle, &bpf_code, bpfFilter, 1, 0xFFFFFF00) < 0) {
+        printf("pcap_compile error: '%s'\n", pcap_geterr(pcap_handle));
+        return;
+      }
+      bpf_cfilter = &bpf_code;
+    }
+    if(pcap_setfilter(pcap_handle, bpf_cfilter) < 0) {
 	printf("pcap_setfilter error: '%s'\n", pcap_geterr(pcap_handle));
-      } else
+    } else {
 	printf("Successfully set BPF filter to '%s'\n", bpfFilter);
     }
   }
@@ -3245,8 +3245,10 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
     if((pcap_handle = pcap_open_offline((char*)pcap_file, pcap_error_buffer)) == NULL) {
       char filename[256] = { 0 };
 
-      if(strstr((char*)pcap_file, (char*)".pcap"))
+      if(strstr((char*)pcap_file, (char*)".pcap")) {
 	printf("ERROR: could not open pcap file: %s\n", pcap_error_buffer);
+	exit(-1);
+      }
 
       /* Trying to open as a playlist as last attempt */
       else if((getNextPcapFileFromPlaylist(thread_id, filename, sizeof(filename)) != 0)
@@ -3488,6 +3490,11 @@ void * processing_thread(void *_thread_id) {
 pcap_loop:
   runPcapLoop(thread_id);
 
+  if(ndpi_thread_info[thread_id].workflow->pcap_handle)
+    pcap_close(ndpi_thread_info[thread_id].workflow->pcap_handle);
+
+  ndpi_thread_info[thread_id].workflow->pcap_handle = NULL;
+
   if(playlist_fp[thread_id] != NULL) { /* playlist: read next file */
     char filename[256];
 
@@ -3498,6 +3505,10 @@ pcap_loop:
     }
   }
 #endif
+  if(bpf_cfilter) {
+	  pcap_freecode(bpf_cfilter);
+	  bpf_cfilter = NULL;
+  }
 
   return NULL;
 }
@@ -3651,6 +3662,7 @@ static void dgaUnitTest() {
   };
 
   const char *non_dga[] = {
+    "dns.msftncsi.com",
     "www.confindustriabrescia.it",
     "mz.gov.pl",
     "zoomam104zc.zoom.us",
@@ -3683,7 +3695,7 @@ static void dgaUnitTest() {
     "mqtt.facebook.com",
     NULL
   };
-  int i;
+  int debug = 0, i;
   NDPI_PROTOCOL_BITMASK all;
   struct ndpi_detection_module_struct *ndpi_str = ndpi_init_detection_module(enable_ja3_plus ? ndpi_enable_ja3_plus : ndpi_no_prefs);
 
@@ -3696,14 +3708,16 @@ static void dgaUnitTest() {
 
   assert(ndpi_str != NULL);
 
-  for(i=0; dga[i] != NULL; i++)
-    assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)dga[i], 1) == 1);
-
   for(i=0; non_dga[i] != NULL; i++) {
-    /* printf("Checking non DGA %s\n", non_dga[i]); */
+    if(debug) printf("Checking non DGA %s\n", non_dga[i]);
     assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)non_dga[i], 1) == 0);
   }
-
+  
+  for(i=0; dga[i] != NULL; i++) {
+    if(debug) printf("Checking DGA %s\n", non_dga[i]);
+    assert(ndpi_check_dga_name(ndpi_str, NULL, (char*)dga[i], 1) == 1);
+  }
+  
   ndpi_exit_detection_module(ndpi_str);
 }
 
@@ -4370,6 +4384,10 @@ int original_main(int argc, char **argv) {
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     if(getenv("REP_MINI"))
 	    rep_mini = 1;
+
+    if(getenv("AHO_DEBUG"))
+	  ac_automata_enable_debug(1);
+
     parseOptions(argc, argv);
 
     ndpi_info_mod = ndpi_init_detection_module(enable_ja3_plus ? ndpi_enable_ja3_plus : ndpi_no_prefs);
