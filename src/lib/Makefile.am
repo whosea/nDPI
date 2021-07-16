@@ -35,6 +35,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/applejuice.c \
 		     protocols/apple_push.c \
 		     protocols/armagetron.c \
+		     protocols/avast_securedns.c \
 		     protocols/ayiya.c \
 		     protocols/amqp.c \
 		     protocols/bgp.c \

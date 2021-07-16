@@ -131,6 +131,7 @@ static ndpi_risk_info ndpi_known_risks[] = {
   { NDPI_MALICIOUS_SHA1_CERTIFICATE,            NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_DESKTOP_OR_FILE_SHARING_SESSION,       NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_TLS_UNCOMMON_ALPN,                     NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_CERT_VALIDITY_TOO_LONG,            NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
 
   /* Leave this as last member */
   { NDPI_MAX_RISK,                              NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }
@@ -1826,6 +1827,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "GitLab", NDPI_PROTOCOL_CATEGORY_COLLABORATIVE,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, NDPI_PROTOCOL_SAFE, NDPI_PROTOCOL_AVAST_SECUREDNS,
+              "AVAST SecureDNS", NDPI_PROTOCOL_CATEGORY_NETWORK,
+              ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0),  /* TCP */
+              ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0)); /* UDP */
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -2256,7 +2261,7 @@ static const char *categories[] = {
   "DataTransfer",
   "Web",
   "SocialNetwork",
-  "FileTransfer",
+  "Download",
   "Game",
   "Chat",
   "VoIP",
@@ -3999,6 +4004,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* Z39.50 international standard client–server, application layer communications protocol */
   init_z3950_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* AVAST SecureDNS */
+  init_avast_securedns_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
