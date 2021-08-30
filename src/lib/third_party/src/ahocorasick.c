@@ -428,7 +428,11 @@ int ac_automata_search (AC_AUTOMATA_t * thiz,
         AC_TEXT_t * txt, AC_REP_t * param)
 {
   unsigned long position;
-  int icase = 0,i,debug=0;
+  int icase = 0,i;
+#ifndef __KERNEL__
+  int debug=0;
+#endif
+
   AC_MATCH_t *match;
   AC_NODE_t *curr;
   AC_NODE_t *next;
