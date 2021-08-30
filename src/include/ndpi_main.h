@@ -108,6 +108,7 @@ extern "C" {
 				      int protoId, ...);
 
   extern void ndpi_set_proto_defaults(struct ndpi_detection_module_struct *ndpi_mod,
+				      u_int8_t is_cleartext,
 				      ndpi_protocol_breed_t protoBreed, u_int16_t protoId, char *protoName,
 				      ndpi_protocol_category_t protoCategory,
 				      ndpi_port_range *tcpDefPorts,
@@ -136,7 +137,7 @@ extern "C" {
   extern u_int8_t ndpi_is_proto(ndpi_protocol proto, u_int16_t p);
 
   extern u_int16_t ndpi_get_lower_proto(ndpi_protocol p);
-  
+
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
   void ndpi_debug_get_last_log_function_line(struct ndpi_detection_module_struct *ndpi_struct,
 					     const char **file, const char **func, u_int32_t * line);
@@ -157,7 +158,14 @@ extern "C" {
   int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi_str,
 					 const u_int8_t ** l4ptr, u_int16_t * l4len,
 					 u_int8_t * nxt_hdr);
-  void ndpi_set_risk(struct ndpi_flow_struct *flow, ndpi_risk_enum r);
+  void ndpi_set_risk(struct ndpi_detection_module_struct *ndpi_str,
+		     struct ndpi_flow_struct *flow, ndpi_risk_enum r);
+  int ndpi_is_printable_string(char const * const str, size_t len);
+#define NDPI_ENTROPY_ENCRYPTED_OR_RANDOM(entropy) (entropy > 7.0f)
+  float ndpi_entropy(u_int8_t const * const buf, size_t len);
+  void load_common_alpns(struct ndpi_detection_module_struct *ndpi_str);
+  u_int8_t is_a_common_alpn(struct ndpi_detection_module_struct *ndpi_str,
+			    const char *alpn_to_check, u_int alpn_to_check_len);    
 #ifdef __cplusplus
 }
 #endif

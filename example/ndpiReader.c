@@ -37,6 +37,8 @@
 #else
 #include <unistd.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/mman.h>
 #endif
 #include <string.h>
 #include <stdarg.h>
@@ -44,7 +46,6 @@
 #include <pcap.h>
 #include <signal.h>
 #include <pthread.h>
-#include <sys/socket.h>
 #include <assert.h>
 #include <math.h>
 #include "ndpi_api.h"
@@ -52,7 +53,6 @@
 #include "../src/lib/third_party/include/ahocorasick.h"
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <libgen.h>
 
 #include "reader_util.h"
@@ -63,12 +63,14 @@ extern int bt_parse_debug;
 #define ntohl64(x) ( ( (uint64_t)(ntohl( (uint32_t)((x << 32) >> 32) )) << 32) | ntohl( ((uint32_t)(x >> 32)) ) )
 #define htonl64(x) ntohl64(x)
 
-#define EURISTICS_CODE 1
+#define HEURISTICS_CODE 1
 
 /** Client parameters **/
 
 static char *_pcap_file[MAX_NUM_READER_THREADS]; /**< Ingress pcap file/interfaces */
+#ifndef USE_DPDK
 static FILE *playlist_fp[MAX_NUM_READER_THREADS] = { NULL }; /**< Ingress playlist */
+#endif
 static FILE *results_file           = NULL;
 static char *results_path           = NULL;
 static char * bpfFilter             = NULL; /**< bpf filter  */
@@ -101,7 +103,10 @@ static struct timeval startup_time, begin, end;
 static int core_affinity[MAX_NUM_READER_THREADS];
 #endif
 static struct timeval pcap_start = { 0, 0}, pcap_end = { 0, 0 };
-static struct bpf_program bpf_code,*bpf_cfilter = NULL;
+#ifndef USE_DPDK
+static struct bpf_program bpf_code;
+#endif
+static struct bpf_program *bpf_cfilter = NULL;
 /** Detection parameters **/
 static time_t capture_for = 0;
 static time_t capture_until = 0;
@@ -814,11 +819,14 @@ void printCSVHeader() {
  * @brief Option parser
  */
 static void parseOptions(int argc, char **argv) {
-  int option_idx = 0, do_capture = 0;
+  int option_idx = 0;
+  int opt;
+#ifndef USE_DPDK
   char *__pcap_file = NULL, *bind_mask = NULL;
-  int thread_id, opt;
+  int thread_id, do_capture = 0;
 #ifdef linux
   u_int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
 #endif
 
 #ifdef USE_DPDK
@@ -882,9 +890,11 @@ static void parseOptions(int argc, char **argv) {
       bpfFilter = optarg;
       break;
 
+#ifndef USE_DPDK
     case 'g':
       bind_mask = optarg;
       break;
+#endif
 
     case 'l':
       num_loops = atoi(optarg);
@@ -1004,9 +1014,11 @@ static void parseOptions(int argc, char **argv) {
       extcap_config();
       break;
 
+#ifndef USE_DPDK
     case '5':
       do_capture = 1;
       break;
+#endif
 
     case '7':
       extcap_capture_fifo = strdup(optarg);
@@ -1076,17 +1088,20 @@ static void parseOptions(int argc, char **argv) {
   }
 
 #ifdef linux
+#ifndef USE_DPDK
   for(thread_id = 0; thread_id < num_threads; thread_id++)
     core_affinity[thread_id] = -1;
 
   if(num_cores > 1 && bind_mask != NULL) {
     char *core_id = strtok(bind_mask, ":");
     thread_id = 0;
+    
     while(core_id != NULL && thread_id < num_threads) {
       core_affinity[thread_id++] = atoi(core_id) % num_cores;
       core_id = strtok(NULL, ":");
     }
   }
+#endif
 #endif
 #endif
 }
@@ -1531,10 +1546,10 @@ if(!rep_mini) {
     }
   }
 
-#ifdef EURISTICS_CODE
-  if(flow->ssh_tls.browser_euristics.is_safari_tls)  fprintf(out, "[Safari]");
-  if(flow->ssh_tls.browser_euristics.is_firefox_tls) fprintf(out, "[Firefox]");
-  if(flow->ssh_tls.browser_euristics.is_chrome_tls)  fprintf(out, "[Chrome]");
+#ifdef HEURISTICS_CODE
+  if(flow->ssh_tls.browser_heuristics.is_safari_tls)  fprintf(out, "[Safari]");
+  if(flow->ssh_tls.browser_heuristics.is_firefox_tls) fprintf(out, "[Firefox]");
+  if(flow->ssh_tls.browser_heuristics.is_chrome_tls)  fprintf(out, "[Chrome]");
 #endif
   
   if(flow->ssh_tls.notBefore && flow->ssh_tls.notAfter) {
@@ -1714,7 +1729,8 @@ int updateIpTree(u_int32_t key, u_int8_t version,
 
     q->addr = key;
     q->version = version;
-    strncpy(q->proto, proto, sizeof(q->proto));
+    strncpy(q->proto, proto, sizeof(q->proto) - 1);
+    q->proto[sizeof(q->proto) - 1] = '\0';
     q->count = UPDATED_TREE;
     q->left = q->right = (addr_node *)0;
 
@@ -1749,7 +1765,8 @@ void updateTopIpAddress(u_int32_t addr, u_int8_t version, const char *proto,
   pair.addr = addr;
   pair.version = version;
   pair.count = count;
-  strncpy(pair.proto, proto, sizeof(pair.proto));
+  strncpy(pair.proto, proto, sizeof(pair.proto) - 1);
+  pair.proto[sizeof(pair.proto) - 1] = '\0';
 
   for(i=0; i<size; i++) {
     /* if the same ip with a bigger
@@ -1807,7 +1824,8 @@ static void updatePortStats(struct port_stats **stats, u_int32_t port,
 
     s->addr_tree->addr = addr;
     s->addr_tree->version = version;
-    strncpy(s->addr_tree->proto, proto, sizeof(s->addr_tree->proto));
+    strncpy(s->addr_tree->proto, proto, sizeof(s->addr_tree->proto) - 1);
+    s->addr_tree->proto[sizeof(s->addr_tree->proto) - 1] = '\0';
     s->addr_tree->count = 1;
     s->addr_tree->left = NULL;
     s->addr_tree->right = NULL;
@@ -2017,12 +2035,14 @@ static void port_stats_walker(const void *node, ndpi_VISIT which, int depth, voi
     sport = ntohs(flow->src_port), dport = ntohs(flow->dst_port);
 
     /* get app level protocol */
-    if(flow->detected_protocol.master_protocol)
+    if(flow->detected_protocol.master_protocol) {
       ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct,
 			 flow->detected_protocol, proto, sizeof(proto));
-    else
+    } else {
       strncpy(proto, ndpi_get_proto_name(ndpi_thread_info[thread_id].workflow->ndpi_struct,
-					 flow->detected_protocol.app_protocol),sizeof(proto));
+					 flow->detected_protocol.app_protocol),sizeof(proto) - 1);
+      proto[sizeof(proto) - 1] = '\0';
+    }
 
     if(((r = strcmp(ipProto2Name(flow->protocol), "TCP")) == 0)
        && (flow->src2dst_packets == 1) && (flow->dst2src_packets == 0)) {
@@ -2405,7 +2425,7 @@ static void printFlowsStats() {
     ndpi_host_ja3_fingerprints *ja3ByHostsHashT = NULL; // outer hash table
     ndpi_ja3_fingerprints_host *hostByJA3C_ht = NULL;   // for client
     ndpi_ja3_fingerprints_host *hostByJA3S_ht = NULL;   // for server
-    int i;
+    unsigned int i;
     ndpi_host_ja3_fingerprints *ja3ByHost_element = NULL;
     ndpi_ja3_info *info_of_element = NULL;
     ndpi_host_ja3_fingerprints *tmp = NULL;
@@ -2911,7 +2931,7 @@ static void printFlowsStats() {
     for(i=0; i<num_flows; i++)
       printFlow(i+1, all_flows[i].flow, all_flows[i].thread_id);
   } else if(csv_fp != NULL) {
-    int i;
+    unsigned int i;
 
     num_flows = 0;
     for(thread_id = 0; thread_id < num_threads; thread_id++) {
@@ -2994,7 +3014,7 @@ static void printResults(u_int64_t processing_time_usec, u_int64_t setup_time_us
   if(!quiet_mode) {
     printf("\nnDPI Memory statistics:\n");
     printf("\tnDPI Memory (once):      %-13s\n", formatBytes(ndpi_get_ndpi_detection_module_size(), buf, sizeof(buf)));
-    printf("\tFlow Memory (per flow):  %-13s\n", formatBytes(sizeof(struct ndpi_flow_struct), buf, sizeof(buf)));
+    printf("\tFlow Memory (per flow):  %-13s\n", formatBytes( ndpi_detection_get_sizeof_ndpi_flow_struct() + 2*ndpi_detection_get_sizeof_ndpi_id_struct(), buf, sizeof(buf)));
     printf("\tActual Memory:           %-13s\n", formatBytes(current_ndpi_memory, buf, sizeof(buf)));
     printf("\tPeak Memory:             %-13s\n", formatBytes(max_ndpi_memory, buf, sizeof(buf)));
     printf("\tSetup Time:              %lu msec\n", (unsigned long)(setup_time_usec/1000));
@@ -3047,9 +3067,23 @@ static void printResults(u_int64_t processing_time_usec, u_int64_t setup_time_us
 	  t = 0;
 	  b = 0;
 	}
-	strftime(when, sizeof(when), "%d/%b/%Y %H:%M:%S", localtime_r(&pcap_start.tv_sec, &result));
+#ifdef WIN32
+	/* localtime() on Windows is thread-safe */
+	struct tm * tm_ptr = localtime(&pcap_start.tv_sec);
+	result = *tm_ptr;
+#else
+	localtime_r(&pcap_start.tv_sec, &result);
+#endif
+	strftime(when, sizeof(when), "%d/%b/%Y %H:%M:%S", &result);
 	printf("\tAnalysis begin:        %s\n", when);
-	strftime(when, sizeof(when), "%d/%b/%Y %H:%M:%S", localtime_r(&pcap_end.tv_sec, &result));
+#ifdef WIN32
+	/* localtime() on Windows is thread-safe */
+	tm_ptr = localtime(&pcap_end.tv_sec);
+	result = *tm_ptr;
+#else
+	localtime_r(&pcap_end.tv_sec, &result);
+#endif
+	strftime(when, sizeof(when), "%d/%b/%Y %H:%M:%S", &result);
 	printf("\tAnalysis end:          %s\n", when);
 	printf("\tTraffic throughput:    %s pps / %s/sec\n", formatPackets(t, buf), formatTraffic(b, 1, buf1));
 	printf("\tTraffic duration:      %.3f sec\n", traffic_duration/1000000);
@@ -3202,6 +3236,8 @@ void sigproc(int sig) {
 }
 
 
+#ifndef USE_DPDK
+
 /**
  * @brief Get the next pcap file from a passed playlist
  */
@@ -3225,7 +3261,6 @@ next_line:
   }
 }
 
-
 /**
  * @brief Configure the pcap handle
  */
@@ -3248,14 +3283,17 @@ static void configurePcapHandle(pcap_t * pcap_handle) {
   }
 }
 
+#endif
 
 /**
  * @brief Open a pcap file or a specified device - Always returns a valid pcap_t
  */
 static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_file) {
+#ifndef USE_DPDK
   u_int snaplen = 1536;
   int promisc = 1;
   char pcap_error_buffer[PCAP_ERRBUF_SIZE];
+#endif
   pcap_t * pcap_handle = NULL;
 
   /* trying to open a live interface */
@@ -3425,8 +3463,8 @@ static void ndpi_process_packet(u_char *args,
     printf("INTERNAL ERROR: ingress packet was modified by nDPI: this should not happen [thread_id=%u, packetId=%lu, caplen=%u]\n",
 	   thread_id, (unsigned long)ndpi_thread_info[thread_id].workflow->stats.raw_packet_count, header->caplen);
 
-  if((pcap_end.tv_sec-pcap_start.tv_sec) > pcap_analysis_duration) {
-    int i;
+  if((u_int32_t)(pcap_end.tv_sec-pcap_start.tv_sec) > pcap_analysis_duration) {
+    unsigned int i;
     u_int64_t processing_time_usec, setup_time_usec;
 
     gettimeofday(&end, NULL);
@@ -3459,6 +3497,7 @@ static void ndpi_process_packet(u_char *args,
   }
 }
 
+#ifndef USE_DPDK
 /**
  * @brief Call pcap_loop() to process packets from a live capture or savefile
  */
@@ -3474,13 +3513,16 @@ static void runPcapLoop(u_int16_t thread_id) {
       printf("Error while reading pcap file: '%s'\n", pcap_geterr(ndpi_thread_info[thread_id].workflow->pcap_handle));
   }
 }
+#endif
 
 /**
  * @brief Process a running thread
  */
 void * processing_thread(void *_thread_id) {
   long thread_id = (long) _thread_id;
+#ifndef USE_DPDK
   char pcap_error_buffer[PCAP_ERRBUF_SIZE];
+#endif
 
 #if defined(linux) && defined(HAVE_PTHREAD_SETAFFINITY_NP)
   if(core_affinity[thread_id] >= 0) {
@@ -3780,7 +3822,9 @@ static void hllUnitTest() {
 
 static void bitmapUnitTest() {
   u_int32_t val, i, j;
+  u_int64_t val64;
 
+  /* With a 32 bit integer */
   for(i=0; i<32; i++) {
     NDPI_ZERO_BIT(val);
     NDPI_SET_BIT(val, i);
@@ -3790,6 +3834,20 @@ static void bitmapUnitTest() {
     for(j=0; j<32; j++) {
       if(j != i) {
 	assert(!NDPI_ISSET_BIT(val, j));
+      }
+    }
+  }
+
+  /* With a 64 bit integer */
+  for(i=0; i<64; i++) {
+    NDPI_ZERO_BIT(val64);
+    NDPI_SET_BIT(val64, i);
+
+    assert(NDPI_ISSET_BIT(val64, i));
+
+    for(j=0; j<64; j++) {
+      if(j != i) {
+	assert(!NDPI_ISSET_BIT(val64, j));
       }
     }
   }
@@ -4482,11 +4540,12 @@ int original_main(int argc, char **argv) {
 /**
    @brief Timezone
 **/
+#ifndef __GNUC__
   struct timezone {
     int tz_minuteswest; /* minutes W of Greenwich */
     int tz_dsttime;     /* type of dst correction */
   };
-
+#endif
 
 /**
    @brief Set time

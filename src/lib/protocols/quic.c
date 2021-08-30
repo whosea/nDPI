@@ -202,7 +202,14 @@ int quic_len(const uint8_t *buf, uint64_t *value)
     *value = ntohl(*(uint32_t *)buf) & 0x3FFFFFFF;
     return 4;
   case 3:
-    *value = ndpi_ntohll(*(uint64_t *)buf) & 0x3FFFFFFFFFFFFFFF;
+    {
+      u_int64_t n;
+      
+      /* Necessary as simple cast crashes on ARM */
+      memcpy(&n, buf, sizeof(u_int64_t));    
+      
+      *value = ndpi_ntohll(n & 0x3FFFFFFFFFFFFFFF);
+    }
     return 8;
   default: /* No Possible */
     return 0;
@@ -1016,7 +1023,7 @@ static int __reassemble(struct ndpi_flow_struct *flow, const u_int8_t *frag,
                         uint64_t frag_len, uint64_t frag_offset,
                         const u_int8_t **buf, u_int64_t *buf_len)
 {
-  const int max_quic_reasm_buffer_len = 4096; /* Let's say a couple of full-MTU packets... */
+  const uint64_t max_quic_reasm_buffer_len = 4096; /* Let's say a couple of full-MTU packets... */
 
   /* TODO: at the moment, this function is only a little more than a stub.
      We should reassemble the fragments, but nDPI lacks any proper generic
@@ -1303,7 +1310,7 @@ static void process_tls(struct ndpi_detection_module_struct *ndpi_struct,
   packet->payload_packet_len = crypto_data_len;
 
   processClientServerHello(ndpi_struct, flow, version);
-  flow->l4.tcp.tls.hello_processed = 1; /* Allow matching of custom categories */
+  flow->protos.tls_quic_stun.tls_quic.hello_processed = 1; /* Allow matching of custom categories */
 
   /* Restore */
   packet->payload = p;
@@ -1379,7 +1386,7 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
                                   (char *)flow->protos.tls_quic_stun.tls_quic.client_requested_server_name,
                                   strlen((const char*)flow->protos.tls_quic_stun.tls_quic.client_requested_server_name),
                                   &ret_match, NDPI_PROTOCOL_QUIC);
-      flow->l4.tcp.tls.hello_processed = 1; /* Allow matching of custom categories */
+      flow->protos.tls_quic_stun.tls_quic.hello_processed = 1; /* Allow matching of custom categories */
 
       ndpi_check_dga_name(ndpi_struct, flow,
                           flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, 1);
@@ -1411,7 +1418,7 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
   /* Add check for missing SNI */
   if(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name[0] == '\0') {
     /* This is a bit suspicious */
-    ndpi_set_risk(flow, NDPI_TLS_MISSING_SNI);
+    ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_MISSING_SNI);
   }
 }
 
@@ -1591,7 +1598,7 @@ static void ndpi_search_quic(struct ndpi_detection_module_struct *ndpi_struct,
 {
   u_int32_t version;
   u_int8_t *clear_payload;
-  uint32_t clear_payload_len;
+  uint32_t clear_payload_len = 0;
   const u_int8_t *crypto_data;
   uint64_t crypto_data_len;
   int is_quic;

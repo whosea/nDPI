@@ -26,16 +26,17 @@
 #endif
 
 #include <stdlib.h>
+#include <math.h>
+#include <float.h>
 
 #ifdef WIN32
 #include <winsock2.h> /* winsock.h is included automatically */
 #include <process.h>
 #include <io.h>
+#include <ip6_misc.h>
 #else
 #include <unistd.h>
 #include <netinet/in.h>
-#include <math.h>
-#include <float.h>
 #endif
 #ifdef linux
 #include <pcap/nflog.h>
@@ -43,22 +44,7 @@
 
 #include "reader_util.h"
 
-#ifndef ETH_P_IP
-#define ETH_P_IP               0x0800 	/* IPv4 */
-#endif
-
-#ifndef ETH_P_IPv6
-#define ETH_P_IPV6	       0x86dd	/* IPv6 */
-#endif
-
-#define SLARP                  0x8035   /* Cisco Slarp */
-#define CISCO_D_PROTO          0x2000	/* Cisco Discovery Protocol */
-
-#define VLAN                   0x8100
-#define MPLS_UNI               0x8847
-#define MPLS_MULTI             0x8848
-#define PPPoE                  0x8864
-#define SNAP                   0xaa
+#define SNAP                   0XAA
 #define BSTP                   0x42     /* Bridge Spanning Tree Protocol */
 
 /* Keep last 32 packets */
@@ -1028,7 +1014,8 @@ static u_int8_t is_ndpi_proto(struct ndpi_flow_info *flow, u_int16_t id) {
 
 void correct_csv_data_field(char* data) {
   /* Replace , with ; to avoid issues with CSVs */
-  for(u_int i=0; data[i] != '\0'; i++) if(data[i] == ',') data[i] = ';';
+  u_int i;
+  for(i=0; data[i] != '\0'; i++) if(data[i] == ',') data[i] = ';';
 }
 
 /* ****************************************************** */
@@ -1059,7 +1046,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 	   flow->ndpi_flow->flow_extra_info);
 
   flow->risk = flow->ndpi_flow->risk;
-  
+
   if(is_ndpi_proto(flow, NDPI_PROTOCOL_DHCP)) {
     snprintf(flow->dhcp_fingerprint, sizeof(flow->dhcp_fingerprint), "%s", flow->ndpi_flow->protos.dhcp.fingerprint);
   } else if(is_ndpi_proto(flow, NDPI_PROTOCOL_BITTORRENT)) {
@@ -1182,7 +1169,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       flow->ssh_tls.sha1_cert_fingerprint_set = 1;
     }
 
-    flow->ssh_tls.browser_euristics = flow->ndpi_flow->protos.tls_quic_stun.tls_quic.browser_euristics;
+    flow->ssh_tls.browser_heuristics = flow->ndpi_flow->protos.tls_quic_stun.tls_quic.browser_heuristics;
     
     if(flow->ndpi_flow->protos.tls_quic_stun.tls_quic.alpn) {
       if((flow->ssh_tls.tls_alpn = ndpi_strdup(flow->ndpi_flow->protos.tls_quic_stun.tls_quic.alpn)) != NULL)
@@ -1303,6 +1290,7 @@ void update_tcp_flags_count(struct ndpi_flow_info* flow, struct ndpi_tcphdr* tcp
 }
 
 /* ****************************************************** */
+
 /**
    Function to process the packet:
    determine the flow of a packet and try to decode it
@@ -1479,8 +1467,8 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 
     /* Copy packets entropy if num packets count == 10 */
     ndpi_clear_entropy_stats(flow);
-
-    if(!flow->has_human_readeable_strings) {
+    
+    if((human_readeable_string_len != 0) && (!flow->has_human_readeable_strings)) {
       u_int8_t skip = 0;
 
       if((proto == IPPROTO_TCP)
@@ -1607,6 +1595,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 #endif
   
   *flow_risk = flow->risk;
+  
   return(flow->detected_protocol);
 }
 
@@ -1686,16 +1675,21 @@ static const u_char *parse_nflog_packet(const struct pcap_pkthdr *h, const u_cha
 	return p;
 }
 #endif
-int ndpi_is_datalink_supported(int datalink_type)
-{
+/* ****************************************************** */
+
+int ndpi_is_datalink_supported(int datalink_type) {
   /* Keep in sync with the similar switch in ndpi_workflow_process_packet */
   switch(datalink_type) {
   case DLT_NULL:
   case DLT_PPP_SERIAL:
   case DLT_C_HDLC:
   case DLT_PPP:
+#ifdef DLT_IPV4
   case DLT_IPV4:
+#endif
+#ifdef DLT_IPV6
   case DLT_IPV6:
+#endif
   case DLT_EN10MB:
   case DLT_LINUX_SLL:
   case DLT_IEEE802_11_RADIO:
@@ -1747,7 +1741,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   header_c = *header_o;
   header = &header_c;
   /* lengths and offsets */
-  u_int16_t eth_offset = 0;
+  u_int32_t eth_offset = 0;
   u_int16_t radio_len;
   u_int16_t fc;
   u_int16_t type = 0;
@@ -1828,15 +1822,19 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     }
     break;
 
+#ifdef DLT_IPV4
   case DLT_IPV4:
     type = ETH_P_IP;
     ip_offset = 0;
     break;
+#endif
 
+#ifdef DLT_IPV6
   case DLT_IPV6:
     type = ETH_P_IPV6;
     ip_offset = 0;
     break;
+#endif
 
     /* IEEE 802.3 Ethernet - 1 */
   case DLT_EN10MB:
@@ -1934,7 +1932,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 
   /* check ether type */
   switch(type) {
-  case VLAN:
+  case ETH_P_VLAN:
     vlan_id = ((packet[ip_offset] << 8) + packet[ip_offset+1]) & 0xFFF;
     type = (packet[ip_offset+2] << 8) + packet[ip_offset+3];
     ip_offset += 4;
@@ -1949,8 +1947,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     recheck_type = 1;
     break;
 
-  case MPLS_UNI:
-  case MPLS_MULTI:
+  case ETH_P_MPLS_UNI:
+  case ETH_P_MPLS_MULTI:
     mpls.u32 = *((uint32_t *) &packet[ip_offset]);
     mpls.u32 = ntohl(mpls.u32);
     workflow->stats.mpls_count++;
@@ -1964,7 +1962,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     recheck_type = 1;
     break;
 
-  case PPPoE:
+  case ETH_P_PPPoE:
     workflow->stats.pppoe_count++;
     type = ETH_P_IP;
     ip_offset += 8;
@@ -2008,7 +2006,11 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     ip_len = ((u_int16_t)iph->ihl * 4);
     iph6 = NULL;
 
-    if(iph->protocol == IPPROTO_IPV6 || iph->protocol == IPPROTO_IPIP) {
+    if(iph->protocol == IPPROTO_IPV6
+#ifdef IPPROTO_IPIP
+       || iph->protocol == IPPROTO_IPIP
+#endif
+       ) {
       ip_offset += ip_len;
       if(ip_len > 0)
         goto iph_check;
@@ -2043,7 +2045,11 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       return(nproto);
     }
 
-    if(proto == IPPROTO_IPV6 || proto == IPPROTO_IPIP) {
+    if(proto == IPPROTO_IPV6
+#ifdef IPPROTO_IPIP
+       || proto == IPPROTO_IPIP
+#endif
+       ) {
       if(l4ptr > packet) { /* Better safe than sorry */
         ip_offset = (l4ptr - packet);
         goto iph_check;
@@ -2298,6 +2304,7 @@ int dpdk_port_init(int port, struct rte_mempool *mbuf_pool) {
 int dpdk_port_deinit(int port) {
   rte_eth_dev_stop(port);
   rte_eth_dev_close(port);
+  return 0;
 }
 
 #endif

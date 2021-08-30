@@ -33,6 +33,8 @@
 #else
 #include <unistd.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/mman.h>
 #endif
 
 #include <stdio.h>
@@ -44,12 +46,10 @@
 #include <pcap.h>
 #include <signal.h>
 #include <pthread.h>
-#include <sys/socket.h>
 #include <assert.h>
 #include <math.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <libgen.h>
 
 #include "ndpi_config.h"
@@ -68,7 +68,7 @@ int serializerUnitTest() {
 #ifdef HAVE_JSON_H
   ndpi_serializer serializer, deserializer;
   int i, loop_id;
-  ndpi_serialization_format fmt;
+  ndpi_serialization_format fmt = {0};
   u_int32_t buffer_len;
   char *buffer;
   enum json_tokener_error jerr;

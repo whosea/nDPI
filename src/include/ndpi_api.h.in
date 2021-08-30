@@ -51,9 +51,9 @@ extern "C" {
   /*
     In case a custom DGA function is used, the fucntion
     below must be overwritten,
-   */
+  */
   extern ndpi_custom_dga_predict_fctn ndpi_dga_function;
-  
+
   /**
    * Check if a string is encoded with punycode
    * ( https://tools.ietf.org/html/rfc3492 )
@@ -279,7 +279,7 @@ extern "C" {
   void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *ndpi_struct,
 					    const NDPI_PROTOCOL_BITMASK * detection_bitmask);
 
-    /**
+  /**
    *  Function to be called before we give up with detection for a given flow.
    *  This function reduces the NDPI_UNKNOWN_PROTOCOL detection
    *
@@ -378,7 +378,7 @@ extern "C" {
    * @par    l4_protocol_return = protocol of the layer 4 data if return value == 0, undefined otherwise
    * @par    flags = limit operation on ipv4 or ipv6 packets. Possible values: NDPI_DETECTION_ONLY_IPV4 - NDPI_DETECTION_ONLY_IPV6 - 0 (any)
    * @return 0 if layer 4 data could be found correctly;
-             else != 0
+   else != 0
    *
    */
   u_int8_t ndpi_detection_get_l4(const u_int8_t *l3, u_int16_t l3_len, const u_int8_t **l4_return, u_int16_t *l4_len_return,
@@ -460,10 +460,12 @@ extern "C" {
   /**
    * Check if the string content passed match with a protocol
    *
+   * @par    ndpi_struct         = the detection module
    * @par    flow                = the flow where match the host
    * @par    subprotocol_id      = subprotocol id
    */
-  void ndpi_check_subprotocol_risk(struct ndpi_flow_struct *flow, u_int16_t subprotocol_id);
+  void ndpi_check_subprotocol_risk(struct ndpi_detection_module_struct *ndpi_str,
+				 struct ndpi_flow_struct *flow, u_int16_t subprotocol_id);
 
   /**
    * Check if the string content passed match with a protocol
@@ -492,9 +494,9 @@ extern "C" {
    *
    */
   void ndpi_exclude_protocol(struct ndpi_detection_module_struct *ndpi_struct,
-				  struct ndpi_flow_struct *flow,
-				  u_int16_t master_protocol_id,
-				  const char *_file, const char *_func,int _line);
+			     struct ndpi_flow_struct *flow,
+			     u_int16_t master_protocol_id,
+			     const char *_file, const char *_func,int _line);
   /**
    * Check if the string -bigram_to_match- match with a bigram of -automa-
    *
@@ -694,7 +696,7 @@ extern "C" {
    *
    * @par  ndpi_mod = the detection module
    */
-  void ndpi_dump_risks_score();
+  void ndpi_dump_risks_score(void);
 
 #endif
   /**
@@ -715,7 +717,29 @@ extern "C" {
   int ndpi_load_protocols_file(struct ndpi_detection_module_struct *ndpi_mod,
 			       const char* path);
 
- /**
+  /**
+   * Add an IP-address based risk mask
+   *
+   * @par     ndpi_mod = the detection module
+   * @par     ip       = the IP address for which you wanna set the mask
+   * @par     mask     = the IP risk mask
+   * @return  0 if the rule is loaded correctly;
+   *          -1 else
+   */
+  int ndpi_add_ip_risk_mask(struct ndpi_detection_module_struct *ndpi_mod, char *ip, ndpi_risk mask);
+
+  /**
+   * Add a host-address based risk mask
+   *
+   * @par     ndpi_mod = the detection module
+   * @par     host     = the hostname/domain for which you wanna set the mask
+   * @par     mask     = the host risk mask
+   * @return  0 if the rule is loaded correctly;
+   *          -1 else
+   */
+  int ndpi_add_host_risk_mask(struct ndpi_detection_module_struct *ndpi_mod, char *host, ndpi_risk mask);
+
+  /**
    * Read a file and load the categories
    *
    * @par     ndpi_mod = the detection module
@@ -725,7 +749,7 @@ extern "C" {
    */
   int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, const char* path);
 
- /**
+  /**
    * Read a file and load the list of risky domains
    *
    * @par     ndpi_mod = the detection module
@@ -735,7 +759,7 @@ extern "C" {
    */
   int ndpi_load_risk_domain_file(struct ndpi_detection_module_struct *ndpi_str, const char* path);
 
- /**
+  /**
    * Read a file and load the list of malicious JA3 signatures
    *
    * @par     ndpi_mod = the detection module
@@ -781,7 +805,7 @@ extern "C" {
   void ndpi_set_automa(struct ndpi_detection_module_struct *ndpi_struct,
 		       void* automa);
 
-/* NDPI_PROTOCOL_HTTP */
+  /* NDPI_PROTOCOL_HTTP */
   /**
    * Retrieve information for HTTP flows
    *
@@ -789,7 +813,7 @@ extern "C" {
    * @par     flow     = the detected flow
    * @return  the HTTP method information about the flow
    *
-  */
+   */
   ndpi_http_method ndpi_get_http_method(struct ndpi_detection_module_struct *ndpi_mod,
 					struct ndpi_flow_struct *flow);
 
@@ -800,7 +824,7 @@ extern "C" {
    * @par     flow     = the detected flow
    * @return  the HTTP method information about the flow
    *
-  */
+   */
   char* ndpi_get_http_url(struct ndpi_detection_module_struct *ndpi_mod,
 			  struct ndpi_flow_struct *flow);
 
@@ -811,11 +835,11 @@ extern "C" {
    * @par     flow     = the detected flow
    * @return  the HTTP method information about the flow
    *
-  */
+   */
   char* ndpi_get_http_content_type(struct ndpi_detection_module_struct *ndpi_mod,
 				   struct ndpi_flow_struct *flow);
 
-/* NDPI_PROTOCOL_TOR */
+  /* NDPI_PROTOCOL_TOR */
   /**
    * Check if the flow could be detected as TOR protocol
    *
@@ -894,17 +918,17 @@ extern "C" {
   int ndpi_match_string(void *_automa, char *string_to_match);
 
   int ndpi_load_ip_category(struct ndpi_detection_module_struct *ndpi_struct,
-				 const char *ip_address_and_mask, ndpi_protocol_category_t category);
+			    const char *ip_address_and_mask, ndpi_protocol_category_t category);
   int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_struct,
-				 const char *name_to_add, ndpi_protocol_category_t category);
+				  const char *name_to_add, ndpi_protocol_category_t category);
 #ifndef __KERNEL__
   int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct,
-				 const char *ip_or_name, ndpi_protocol_category_t category);
+			 const char *ip_or_name, ndpi_protocol_category_t category);
   int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_struct);
   int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_struct,
-				 u_int32_t saddr,
-				 u_int32_t daddr,
-				 ndpi_protocol *ret);
+				     u_int32_t saddr,
+				     u_int32_t daddr,
+				     ndpi_protocol *ret);
   int ndpi_match_custom_category(struct ndpi_detection_module_struct *ndpi_struct,
 				 char *name, u_int name_len, ndpi_protocol_category_t *id);
   int ndpi_get_custom_category_match(struct ndpi_detection_module_struct *ndpi_struct,
@@ -924,7 +948,7 @@ extern "C" {
 
   u_int16_t ndpi_get_lower_proto(ndpi_protocol proto);
   u_int16_t ndpi_get_upper_proto(ndpi_protocol proto);
-  
+
   ndpi_proto_defaults_t* ndpi_get_proto_defaults(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_num_supported_protocols(struct ndpi_detection_module_struct *ndpi_mod);
   u_int ndpi_get_ndpi_num_custom_protocols(struct ndpi_detection_module_struct *ndpi_mod);
@@ -964,9 +988,6 @@ extern "C" {
   void set_ndpi_flow_free(void  (*__ndpi_flow_free)(void *ptr));
   void set_ndpi_debug_function(struct ndpi_detection_module_struct *ndpi_str,
 			       ndpi_debug_function_ptr ndpi_debug_printf);
-  //void * ndpi_malloc(size_t size);
-  //void * ndpi_calloc(unsigned long count, size_t size);
-  //void ndpi_free(void *ptr);
   u_int16_t ndpi_get_api_version(void);
   const char *ndpi_get_gcrypt_version(void);
 
@@ -985,6 +1006,9 @@ extern "C" {
 				      char *buffer, u_int buffer_size,
 				      u_int8_t min_string_match_len, /* Will return 0 if no string > min_string_match_len have been found */
 				      char *outbuf, u_int outbuf_len);
+  /* Return a flow info string (summarized). Does only work for DNS/HTTP/TLS/QUIC. */
+  const char* ndpi_get_flow_info(struct ndpi_flow_struct const * const flow,
+                                 ndpi_protocol const * const l7_protocol);
   char* ndpi_ssl_version2str(struct ndpi_flow_struct *flow,
                              u_int16_t version, u_int8_t *unknown_tls_version);
   int ndpi_netbios_name_interpret(u_char *in, u_int in_len, u_char *out, u_int out_len);
@@ -1059,7 +1083,9 @@ extern "C" {
   /* General purpose utilities */
   u_int64_t ndpi_htonll(u_int64_t v);
   u_int64_t ndpi_ntohll(u_int64_t v);
-
+  u_int8_t ndpi_is_valid_protoId(u_int16_t protoId);
+  u_int8_t ndpi_is_encrypted_proto(struct ndpi_detection_module_struct *ndpi_str, ndpi_protocol proto);
+  
   /* DGA */
   int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 			  struct ndpi_flow_struct *flow,
@@ -1555,7 +1581,7 @@ extern "C" {
   ndpi_risk_info* ndpi_risk2severity(ndpi_risk_enum risk);
   u_int16_t ndpi_risk2score(ndpi_risk risk,
 			    u_int16_t *client_score, u_int16_t *server_score);
-  
+
   /* ******************************* */
 
   /* HyperLogLog cardinality estimator */
@@ -1602,15 +1628,21 @@ extern "C" {
 
 #ifndef __KERNEL__
   int ndpi_load_geoip(struct ndpi_detection_module_struct *ndpi_str,
-		       const char *ip_city_data, const char *ip_as_data);
-  void ndpi_free_geoip(struct ndpi_detection_module_struct *ndpi_str);  
+		      const char *ip_city_data, const char *ip_as_data);
+  void ndpi_free_geoip(struct ndpi_detection_module_struct *ndpi_str);
   int ndpi_get_geoip_asn(struct ndpi_detection_module_struct *ndpi_str,
 			 char *ip, u_int32_t *asn);
-int ndpi_get_geoip_country_continent(struct ndpi_detection_module_struct *ndpi_str, char *ip,
-				     char *country_code, u_int8_t country_code_len,
-				     char *continent, u_int8_t continent_len);
+  int ndpi_get_geoip_country_continent(struct ndpi_detection_module_struct *ndpi_str, char *ip,
+				       char *country_code, u_int8_t country_code_len,
+				       char *continent, u_int8_t continent_len);
 #endif
 
+  /* ******************************* */
+
+  char* ndpi_get_flow_name(struct ndpi_flow_struct *flow);
+  
+  /* ******************************* */
+  
 #ifdef __cplusplus
 }
 #endif

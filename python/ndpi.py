@@ -322,6 +322,11 @@ typedef enum {
   NDPI_MALICIOUS_JA3,
   NDPI_MALICIOUS_SHA1_CERTIFICATE,
   NDPI_DESKTOP_OR_FILE_SHARING_SESSION,
+  NDPI_TLS_UNCOMMON_ALPN,
+  NDPI_TLS_CERT_VALIDITY_TOO_LONG,
+  NDPI_TLS_SUSPICIOUS_EXTENSION,
+  NDPI_TLS_FATAL_ALERT,
+  NDPI_SUSPICIOUS_ENTROPY,
 
   /* Leave this as last member */
   NDPI_MAX_RISK
@@ -592,7 +597,7 @@ struct ndpi_flow_tcp_struct {
     void* srv_cert_fingerprint_ctx; /* SHA-1 */
 
     /* NDPI_PROTOCOL_TLS */
-    uint8_t hello_processed:1, certificate_processed:1, subprotocol_detected:1, fingerprint_set:1, _pad:4; 
+    uint8_t certificate_processed:1, fingerprint_set:1, _pad:6;
     uint8_t sha1_certificate_fingerprint[20], num_tls_blocks;
     int16_t tls_application_blocks_len[NDPI_MAX_NUM_TLS_APPL_BLOCKS];
   } tls;
@@ -673,7 +678,7 @@ struct ndpi_flow_udp_struct {
   uint32_t halflife2_stage:2;		  // 0 - 2
 
   /* NDPI_PROTOCOL_TFTP */
-  uint32_t tftp_stage:1;
+  uint32_t tftp_stage:2;
 
   /* NDPI_PROTOCOL_AIMINI */
   uint32_t aimini_stage:5;
@@ -1112,6 +1117,8 @@ struct ndpi_flow_struct {
       uint32_t notBefore, notAfter;
       char ja3_client[33], ja3_server[33];
       uint16_t server_cipher;
+      u_int8_t sha1_certificate_fingerprint[20];
+      u_int8_t hello_processed:1, subprotocol_detected:1, _pad:6;
       struct {
         uint16_t cipher_suite;
         char *esni;

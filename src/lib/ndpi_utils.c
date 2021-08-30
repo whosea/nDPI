@@ -24,6 +24,7 @@
 #ifndef __KERNEL__
 #include <stdlib.h>
 #include <errno.h>
+#include <math.h>
 #include <sys/types.h>
 
 #include <time.h>
@@ -853,6 +854,41 @@ int ndpi_has_human_readeable_string(struct ndpi_detection_module_struct *ndpi_st
 
 /* ********************************** */
 
+static const char* ndpi_get_flow_info_by_proto_id(struct ndpi_flow_struct const * const flow,
+                                                  u_int16_t proto_id)
+{
+  switch (proto_id)
+  {
+    case NDPI_PROTOCOL_DNS:
+    case NDPI_PROTOCOL_HTTP:
+        return (char const *)flow->host_server_name;
+    case NDPI_PROTOCOL_QUIC:
+    case NDPI_PROTOCOL_TLS:
+        if (flow->protos.tls_quic_stun.tls_quic.hello_processed != 0)
+        {
+          return flow->protos.tls_quic_stun.tls_quic.client_requested_server_name;
+        }
+        break;
+  }
+
+  return NULL;
+}
+
+const char* ndpi_get_flow_info(struct ndpi_flow_struct const * const flow,
+                               ndpi_protocol const * const l7_protocol)
+{
+  char const * const app_protocol_info = ndpi_get_flow_info_by_proto_id(flow, l7_protocol->app_protocol);
+
+  if (app_protocol_info != NULL)
+  {
+    return app_protocol_info;
+  }
+
+  return ndpi_get_flow_info_by_proto_id(flow, l7_protocol->master_protocol);
+}
+
+/* ********************************** */
+
 char* ndpi_ssl_version2str(struct ndpi_flow_struct *flow,
                            u_int16_t version, u_int8_t *unknown_tls_version) {
 
@@ -1020,7 +1056,7 @@ u_char* ndpi_base64_decode(const u_char *src, size_t len, size_t *out_len) {
 char* ndpi_base64_encode(unsigned char const* bytes_to_encode, size_t in_len) {
   size_t len = 0, ret_size;
   char *ret;
-  int i = 0;
+  int j, i = 0;
   unsigned char char_array_3[3];
   unsigned char char_array_4[4];
 
@@ -1044,7 +1080,6 @@ char* ndpi_base64_encode(unsigned char const* bytes_to_encode, size_t in_len) {
   }
 
   if(i) {
-    int j;
     for(j = i; j < 3; j++)
       char_array_3[j] = '\0';
 
@@ -1102,6 +1137,9 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
 
   ndpi_serialize_start_of_block(serializer, "ndpi");
   ndpi_serialize_risk(serializer, flow);
+  if (l7_protocol.master_protocol == NDPI_PROTOCOL_IP_ICMP && flow->entropy > 0.0f) {
+    ndpi_serialize_string_float(serializer, "entropy", flow->entropy, "%.6f");
+  }
   ndpi_serialize_string_string(serializer, "proto", ndpi_protocol2name(ndpi_struct, l7_protocol, buf, sizeof(buf)));
   ndpi_protocol_breed_t breed =
       ndpi_get_proto_breed(ndpi_struct,
@@ -1747,10 +1785,18 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
 
   case NDPI_TLS_UNCOMMON_ALPN:
     return("Uncommon TLS ALPN");
-    
+
   case NDPI_TLS_CERT_VALIDITY_TOO_LONG:
     return("TLS certificate validity longer than 13 months");
 
+  case NDPI_TLS_SUSPICIOUS_EXTENSION:
+    return("TLS suspicious extension");
+
+  case NDPI_TLS_FATAL_ALERT:
+    return("TLS fatal alert");
+
+  case NDPI_SUSPICIOUS_ENTROPY:
+    return("Suspicious entropy");
 
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
@@ -1765,7 +1811,7 @@ const char* ndpi_severity2str(ndpi_risk_severity s) {
   case NDPI_RISK_LOW:
     return("Low");
     break;
-    
+
   case NDPI_RISK_MEDIUM:
     return("Medium");
     break;
@@ -1791,16 +1837,16 @@ u_int16_t ndpi_risk2score(ndpi_risk risk,
   u_int32_t i;
 
   *client_score = *server_score = 0; /* Reset values */
-  
+
   if(risk == 0) return(0);
-  
+
   for(i = 0; i < NDPI_MAX_RISK; i++) {
     ndpi_risk_enum r = (ndpi_risk_enum)i;
 
     if(NDPI_ISSET_BIT(risk, r)) {
       ndpi_risk_info *info = ndpi_risk2severity(r);
       u_int16_t val = 0, client_score_val;
-      
+
       switch(info->severity) {
       case NDPI_RISK_LOW:
 	val = NDPI_SCORE_RISK_LOW;
@@ -1994,7 +2040,7 @@ int ndpi_hash_add_entry(ndpi_str_hash *h, char *key, u_int8_t key_len, u_int8_t 
 
     if(e == NULL)
       return(-2);
-    
+
     if((e->key = (char*)ndpi_malloc(key_len)) == NULL)
       return(-3);
 
@@ -2008,13 +2054,214 @@ int ndpi_hash_add_entry(ndpi_str_hash *h, char *key, u_int8_t key_len, u_int8_t 
     return(0);
 }
 
+/* ********************************************************************************* */
+
+static u_int64_t ndpi_host_ip_risk_ptree_match(struct ndpi_detection_module_struct *ndpi_str,
+					       struct in_addr *pin /* network byte order */) {
+  ndpi_prefix_t prefix;
+  ndpi_patricia_node_t *node;
+
+  /* Make sure all in network byte order otherwise compares wont work */
+  ndpi_fill_prefix_v4(&prefix, pin, 32, ((ndpi_patricia_tree_t *) ndpi_str->protocols_ptree)->maxbits);
+  node = ndpi_patricia_search_best(ndpi_str->ip_risk_mask_ptree, &prefix);
+
+  if(node)
+    return(node->value.u.uv64);
+  else
+    return((u_int64_t)-1);
+}
+
+/* ********************************************************************************* */
+
+static void ndpi_handle_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str,
+					struct ndpi_flow_struct *flow) {
+  char *host;
+
+  if(flow->risk == 0) return; /* Nothing to do */
+
+  host = ndpi_get_flow_name(flow);
+
+  if((!flow->host_risk_mask_evaluated) && (!flow->ip_risk_mask_evaluated)) {
+    flow->risk_mask = (u_int64_t)-1; /* No mask */    
+  }
+  
+  if(!flow->host_risk_mask_evaluated) {
+    if(host && (host[0] != '\0')) {
+      /* Check host exception */
+      ndpi_automa *automa = &ndpi_str->host_risk_mask_automa;
+
+      if(automa->ac_automa) {
+	AC_TEXT_t ac_input_text;
+	AC_REP_t match;
+
+	ac_input_text.astring = host, ac_input_text.length = strlen(host);
+	ac_input_text.option = 0;
+
+	if(ac_automata_search(automa->ac_automa, &ac_input_text, &match) > 0)
+	   flow->risk_mask &= match.number64;
+      }
+
+      /* Used to avoid double checks (e.g. in DNS req/rsp) */
+      flow->host_risk_mask_evaluated = 1;
+    }
+  }
+
+  /* TODO: add IPv6 support */
+  if(!flow->ip_risk_mask_evaluated) {
+    if(flow->packet.iph) {
+      struct ndpi_packet_struct *packet = &flow->packet;
+      struct in_addr pin;
+
+      pin.s_addr = packet->iph->saddr;
+      flow->risk_mask &= ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
+
+      pin.s_addr = packet->iph->daddr;
+      flow->risk_mask &= ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
+    }
+
+    flow->ip_risk_mask_evaluated = 1;
+  }
+
+  flow->risk &= flow->risk_mask;
+}
+
 /* ******************************************************************** */
 
-void ndpi_set_risk(struct ndpi_flow_struct *flow, ndpi_risk_enum r) {
+void ndpi_set_risk(struct ndpi_detection_module_struct *ndpi_str,
+		   struct ndpi_flow_struct *flow, ndpi_risk_enum r) {
   ndpi_risk v = 1ull << r;
 
   // NDPI_SET_BIT(flow->risk, (u_int32_t)r);
   flow->risk |= v;
+  ndpi_handle_risk_exceptions(ndpi_str, flow);
 }
 
+/* ******************************************************************** */
 
+int ndpi_is_printable_string(char const * const str, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    if (ndpi_isprint(str[i]) == 0) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+/* ******************************************************************** */
+
+float ndpi_entropy(u_int8_t const * const buf, size_t len) {
+  float entropy = 0.0f;
+  u_int32_t byte_counters[256];
+
+  memset(byte_counters, 0, sizeof(byte_counters));
+
+  for (size_t i = 0; i < len; ++i) {
+    byte_counters[buf[i]]++;
+  }
+
+  for (size_t i = 0; i < sizeof(byte_counters) / sizeof(byte_counters[0]); ++i) {
+    if (byte_counters[i] == 0) {
+      continue;
+    }
+
+    float const p = (float)byte_counters[i] / len;
+    entropy += p * log2f(1 / p);
+  }
+
+  return entropy;
+}
+
+/* ******************************************* */
+
+char* ndpi_get_flow_name(struct ndpi_flow_struct *flow) {
+  if(!flow) goto no_flow_info;
+
+  if(flow->host_server_name[0] != '\0')
+    return((char*)flow->host_server_name);
+
+  if(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name[0] != '\0')
+    return(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
+
+ no_flow_info:
+  return((char*)"");
+}
+
+/* ******************************************* */
+
+void load_common_alpns(struct ndpi_detection_module_struct *ndpi_str) {
+  /* see: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml */
+  const char* const common_alpns[] = {
+    "http/0.9", "http/1.0", "http/1.1",
+    "spdy/1", "spdy/2", "spdy/3", "spdy/3.1",
+    "stun.turn", "stun.nat-discovery",
+    "h2", "h2c", "h2-16", "h2-15", "h2-14", "h2-fb",
+    "webrtc", "c-webrtc",
+    "ftp", "imap", "pop3", "managesieve", "coap",
+    "xmpp-client", "xmpp-server",
+    "acme-tls/1",
+    "mqtt", "dot", "ntske/1", "sunrpc",
+    "h3",
+    "smb",
+    "irc",
+
+    /* QUIC ALPNs */
+    "h3-T051", "h3-T050",
+    "h3-32", "h3-30", "h3-29", "h3-28", "h3-27", "h3-24", "h3-22",
+    "hq-30", "hq-29", "hq-28", "hq-27",
+    "h3-fb-05", "h1q-fb",
+    "doq-i00",
+
+    NULL /* end */
+  };
+  u_int i;
+
+  for(i=0; common_alpns[i] != NULL; i++) {
+    AC_PATTERN_t ac_pattern;
+
+    memset(&ac_pattern, 0, sizeof(ac_pattern));
+    ac_pattern.astring      = ndpi_strdup((char*)common_alpns[i]);
+    ac_pattern.length       = strlen(common_alpns[i]);
+
+    if(ac_automata_add(ndpi_str->common_alpns_automa.ac_automa, &ac_pattern) != ACERR_SUCCESS)
+      printf("%s(): unable to add %s\n", __FUNCTION__, common_alpns[i]);
+  }
+}
+
+/* ******************************************* */
+
+u_int8_t is_a_common_alpn(struct ndpi_detection_module_struct *ndpi_str,
+			  const char *alpn_to_check, u_int alpn_to_check_len) {
+  ndpi_automa *automa = &ndpi_str->common_alpns_automa;
+  
+  if(automa->ac_automa) {
+    AC_TEXT_t ac_input_text;
+    AC_REP_t match;
+    
+    ac_input_text.astring = (char*)alpn_to_check, ac_input_text.length = alpn_to_check_len;
+    ac_input_text.option = 0;
+    
+    if(ac_automata_search(automa->ac_automa, &ac_input_text, &match) > 0)
+      return(1);
+  }
+  
+  return(0);
+}
+
+/* ******************************************* */
+
+u_int8_t ndpi_is_valid_protoId(u_int16_t protoId) {
+  return((protoId >= NDPI_MAX_SUPPORTED_PROTOCOLS + NDPI_MAX_NUM_CUSTOM_PROTOCOLS) ? 0 : 1);  
+}
+
+/* ******************************************* */
+
+u_int8_t ndpi_is_encrypted_proto(struct ndpi_detection_module_struct *ndpi_str,
+				 ndpi_protocol proto) {
+
+  if(ndpi_is_valid_protoId(proto.master_protocol) && ndpi_is_valid_protoId(proto.app_protocol)) {    
+    return((ndpi_str->proto_defaults[proto.master_protocol].isClearTextProto
+	    && ndpi_str->proto_defaults[proto.app_protocol].isClearTextProto) ? 0 : 1);
+  } else
+    return(0);
+}

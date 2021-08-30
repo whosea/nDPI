@@ -383,9 +383,9 @@ AC_ERROR_t ac_automata_finalize (AC_AUTOMATA_t * thiz) {
 int ac_automata_exact_match(AC_PATTERNS_t *mp,int pos, AC_TEXT_t *txt) {
     AC_PATTERN_t *patterns = mp->patterns;
     AC_PATTERN_t **matched = txt->match.matched;
-    int i;
+    unsigned int i;
     int match_map = 0;
-    for(i=0; i < mp->num && i < (__SIZEOF_INT__*8-1); i++,patterns++) {
+    for(i=0; i < mp->num && i < ((sizeof(int)*8)-1); i++,patterns++) {
       do {
         if(patterns->rep.from_start && patterns->rep.at_end) {
             if(pos == txt->length && patterns->length == pos)
@@ -681,8 +681,13 @@ void ac_automata_dump(AC_AUTOMATA_t * thiz, FILE *file) {
   ai.bufstr[0] = '\0';
 
   ac_automata_walk(thiz,dump_node_common,dump_node_str,(void *)&ai);
+#ifdef WIN32
+  fprintf(ai.file,"---\n mem size %lu avg node size %d, node one char %d, <=8c %d, >8c %d, range %d\n---DUMP-END-\n",
+              (long unsigned int)ai.memcnt,(int)ai.memcnt/(thiz->all_nodes_num+1),(int)ai.node_oc,(int)ai.node_8c,(int)ai.node_xc,(int)ai.node_xr);
+#else
   fprintf(ai.file,"---\n mem size %zu avg node size %d, node one char %d, <=8c %d, >8c %d, range %d\n---DUMP-END-\n",
               ai.memcnt,(int)ai.memcnt/(thiz->all_nodes_num+1),(int)ai.node_oc,(int)ai.node_8c,(int)ai.node_xc,(int)ai.node_xr);
+#endif
 }
 #endif
 

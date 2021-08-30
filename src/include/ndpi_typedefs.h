@@ -74,7 +74,7 @@ typedef enum {
   - ndpi_risk2str (in ndpi_utils.c)
   - https://github.com/ntop/ntopng/blob/dev/scripts/lua/modules/flow_risk_utils.lua
   - ndpi_risk_enum (in python/ndpi.py)
-  - ndpi_known_risks (ndpi_utils.c)
+  - ndpi_known_risks (ndpi_main.c)
  */
 typedef enum {
   NDPI_NO_RISK = 0,
@@ -110,7 +110,10 @@ typedef enum {
   NDPI_DESKTOP_OR_FILE_SHARING_SESSION, /* 30 */
   NDPI_TLS_UNCOMMON_ALPN,
   NDPI_TLS_CERT_VALIDITY_TOO_LONG,
-
+  NDPI_TLS_SUSPICIOUS_EXTENSION,
+  NDPI_TLS_FATAL_ALERT,
+  NDPI_SUSPICIOUS_ENTROPY,
+  
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 63 due to (**) */
 } ndpi_risk_enum;
@@ -751,8 +754,7 @@ struct ndpi_flow_tcp_struct {
     void* srv_cert_fingerprint_ctx; /* SHA-1 */
 
     /* NDPI_PROTOCOL_TLS */
-    u_int8_t hello_processed:1, certificate_processed:1, subprotocol_detected:1,
-	fingerprint_set:1, _pad:4;
+    u_int8_t certificate_processed:1, fingerprint_set:1, _pad:6;
     u_int8_t num_tls_blocks;
     int16_t tls_application_blocks_len[NDPI_MAX_NUM_TLS_APPL_BLOCKS]; /* + = src->dst, - = dst->src */
   } tls;
@@ -762,6 +764,8 @@ struct ndpi_flow_tcp_struct {
 
   /* NDPI_PROTOCOL_DIRECT_DOWNLOAD_LINK */
   u_int32_t ddlink_server_direction:1;
+
+  /* Part of the TCP header. */
   u_int32_t seen_syn:1;
   u_int32_t seen_syn_ack:1;
   u_int32_t seen_ack:1;
@@ -838,7 +842,7 @@ struct ndpi_flow_udp_struct {
   u_int32_t halflife2_stage:2;		  // 0 - 2
 
   /* NDPI_PROTOCOL_TFTP */
-  u_int32_t tftp_stage:1;
+  u_int32_t tftp_stage:2;
 
   /* NDPI_PROTOCOL_AIMINI */
   u_int32_t aimini_stage:5;
@@ -1097,7 +1101,8 @@ typedef enum {
 typedef struct ndpi_proto_defaults {
   char *protoName;
   ndpi_protocol_category_t protoCategory;
-  u_int16_t * subprotocols;
+  u_int8_t isClearTextProto;
+  u_int16_t *subprotocols;
   u_int32_t subprotocol_count;
   u_int16_t protoId, protoIdx;
   u_int16_t tcp_default_ports[MAX_DEFAULT_PORTS], udp_default_ports[MAX_DEFAULT_PORTS];
@@ -1214,11 +1219,14 @@ struct ndpi_detection_module_struct {
     content_automa,                            /* Used for HTTP subprotocol_detection */
     subprotocol_automa,                        /* Used for HTTP subprotocol_detection */
     risky_domain_automa, tls_cert_subject_automa,
-    malicious_ja3_automa, malicious_sha1_automa;
+    malicious_ja3_automa, malicious_sha1_automa,
+    host_risk_mask_automa, common_alpns_automa;  
   /* IMPORTANT: please update ndpi_finalize_initialization() whenever you add a new automa */
   
   spinlock_t host_automa_lock;
 
+  void *ip_risk_mask_ptree;
+  
   struct {
     ndpi_automa hostnames, hostnames_shadow;
     void *ipAddresses, *ipAddresses_shadow; /* Patricia */
@@ -1306,9 +1314,9 @@ typedef enum {
 
 #define MAX_NUM_TLS_SIGNATURE_ALGORITHMS 16
 
-struct tls_euristics {
+struct tls_heuristics {
   /*
-    TLS euristics for detecting browsers usage
+    TLS heuristics for detecting browsers usage
     NOTE: expect false positives
   */
   u_int8_t is_safari_tls:1, is_firefox_tls:1, is_chrome_tls:1, notused:5;
@@ -1353,6 +1361,9 @@ struct ndpi_flow_struct {
     struct ndpi_flow_udp_struct udp;
   } l4;
 
+  /* Some protocols calculate the entropy. */
+  float entropy;
+
   /* Place textual flow info here */
   char flow_extra_info[16];
 
@@ -1364,7 +1375,8 @@ struct ndpi_flow_struct {
   /* HTTP host or DNS query */
   u_char host_server_name[240];
   u_int8_t initial_binary_bytes[8], initial_binary_bytes_len;
-  u_int8_t risk_checked;
+  u_int8_t risk_checked:1, ip_risk_mask_evaluated:1, host_risk_mask_evaluated:1, _notused:5;
+  ndpi_risk risk_mask; /* Stores the flow risk mask for flow peers */
   ndpi_risk risk; /* Issues found with this flow [bitmask of ndpi_risk] */
 
   /*
@@ -1420,6 +1432,7 @@ struct ndpi_flow_struct {
 	char ja3_client[33], ja3_server[33];
 	u_int16_t server_cipher;
 	u_int8_t sha1_certificate_fingerprint[20];
+	u_int8_t hello_processed:1, subprotocol_detected:1, _pad:6;
 
 #ifdef TLS_HANDLE_SIGNATURE_ALGORITMS
 	/* Under #ifdef to save memory for those who do not need them */
@@ -1427,7 +1440,7 @@ struct ndpi_flow_struct {
 	u_int16_t client_signature_algorithms[MAX_NUM_TLS_SIGNATURE_ALGORITHMS];
 #endif
 
-	struct tls_euristics browser_euristics;
+	struct tls_heuristics browser_heuristics;
 
 	struct {
 	  u_int16_t cipher_suite;
@@ -1568,12 +1581,14 @@ struct ndpi_flow_struct {
   struct ndpi_id_struct *dst;
 };
 
+#define NDPI_PROTOCOL_DEFAULT_LEVEL	0
+
 typedef struct {
   char *string_to_match, *proto_name;
   u_int16_t protocol_id;
   ndpi_protocol_category_t protocol_category;
   ndpi_protocol_breed_t protocol_breed;
-  int level; /* 0 by default */
+  int level; /* NDPI_PROTOCOL_DEFAULT_LEVEL (0) by default */
 } ndpi_protocol_match;
 
 typedef struct {
