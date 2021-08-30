@@ -386,6 +386,7 @@ int main(int argc,char **argv) {
 	fclose(fd);
 
 	if (optind < argc) {
+		if(infile) free(infile);
 		infile = strdup(argv[optind++]);
 		fd = fopen(infile,"r");
 		if(!fd) {
@@ -493,6 +494,8 @@ int main(int argc,char **argv) {
 
   if(fd) fclose(fd);
   if(yfd) fclose(yfd);
-
+  if(outfile) free(outfile);
+  if(infile) free(infile);
+  if(protocol_name) free(protocol_name);
   return(0);
 }

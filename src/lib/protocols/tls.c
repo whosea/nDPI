@@ -2448,7 +2448,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 
       flow->protos.tls_quic_stun.tls_quic.ssl_version = tls_version;
       if(flow->protos.tls_quic_stun.tls_quic.ssl_version < 0x0302) /* TLSv1.1 */
-	ndpi_set_risk(flow, NDPI_TLS_OBSOLETE_VERSION);
+	ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_OBSOLETE_VERSION);
  
       if((session_id_len+base_offset+3) > packet->payload_packet_len)
 	return(0); /* Not found */
@@ -2538,10 +2538,10 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
 		  if(!is_quic) {
 		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, buffer, strlen(buffer)))
-		      flow->l4.tcp.tls.subprotocol_detected = 1;
+		      flow->protos.tls_quic_stun.tls_quic.subprotocol_detected = 1;
 		  } else {
 		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_QUIC, buffer, strlen(buffer)))
-		      flow->l4.tcp.tls.subprotocol_detected = 1;
+		      flow->protos.tls_quic_stun.tls_quic.subprotocol_detected = 1;
 		  }
 
 		  if(ndpi_check_dga_name(ndpi_struct, flow,
@@ -2760,14 +2760,14 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	    /* Before returning to the caller we need to make a final check */
 	    if((flow->protos.tls_quic_stun.tls_quic.ssl_version >= 0x0303) /* >= TLSv1.2 */
 	       && (flow->protos.tls_quic_stun.tls_quic.alpn == NULL) /* No ALPN */) {
-	      ndpi_set_risk(flow, NDPI_TLS_NOT_CARRYING_HTTPS);
+	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_NOT_CARRYING_HTTPS);
 	    }
 
 	    /* Suspicious Domain Fronting:
 	       https://github.com/SixGenInc/Noctilucent/blob/master/docs/ */
 	    if(flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni &&
 	       flow->protos.tls_quic_stun.tls_quic.client_requested_server_name[0] != '\0') {
-	      ndpi_set_risk(flow, NDPI_TLS_SUSPICIOUS_ESNI_USAGE);
+	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_SUSPICIOUS_ESNI_USAGE);
 	    }
 
 	    /* Add check for missing SNI */
@@ -2776,7 +2776,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	       && (flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni == NULL) /* No ESNI */
 	       ) {
 	      /* This is a bit suspicious */
-	      ndpi_set_risk(flow, NDPI_TLS_MISSING_SNI);
+	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_MISSING_SNI);
 	    }
 
 	    return(2 /* Client Certificate */);

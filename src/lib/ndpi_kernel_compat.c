@@ -164,7 +164,11 @@ static int inet_pton4(const char *src, unsigned char *dst)
 	memcpy(dst, tmp, INADDRSZ);
 	return (1);
 }
-
+static uint32_t inet_addr(const char *ip) {
+	uint32_t r;
+	if(inet_pton4(ip,(char *)&r)) return r;
+	return 0;
+}
 
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
 
@@ -358,6 +362,11 @@ static int inet_pton6(const char *src, unsigned char *dst)
 }
 #endif /* NDPI_DETECTION_SUPPORT_IPV6 */
 
+long long int atoll(const char *buf) {
+	long long int ret;
+	if(kstrtoll(buf,0,&ret)) ret = 0;
+	return ret;
+}
 long int atol(const char *buf) {
 	long int ret;
 	if(kstrtol(buf,0,&ret)) ret = 0;

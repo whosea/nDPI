@@ -60,6 +60,9 @@ stamp-h1
 /src/lib/ndpi_network_list_compile
 /src/lib/ndpi_network_list.c.inc
 /fuzz/Makefile
+/fuzz/fuzz_ndpi_reader
+/fuzz/fuzz_ndpi_reader_with_main
+/fuzz/fuzz_process_packet
 /python/Makefile
 /tests/unit/Makefile
 /tests/unit/unit

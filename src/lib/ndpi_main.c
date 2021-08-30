@@ -2995,7 +2995,9 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
       break;
     case NDPI_ICMP_PROTOCOL_TYPE:
       if(flow && flow->packet.payload) {
+#ifndef __KERNEL__ 
         flow->entropy = 0.0f;
+#endif
 	/* Run some basic consistency tests */
 
 	if(flow->packet.payload_packet_len < sizeof(struct ndpi_icmphdr))
@@ -3008,7 +3010,7 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
 	  if(((icmp_type >= 44) && (icmp_type <= 252))
 	     || (icmp_code > 15))
 	    ndpi_set_risk(ndpi_str, flow, NDPI_MALFORMED_PACKET);
-	  
+#ifndef __KERNEL__ 
 	  if (flow->packet.payload_packet_len > sizeof(struct ndpi_icmphdr)) {
 	    flow->entropy = ndpi_entropy(flow->packet.payload + sizeof(struct ndpi_icmphdr),
 	                                 flow->packet.payload_packet_len - sizeof(struct ndpi_icmphdr));
@@ -3017,6 +3019,7 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
 	      ndpi_set_risk(ndpi_str, flow, NDPI_SUSPICIOUS_ENTROPY);
 	    }
 	  }
+#endif
 	}
       }
       return(NDPI_PROTOCOL_IP_ICMP);
@@ -3174,20 +3177,20 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
   at = strrchr(rule, '@');
   if(at == NULL) {
     /* This looks like a mask rule or an invalid rule */
-    char _rule[256], *rule_type, *key;
+    char _rule[256], *rule_type, *key, *saveptr;
 
     snprintf(_rule, sizeof(_rule), "%s", rule);
-    rule_type = strtok(rule, ":");
+    rule_type = strtok_r(rule, ":",&saveptr);
 
     if(!rule_type) {
       NDPI_LOG_ERR(ndpi_str, "Invalid rule '%s'\n", rule);
       return(-1);      
     }
 
-    key = strtok(NULL, "=");
+    key = strtok_r(NULL, "=", &saveptr);
 
     if(key) {
-      char *mask = strtok(NULL, "=");
+      char *mask = strtok_r(NULL, "=", &saveptr);
 
       if(mask) {
 	ndpi_risk risk_mask = (ndpi_risk)atoll(mask);

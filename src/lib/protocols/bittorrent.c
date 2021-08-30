@@ -441,8 +441,27 @@ static inline bool num_seq_match(uint32_t query, uint32_t resp) {
 }
 static inline bool match_utp_query_reply(uint32_t *ppayload, uint32_t *bt_seq,
 		uint32_t len, uint32_t *reply) {
-	uint32_t payload = htonl(*ppayload);
+	uint32_t payload;
+
+	if(len < 20) return false;
+
+	payload = htonl(*ppayload);
 	if(match_utp_query(payload,len)) {
+                if (MATCH(payload, 0x01, 0x00, ANY, ANY)) {
+                        if (len <= 20 ||
+                            (payload == 0x1000004ul && 
+                             (htonl(ppayload[3]) & 0xffff0000ul) == 0x1030000ul)) {
+                                *reply = 0xffff;
+                                return false; // WoT
+                        }
+                        if (!*bt_seq) {
+                                *bt_seq = payload;
+                                return false;
+                        }
+                        if (!*bt_seq || !num_seq_match(payload,*bt_seq)) {
+                                return false;
+                        }
+                }
 		*reply = 0;
 		return true;
 	}

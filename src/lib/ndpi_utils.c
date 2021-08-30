@@ -2139,7 +2139,8 @@ void ndpi_set_risk(struct ndpi_detection_module_struct *ndpi_str,
 /* ******************************************************************** */
 
 int ndpi_is_printable_string(char const * const str, size_t len) {
-  for (size_t i = 0; i < len; ++i) {
+  size_t i;
+  for (i = 0; i < len; ++i) {
     if (ndpi_isprint(str[i]) == 0) {
       return 0;
     }
@@ -2149,7 +2150,7 @@ int ndpi_is_printable_string(char const * const str, size_t len) {
 }
 
 /* ******************************************************************** */
-
+#ifndef __KERNEL__
 float ndpi_entropy(u_int8_t const * const buf, size_t len) {
   float entropy = 0.0f;
   u_int32_t byte_counters[256];
@@ -2171,7 +2172,7 @@ float ndpi_entropy(u_int8_t const * const buf, size_t len) {
 
   return entropy;
 }
-
+#endif
 /* ******************************************* */
 
 char* ndpi_get_flow_name(struct ndpi_flow_struct *flow) {
