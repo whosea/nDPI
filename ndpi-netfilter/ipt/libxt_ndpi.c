@@ -71,6 +71,12 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define NDPI_OPT_SSL      (EXT_OPT_BASE+8)
 #define NDPI_OPT_ANYNAME  (EXT_OPT_BASE+9)
 
+static void ndpi_mt_init(struct xt_entry_match *match)
+{
+	struct xt_ndpi_mtinfo *info = (void *)match->data;
+	NDPI_BITMASK_RESET(info->flags);
+}
+
 static void 
 ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 {
@@ -281,6 +287,8 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 			info->re = 1;
 
 		} else info->re = 0;
+
+		info->empty = NDPI_BITMASK_IS_ZERO(info->flags);
 		return true;
 	}
 	if(c == NDPI_OPT_PROTO) {
@@ -464,8 +472,9 @@ ndpi_mt4_reg = {
 	.family = NFPROTO_UNSPEC,
 #endif
 	.size = XT_ALIGN(sizeof(struct xt_ndpi_mtinfo)),
-	.userspacesize = XT_ALIGN(sizeof(struct xt_ndpi_mtinfo)),
+	.userspacesize = offsetof(struct xt_ndpi_mtinfo, reg_data),
 	.help = ndpi_mt_help,
+	.init = ndpi_mt_init,
 	.parse = ndpi_mt4_parse,
 	.final_check = ndpi_mt_check,
 	.print = ndpi_mt4_print,
