@@ -1420,6 +1420,8 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
 			   flow->detected_protocol, buf, sizeof(buf)),
 	  ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct,
 			     flow->detected_protocol, buf1, sizeof(buf1)));
+  fprintf(out, "[%s]",
+	  ndpi_is_encrypted_proto(ndpi_thread_info[thread_id].workflow->ndpi_struct, flow->detected_protocol) ? "Encrypted" : "ClearText");
 
   if(!rep_mini && flow->detected_protocol.category != 0)
     fprintf(out, "[cat: %s/%u]",
@@ -2116,8 +2118,8 @@ void debug_printf(u_int32_t protocol, void *id_struct,
   va_list va_ap;
   struct tm result;
 
-  if(log_level <= nDPI_LogLevel) {
-    char buf[8192], out_buf[8192];
+  if((int)log_level <= nDPI_LogLevel) {
+    char buf[8192+32], out_buf[8192];
     char theDate[32];
     const char *extra_msg = "";
     time_t theTime = time(NULL);

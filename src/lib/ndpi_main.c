@@ -892,7 +892,7 @@ int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_str
 /* ******************************************************************** */
 
 static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_struct *ndpi_str) {
-  int i,j;
+  size_t i,j;
   u_int val;
 
   for(i = 0; i < ndpi_str->ndpi_num_supported_protocols; i++) {
@@ -2516,10 +2516,10 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
     ac_automata_name(ndpi_str->content_automa.ac_automa,"content",AC_FEATURE_DEBUG);
 
   if(ndpi_str->host_risk_mask_automa.ac_automa)
-    ac_automata_name(ndpi_str->host_risk_mask_automa.ac_automa,"content",AC_FEATURE_DEBUG);
+    ac_automata_name(ndpi_str->host_risk_mask_automa.ac_automa,"risk_mask",AC_FEATURE_DEBUG);
 
   if(ndpi_str->common_alpns_automa.ac_automa)
-    ac_automata_name(ndpi_str->common_alpns_automa.ac_automa,"content",AC_FEATURE_DEBUG);
+    ac_automata_name(ndpi_str->common_alpns_automa.ac_automa,"alpns",AC_FEATURE_DEBUG);
 
   if((ndpi_str->custom_categories.ipAddresses == NULL) || (ndpi_str->custom_categories.ipAddresses_shadow == NULL)) {
     NDPI_LOG_ERR(ndpi_str, "[NDPI] Error allocating Patricia trees\n");
@@ -2594,6 +2594,14 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
 
     case 6:
       automa = &ndpi_str->common_alpns_automa;
+      break;
+
+    case 7:
+      automa = &ndpi_str->subprotocol_automa;
+      break;
+
+    case 8:
+      automa = &ndpi_str->risky_domain_automa;
       break;
 
     default:
@@ -2674,7 +2682,8 @@ static int ndpi_match_string_common(AC_AUTOMATA_t *automa, char *string_to_match
   }
 
   if(automa->automata_open) {
-    printf("[%s:%d] [NDPI] Internal error: please call ndpi_finalize_initialization()\n", __FILE__, __LINE__);
+    printf("[%s:%d] [NDPI] %.16s open. Internal error: please call ndpi_finalize_initialization()\n",
+	__FILE__, __LINE__, automa->name);
     return(-1);
   }
 
@@ -3424,7 +3433,7 @@ int ndpi_load_risk_domain_file(struct ndpi_detection_module_struct *ndpi_str, co
  *
  */
 int ndpi_load_malicious_ja3_file(struct ndpi_detection_module_struct *ndpi_str, const char *path) {
-  char buffer[128], *line, *str;
+  char buffer[128], *line;
   FILE *fd;
   int len, num = 0;
 
@@ -4764,7 +4773,6 @@ static u_int32_t check_ndpi_detection_func(struct ndpi_detection_module_struct *
   u_int16_t proto_index = ndpi_str->proto_defaults[flow->guessed_protocol_id].protoIdx;
   u_int16_t proto_id = ndpi_str->proto_defaults[flow->guessed_protocol_id].protoId;
   NDPI_PROTOCOL_BITMASK detection_bitmask;
-  u_int32_t a;
 
   NDPI_SAVE_AS_BITMASK(detection_bitmask, flow->packet.detected_protocol_stack[0]);
 

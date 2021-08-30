@@ -39,7 +39,7 @@ return s+1;
 
 uint16_t get_proto_by_name(const char *name) {
 const char *s;
-int i;
+size_t i;
 if(!name || !*name) return NDPI_PROTOCOL_UNKNOWN;
 for(i=0; i < sizeof(proto_def)/sizeof(proto_def[0]); i++) {
 	s = proto_def[i];
@@ -180,7 +180,7 @@ char *s = l,*sw,*dlm;
   }
   dlm = strchr(sw,':');
   if(!dlm) return 0;
-  strncpy(word,s,wlen < (dlm - sw) ? wlen : dlm - sw);
+  strncpy(word,s,wlen < (size_t)(dlm - sw) ? wlen : (size_t)(dlm - sw));
   if(strchr(word,' ') || strchr(word,'\t')) return 0;
   dlm++;
   while(*dlm && (*dlm == ' ' || *dlm == '\t')) dlm++;
@@ -220,7 +220,7 @@ int main(int argc,char **argv) {
   ndpi_patricia_node_t *node;
   ndpi_patricia_tree_t *ptree;
   ndpi_prefix_t prefix,prefix1;
-  int i,line,code,nsp,psp;
+  int i,line=0,code,nsp,psp;
   uint16_t protocol;
   char lbuf[128],lbuf2[128];
   char word[128],lastword[128],*wordarg;
@@ -428,7 +428,8 @@ int main(int argc,char **argv) {
 
   for(i=0; i <= NDPI_LAST_IMPLEMENTED_PROTOCOL; i++) {
 	struct net_cidr_list *nl = net_cidr_list[i];
-	int l,mg;
+	size_t l;
+	int mg;
 	if(!nl) continue;
         
 	const  char *pname = get_proto_by_id(i);
@@ -457,7 +458,7 @@ int main(int argc,char **argv) {
 				uint32_t m = 0xfffffffful << (32 - nl->addr[l].masklen);
 				if( (a & ~(m << 1)) == 0 &&
 				     a + (~m + 1) == htonl(nl->addr[l+1].a.s_addr)) {
-					int l2;
+					size_t l2;
 					if(verbose) {
 						fill_ipv4_prefix(&prefix, &nl->addr[l].a,nl->addr[l].masklen);
 						fill_ipv4_prefix(&prefix1,&nl->addr[l+1].a,nl->addr[l+1].masklen);

@@ -1117,10 +1117,6 @@ static void tlsCheckUncommonALPN(struct ndpi_detection_module_struct *ndpi_struc
 				  struct ndpi_flow_struct *flow) {
   char * alpn_start = flow->protos.tls_quic_stun.tls_quic.alpn;
   char * comma_or_nul = alpn_start;
-  char const *alpn;
-  int alpn_found;
-  int alpn_len;
-  size_t i;
   do {
     int alpn_len;
     

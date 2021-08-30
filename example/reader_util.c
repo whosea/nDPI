@@ -2084,7 +2084,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 	u_int offset = ip_offset+ip_len+sizeof(struct ndpi_udphdr);
 	u_int8_t flags = packet[offset];
 	u_int8_t message_type = packet[offset+1];
-	u_int8_t exts_parsing_error = 0;
+	//u_int8_t exts_parsing_error = 0;
 
 	if((((flags & 0xE0) >> 5) == 1 /* GTPv1 */) &&
 	   (message_type == 0xFF /* T-PDU */)) {
@@ -2100,7 +2100,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 	      ext_length = packet[offset] << 2;
 	      offset += ext_length;
 	      if(offset >= header->caplen || ext_length == 0) {
-	        exts_parsing_error = 1;
+	        //exts_parsing_error = 1;
 	        break;
 	      }
 	      if(packet[offset - 1] == 0)

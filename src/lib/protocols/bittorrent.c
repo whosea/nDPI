@@ -148,7 +148,7 @@ return ht;
 }
 
 static void hash_ip4p_del(struct hash_ip4p_table *ht) {
-int key;
+size_t key;
 struct hash_ip4p_node *n,*t;
 
 for(key=0; key < ht->size; key++) {
@@ -637,7 +637,8 @@ static void bt_add_announce(struct ndpi_detection_module_struct *ndpi_struct,
 			int ipv6, ndpi_ip_addr_t *s_ip, u_int16_t s_port,
 			struct bt_parse_protocol *p, u_int32_t now) {
 struct bt_announce *b,*old = bt_ann;
-int i,l;
+int i;
+size_t l;
 const uint8_t *i_hash = p->a.info_hash;
 u_int32_t t_ip[4];
 u_int16_t t_port;

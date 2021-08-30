@@ -173,7 +173,6 @@ static void ndpi_validate_http_content(struct ndpi_detection_module_struct *ndpi
 static ndpi_protocol_category_t ndpi_http_check_content(struct ndpi_detection_module_struct *ndpi_struct,
 							struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = &flow->packet;
-  int i;
 
   if(packet->content_line.len > 0) {
     u_int app_len = sizeof("application");
@@ -484,7 +483,7 @@ static void ndpi_check_numeric_ip(struct ndpi_detection_module_struct *ndpi_stru
 	a += *s - '0';
   }
   if(a < 0 || a > 255 || i != 3) return;
-  ndpi_set_risk(flow, NDPI_HTTP_NUMERIC_IP_HOST);
+  ndpi_set_risk(ndpi_struct, flow, NDPI_HTTP_NUMERIC_IP_HOST);
 }
 
 /* ************************************************************* */
