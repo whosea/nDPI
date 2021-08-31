@@ -11,9 +11,14 @@ allowing you to flexibly choose the traffic that interests us.
 An example for sample traffic passing only through a specific network
 interface eth1 :
 
-	iptables -t mangle -A PREROUTING -m ndpi --all
-	iptables -t mangle -A OUTPUT -m ndpi --all
-	iptables -t mangle -A PREROUTING -i eth1  -m ndpi ! --error -j NDPI --flow-info
+	iptables -t mangle -A INPUT -i eth1 -m ndpi ! --error -j NDPI --flow-info
+	iptables -t mangle -A FORWARD -i eth1  -m ndpi ! --error -j NDPI --flow-info
+	iptables -t mangle -A FORWARD -o eth1  -m ndpi ! --error -j NDPI --flow-info
+	iptables -t mangle -A OUTPUT -o eth1 -m ndpi ! --error -j NDPI --flow-info
+
+If NAT are not used on the network interface, then you can do the two rules:
+
+	iptables -t mangle -A PREROUTING  -i eth1 -m ndpi ! --error -j NDPI --flow-info
 	iptables -t mangle -A POSTROUTING -o eth1 -m ndpi ! --error -j NDPI --flow-info
 
 For information about traffic, you need to open the /proc/net/xt_ndpi/flows file

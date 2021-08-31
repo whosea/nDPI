@@ -71,4 +71,3 @@ stamp-h1
 /tests/do_debug.sh
 /tests/do_valgrind.sh
 .gdbinit
-*.diff

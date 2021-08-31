@@ -2,28 +2,16 @@
 1. Kernel patches
 -----------------
 
-You _must_ apply the patch to the kernel in two cases:
-- Kernel version 3.2 or 3.4.
-- Kernel version 3.10 or higher (see minimum requirements for the kernel)
-In other cases kernel patches not requhired!
-
-Patches are located in the kernel-patch/*.diff
-
-V3.4.97  patch can be applied for 3.4 kernels (tested on 3.4.97+) and possibly to 3.2.
-V3.10.20 patch can be applied to kernel 3.10 (3.11).
-V3.12.7  patch can be applied to kernel 3.12.
-V3.14.4  patch can be applied to kernel 3.14.2-3.14.4
-V3.14.5  patch can be applied to kernel 3.14.5 and higher (3.18 including).
-v4.8.0   patch can be applied to kernel 4.8,4.9
-v4.12.0   patch can be applied to kernel 4.12
-v4.14.0   patch can be applied to kernel 4.14
-v4.15.3   patch can be applied to kernel 4.15
+This version works without patches for the kernel.
+The minimum required kernel version is 4.4.
+If you need to use the extension 'connlabel' you need
+to use a patch for the kernel.
 
 --------------------------------------------------------
 2. The minimum requirements for the kernel configuration
 --------------------------------------------------------
 
-Kernel version >= 3.4 (3.2 not tested)
+Kernel version >= 4.4
 
 Networking support  --->
   Networking options  --->
@@ -33,18 +21,19 @@ Networking support  --->
           Number of custom extend (1) (if patched kernel)
 	  "connlabel" match support (M)
 
-Check your kernel configuration file. For patched kernel there should be:
-
-CONFIG_NF_CONNTRACK=m or y
-CONFIG_NF_CONNTRACK_CUSTOM=1
-CONFIG_UNUSED_SYMBOLS=y
-
+Check your kernel configuration file.
 For non-patched kernel there should be:
 
-CONFIG_NF_CONNTRACK=m or y
-CONFIG_NF_CONNTRACK_LABELS=y
-CONFIG_NETFILTER_XT_MATCH_CONNLABEL=m
-CONFIG_UNUSED_SYMBOLS=y
+  CONFIG_NF_CONNTRACK=m or y
+  CONFIG_NF_CONNTRACK_LABELS=y
+  CONFIG_NETFILTER_XT_MATCH_CONNLABEL=m
+  CONFIG_UNUSED_SYMBOLS=y
+
+For patched kernel there should be:
+
+  CONFIG_NF_CONNTRACK=m or y
+  CONFIG_NF_CONNTRACK_CUSTOM=1
+  CONFIG_UNUSED_SYMBOLS=y
 
 ----------------------
 3. Compile and install
@@ -180,12 +169,19 @@ done
 echo "unknown 10040" >/proc/net/xt_ndpi/proto
 
 #detect incoming traffic
-iptables -t mangle -A PREROUTING -m ndpi --all
+iptables -t mangle -A INPUT -m ndpi --all
+#detect transit traffic
+iptables -t mangle -A FORWARD -m ndpi --all
 #detect outgoing local traffic
 iptables -t mangle -A OUTPUT -m ndpi --all
 
 #traffic classification
 iptables -t mangle -A POSTROUTING -o eth0 -j NDPI --ndpi-id --set-clsf
+
+Warning! Do not use the 'mangle/PREROUTING' chain for incoming packets via
+the network interface with the translations of addresses (NAT),
+since the 'mangle/PREROUTING' chain is performed before NAT. Packet checks need
+to be moved to the 'mangle/FORWARD' and 'mangle/INPUT' chains.
 
 ----------------
 5. Module unload
