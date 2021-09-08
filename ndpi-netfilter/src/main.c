@@ -289,30 +289,32 @@ static unsigned long  ndpi_flow_c=0;
 static unsigned long  ndpi_flow_d=0;
 static unsigned long  ndpi_bt_gc=0;
 
-static unsigned long  ndpi_p0=0;
-static unsigned long  ndpi_p1=0;
-static unsigned long  ndpi_p2=0;
-static unsigned long  ndpi_p31=0;
-static unsigned long  ndpi_p34=0;
-static unsigned long  ndpi_p7=0;
-static unsigned long  ndpi_p9=0;
-static unsigned long  ndpi_pa=0;
-static unsigned long  ndpi_pb=0;
-static unsigned long  ndpi_pc=0;
-static unsigned long  ndpi_pd=0;
-static unsigned long  ndpi_pe=0;
-static unsigned long  ndpi_pf=0;
-static unsigned long  ndpi_pg=0;
-static unsigned long  ndpi_ph=0;
-static unsigned long  ndpi_pi=0;
-static unsigned long  ndpi_pi2=0;
-static unsigned long  ndpi_pi3=0;
-static unsigned long  ndpi_pi4=0;
-static unsigned long  ndpi_pj=0;
-static unsigned long  ndpi_pjc=0;
-static unsigned long  ndpi_pk=0;
+static unsigned long  ndpi_p_ipv4=0;
+static unsigned long  ndpi_p_err_ip_frag_len=0;
+static unsigned long  ndpi_p_err_bad_tcp_udp=0;
+static unsigned long  ndpi_p_ct_null=0;
+static unsigned long  ndpi_p_ct_untrack=0;
+static unsigned long  ndpi_p_ct_confirm=0;
+static unsigned long  ndpi_p_ct_nolabel=0;
+static unsigned long  ndpi_p_ct_ndpi=0;
+static unsigned long  ndpi_p_err_add_ndpi=0;
+static unsigned long  ndpi_p_non_tcpudp=0;
+static unsigned long  ndpi_p_max_parsed_lines=0;
+static unsigned long  ndpi_p_ipv6=0;
+static unsigned long  ndpi_p_nonip=0;
+static unsigned long  ndpi_p_id_num=0;
+static unsigned long  ndpi_p_noncached=0;
+static unsigned long  ndpi_p_err_prot_err=0;
+static unsigned long  ndpi_p_err_noiphdr=0;
+static unsigned long  ndpi_p_err_alloc_flow=0;
+static unsigned long  ndpi_p_err_alloc_id=0;
+static unsigned long  ndpi_p_cached=0;
+static unsigned long  ndpi_p_c_last_ct_not=0;
+static unsigned long  ndpi_p_c_magic_not=0;
+static unsigned long  ndpi_p_l4mismatch=0;
+static unsigned long  ndpi_p_l4mis_size=0;
+static unsigned long  ndpi_p_ndpi_match=0;
 
-static unsigned long  ndpi_pl[11]={0,};
 unsigned long  ndpi_btp_tm[20]={0,};
 
 module_param_named(xt_debug,   ndpi_log_debug, ulong, 0600);
@@ -372,28 +374,31 @@ module_param_named(flow_deleted, ndpi_flow_d, ulong, 0400);
 MODULE_PARM_DESC(flow_deleted,"Counter of destroyed flows. [info]");
 module_param_named(bt_gc_count,  ndpi_bt_gc, ulong, 0400);
 
-module_param_named(ipv4,         ndpi_p0, ulong, 0400);
-module_param_named(ipv6,         ndpi_pa, ulong, 0400);
-module_param_named(nonip,        ndpi_pb, ulong, 0400);
-module_param_named(err_ip_frag_len, ndpi_p1, ulong, 0400);
-module_param_named(err_bad_tcp_udp, ndpi_p2, ulong, 0400);
-module_param_named(ct_confirm,   ndpi_p31, ulong, 0400);
-module_param_named(err_add_ndpi, ndpi_p34, ulong, 0400);
-module_param_named(non_tcpudp,   ndpi_p7, ulong, 0400);
-module_param_named(max_parsed_lines, ndpi_p9, ulong, 0400);
-module_param_named(id_num,	 ndpi_pc, ulong, 0400);
-module_param_named(noncached,	 ndpi_pd, ulong, 0400);
-module_param_named(err_prot_err, ndpi_pe, ulong, 0400);
-module_param_named(err_prot_err1, ndpi_pf, ulong, 0400);
-module_param_named(err_alloc_flow, ndpi_pg, ulong, 0400);
-module_param_named(err_alloc_id, ndpi_ph, ulong, 0400);
-module_param_named(cached,	 ndpi_pi,  ulong, 0400);
-module_param_named(c_skb_not,	 ndpi_pi2, ulong, 0400);
-module_param_named(c_last_ct_not, ndpi_pi3, ulong, 0400);
-module_param_named(c_magic_not,	 ndpi_pi4, ulong, 0400);
-module_param_named(l4mismatch,	 ndpi_pj,  ulong, 0400);
-module_param_named(l4mis_size,	 ndpi_pjc, ulong, 0400);
-module_param_named(ndpi_match,	 ndpi_pk,  ulong, 0400);
+module_param_named(ipv4,         ndpi_p_ipv4, ulong, 0400);
+module_param_named(ipv6,         ndpi_p_ipv6, ulong, 0400);
+module_param_named(nonip,        ndpi_p_nonip, ulong, 0400);
+module_param_named(err_ip_frag_len, ndpi_p_err_ip_frag_len, ulong, 0400);
+module_param_named(err_bad_tcp_udp, ndpi_p_err_bad_tcp_udp, ulong, 0400);
+module_param_named(ct_null,      ndpi_p_ct_null, ulong, 0400);
+module_param_named(ct_untrack,   ndpi_p_ct_untrack, ulong, 0400);
+module_param_named(ct_confirm,   ndpi_p_ct_confirm, ulong, 0400);
+module_param_named(ct_nolabel,   ndpi_p_ct_nolabel, ulong, 0400);
+module_param_named(ct_ndpi,      ndpi_p_ct_ndpi, ulong, 0400);
+module_param_named(err_add_ndpi, ndpi_p_err_add_ndpi, ulong, 0400);
+module_param_named(non_tcpudp,   ndpi_p_non_tcpudp, ulong, 0400);
+module_param_named(max_parsed_lines, ndpi_p_max_parsed_lines, ulong, 0400);
+module_param_named(id_num,	 ndpi_p_id_num, ulong, 0400);
+module_param_named(noncached,	 ndpi_p_noncached, ulong, 0400);
+module_param_named(err_prot_err, ndpi_p_err_prot_err, ulong, 0400);
+module_param_named(err_noiphdr,  ndpi_p_err_noiphdr, ulong, 0400);
+module_param_named(err_alloc_flow, ndpi_p_err_alloc_flow, ulong, 0400);
+module_param_named(err_alloc_id, ndpi_p_err_alloc_id, ulong, 0400);
+module_param_named(cached,	 ndpi_p_cached,  ulong, 0400);
+module_param_named(c_last_ct_not, ndpi_p_c_last_ct_not, ulong, 0400);
+module_param_named(c_magic_not,	 ndpi_p_c_magic_not, ulong, 0400);
+module_param_named(l4mismatch,	 ndpi_p_l4mismatch,  ulong, 0400);
+module_param_named(l4mis_size,	 ndpi_p_l4mis_size, ulong, 0400);
+module_param_named(ndpi_match,	 ndpi_p_ndpi_match,  ulong, 0400);
 
 unsigned long  ndpi_pto=0,
 	       ndpi_ptss=0, ndpi_ptsd=0,
@@ -578,7 +583,7 @@ ndpi_id_search_or_insert(struct ndpi_net *n,
 		pr_err("xt_ndpi: couldn't allocate new id.\n");
 		return NULL;
 	}
-	(volatile unsigned long int)ndpi_pc++;
+	(volatile unsigned long int)ndpi_p_id_num++;
 	memcpy(&id->ip, ip, sizeof(union nf_inet_addr));
 	kref_init (&id->refcnt);
 
@@ -594,7 +599,7 @@ ndpi_free_id (struct ndpi_net *n, struct osdpi_id_node * id)
 	if (refcount_dec_and_test(&id->refcnt.refcount)) {
 	        rb_erase(&id->node, &n->osdpi_id_root);
 	        kmem_cache_free (osdpi_id_cache, id);
-		(volatile unsigned long int)ndpi_pc--;
+		(volatile unsigned long int)ndpi_p_id_num--;
 	}
 }
 
@@ -882,16 +887,6 @@ ndpi_enable_protocols (struct ndpi_net *n)
 }
 
 
-static void add_stat(unsigned long int n) {
-
-	if(n > ndpi_p9) ndpi_p9 = n;
-	n /= 10;
-	if(n < 0) n = 0;
-	if(n > sizeof(ndpi_pl)/sizeof(ndpi_pl[0])-1)
-		n = sizeof(ndpi_pl)/sizeof(ndpi_pl[0])-1;
-	ndpi_pl[n]++;
-}
-
 static char *ct_info(const struct nf_conn * ct,char *buf,size_t buf_size,int dir) {
  const struct nf_conntrack_tuple *t = 
 	 &ct->tuplehash[!dir ? IP_CT_DIR_ORIGINAL: IP_CT_DIR_REPLY].tuple;
@@ -964,7 +959,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		&& !ip6h
 #endif
 	  ) {
-		COUNTER(ndpi_pf);
+		COUNTER(ndpi_p_err_noiphdr);
 		return NDPI_PROCESS_ERROR;
 	}
 
@@ -972,7 +967,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 	if (!flow) {
 		flow = ndpi_alloc_flow(ct_ndpi);
 		if (!flow) {
-			COUNTER(ndpi_pg);
+			COUNTER(ndpi_p_err_alloc_flow);
 			return NDPI_PROCESS_ERROR;
 		}
 	}
@@ -982,7 +977,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		src = ndpi_id_search_or_insert (n,
 			&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3);
 		if (!src) {
-			COUNTER(ndpi_ph);
+			COUNTER(ndpi_p_err_alloc_id);
 			return NDPI_PROCESS_ERROR;
 		}
 		ct_ndpi->src = src;
@@ -992,7 +987,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		dst = ndpi_id_search_or_insert (n,
 			&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3);
 		if (!dst) {
-			COUNTER(ndpi_ph);
+			COUNTER(ndpi_p_err_alloc_id);
 			return NDPI_PROCESS_ERROR;
 		}
 		ct_ndpi->dst = dst;
@@ -1067,8 +1062,6 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		proto = ndpi_guess_undetected_protocol (
 				n->ndpi_struct,flow,protocol,low_ip,low_port,up_ip,up_port);
 	    }
-	} else {
-		add_stat(flow->packet.parsed_lines);
 	}
 	if( proto.app_protocol != NDPI_PROTOCOL_UNKNOWN ||
 	    proto.master_protocol != NDPI_PROTOCOL_UNKNOWN) {
@@ -1088,7 +1081,7 @@ static inline int can_handle(const struct sk_buff *skb,uint8_t *l4_proto)
 
 	ip6h = ipv6_hdr(skb);
 	if(ip6h->version == 6) {
-		COUNTER(ndpi_pa);
+		COUNTER(ndpi_p_ipv6);
 		*l4_proto = ip6h->nexthdr;
 		// FIXME!
 		return 1;
@@ -1096,35 +1089,35 @@ static inline int can_handle(const struct sk_buff *skb,uint8_t *l4_proto)
 #endif
 	iph = ip_hdr(skb);
         if(!iph) { /* not IP */
-		COUNTER(ndpi_pb); return 0;
+		COUNTER(ndpi_p_nonip); return 0;
 	}
 	if(iph->version != 4) {
-		COUNTER(ndpi_pb); return 0;
+		COUNTER(ndpi_p_nonip); return 0;
 	}
 	*l4_proto = proto = iph->protocol;
-	COUNTER(ndpi_p0);
+	COUNTER(ndpi_p_ipv4);
 
 	if(ntohs(iph->frag_off) & 0x3fff) {
-		COUNTER(ndpi_p1); return 0;
+		COUNTER(ndpi_p_err_ip_frag_len); return 0;
 	}
 	if(skb->len <= (iph->ihl << 2)) {
-		COUNTER(ndpi_p1); return 0; 
+		COUNTER(ndpi_p_err_ip_frag_len); return 0; 
 	}
 
 	l4_len = skb->len - (iph->ihl << 2);
         if(proto == IPPROTO_TCP) {
 		if(l4_len < sizeof(struct tcphdr)) {
-			COUNTER(ndpi_p2); return 0;
+			COUNTER(ndpi_p_err_bad_tcp_udp); return 0;
 		}
 		return 1;
 	}
         if(proto == IPPROTO_UDP) {
 		if(l4_len < sizeof(struct udphdr)) {
-			COUNTER(ndpi_p2); return 0;
+			COUNTER(ndpi_p_err_bad_tcp_udp); return 0;
 		}
 		return 1;
 	}
-	COUNTER(ndpi_p7);
+	COUNTER(ndpi_p_non_tcpudp);
 	return 1;
 }
 
@@ -1259,7 +1252,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	if(c_proto->magic != NDPI_ID)
 		ct_proto_set_flow(c_proto,NULL,0);
 
-	COUNTER(ndpi_pk);
+	COUNTER(ndpi_p_ndpi_match);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
 	ktime_get_real_ts64(&tm);
@@ -1269,7 +1262,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	ct = nf_ct_get (skb, &ctinfo);
 	if (ct == NULL) {
-		COUNTER(ndpi_p31);
+		COUNTER(ndpi_p_ct_null);
 		break;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0)
@@ -1278,7 +1271,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	if(ctinfo == IP_CT_UNTRACKED)	
 #endif
 	{
-		COUNTER(ndpi_p31);
+		COUNTER(ndpi_p_ct_untrack);
 		break;
 	}
 	ct_dir = CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL;
@@ -1287,13 +1280,12 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 #ifdef NF_CT_CUSTOM
 	    if(!ct_label) {
 		if(nf_ct_is_confirmed(ct)) {
-			COUNTER(ndpi_p31);
+			COUNTER(ndpi_p_ct_confirm);
 			break;
 		}
 		ct_label = nf_ct_ext_add_ndpi(ct);
 		if(ct_label)
 			ct_label->magic = 0;
-
 	    }
 #endif
 	    if(ct_label) {
@@ -1314,14 +1306,14 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 					pr_info("Reuse   ct_ndpi %p ct %p %s\n",
 						(void *)ct_ndpi, (void *)ct, ct_info(ct,ct_buf,sizeof(ct_buf),ct_dir));
 			  } else
-				COUNTER(ndpi_p34);
+				COUNTER(ndpi_p_err_add_ndpi);
 		}
 	    } else 
-		COUNTER(ndpi_p31);
+		COUNTER(ndpi_p_ct_nolabel);
 	}
 
 	if(!ct_ndpi) {
-		COUNTER(ndpi_p31);
+		COUNTER(ndpi_p_ct_ndpi);
 		break;
 	}
 	if(ndpi_log_debug > 2)
@@ -1362,16 +1354,16 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			host_match = ndpi_host_match(info,ct_ndpi);
 
 		spin_unlock_bh (&ct_ndpi->lock);
-		COUNTER(ndpi_pi);
+		COUNTER(ndpi_p_cached);
 		if(ndpi_log_debug > 1)
 		    packet_trace(skb,ct,"cache      ");
 		break;
 	    } else {
 		if(ct_proto_last(c_proto))
-		    	COUNTER(ndpi_pi3);
+		    	COUNTER(ndpi_p_c_last_ct_not);
 	    }
 	} else 
-		COUNTER(ndpi_pi4); // new packet
+		COUNTER(ndpi_p_c_magic_not); // new packet
 
 	if(!ct_ndpi->flinfo.ifidx) 
 		ct_ndpi->flinfo.ifidx = get_in_if(xt_in(par));
@@ -1383,8 +1375,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		proto.master_protocol = NDPI_PROTOCOL_IP_ICMP;
 		proto.app_protocol = NDPI_PROTOCOL_IP_ICMP;
 		spin_unlock_bh (&ct_ndpi->lock);
-		COUNTER(ndpi_pj);
-		ndpi_pjc += skb->len;
+		COUNTER(ndpi_p_l4mismatch);
+		ndpi_p_l4mis_size += skb->len;
 		break;
 	}
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
@@ -1392,8 +1384,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		proto.master_protocol = NDPI_PROTOCOL_IP_ICMPV6;
 		proto.app_protocol = NDPI_PROTOCOL_IP_ICMPV6;
 		spin_unlock_bh (&ct_ndpi->lock);
-		COUNTER(ndpi_pj);
-		ndpi_pjc += skb->len;
+		COUNTER(ndpi_p_l4mismatch);
+		ndpi_p_l4mis_size += skb->len;
 		break;
 	}
 #endif
@@ -1447,11 +1439,11 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		ct_proto_set_flow(c_proto,ct, !test_flow_yes(ct_ndpi) ? 0:
 			(test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START));
 
-		COUNTER(ndpi_pd);
+		COUNTER(ndpi_p_noncached);
 		do {
 		    // special case for errors
 		    if(r_proto == NDPI_PROCESS_ERROR) {
-			COUNTER(ndpi_pe);
+			COUNTER(ndpi_p_err_prot_err);
 			c_proto->proto = r_proto;
 			proto.app_protocol = r_proto;
 			proto.master_protocol = NDPI_PROTOCOL_UNKNOWN;
