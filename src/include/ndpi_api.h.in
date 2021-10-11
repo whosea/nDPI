@@ -1650,6 +1650,7 @@ extern "C" {
   
   /* ******************************* */
 
+#ifndef __KERNEL__
   ndpi_bitmap* ndpi_bitmap_alloc();
   void ndpi_bitmap_free(ndpi_bitmap* b);
   u_int64_t ndpi_bitmap_cardinality(ndpi_bitmap* b);
@@ -1667,6 +1668,7 @@ extern "C" {
   ndpi_bitmap_iterator* ndpi_bitmap_iterator_alloc(ndpi_bitmap* b);
   void ndpi_bitmap_iterator_free(ndpi_bitmap* b);
   bool ndpi_bitmap_iterator_next(ndpi_bitmap_iterator* i, uint32_t *value);
+#endif
 
   /* ******************************* */
   

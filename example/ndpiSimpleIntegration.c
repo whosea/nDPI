@@ -528,6 +528,7 @@ static void ndpi_process_packet(uint8_t * const args,
 
   check_for_idle_flows(workflow);
 
+header:
   /* process datalink layer */
   switch (pcap_datalink(workflow->pcap_handle)) {
   case DLT_NULL:
@@ -562,6 +563,9 @@ static void ndpi_process_packet(uint8_t * const args,
 	return;
       }
       break;
+    case 0x8100:
+      ip_offset += 4;
+      goto header;
     case ETH_P_ARP: /* ARP */
       return;
     default:

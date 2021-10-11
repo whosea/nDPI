@@ -21,11 +21,16 @@
  *
  */
 
-
+#ifndef __KERNEL__
 #include <stdlib.h>
 #include <errno.h>
 #include <math.h>
 #include <sys/types.h>
+#else
+#include <asm/byteorder.h>
+#include <linux/types.h>
+#include <ndpi_kernel_compat.h>
+#endif
 
 
 #define NDPI_CURRENT_PROTO NDPI_PROTOCOL_UNKNOWN

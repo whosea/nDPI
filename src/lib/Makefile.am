@@ -27,6 +27,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     ndpi_analyze.c \
 		     ndpi_classify.c \
 		     ndpi_serializer.c \
+		     ndpi_community_id.c \
 		     ndpi_geoip.c \
 		     protocols/afp.c \
 		     protocols/ajp.c \
