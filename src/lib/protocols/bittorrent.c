@@ -58,7 +58,7 @@ time_t ndpi_bt_node_expire = 1200; /* time in seconds */
 
 #ifndef __KERNEL__
 
-typedef int bool;
+//typedef int bool;
 #define true 1
 #define false 0
 
@@ -1124,19 +1124,19 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     }
 
     /* this is a self built client, not possible to catch asymmetrically */
-    if(    memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Mozilla/4.0 "), 0) == 0
+    if((packet->parsed_lines == 10 || (packet->parsed_lines == 11 && packet->line[10].len == 0))
+	&& memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Mozilla/4.0 "), 0) == 0
 	&& memcmp_packet_line(packet,2, NDPI_STATICSTRING("Keep-Alive: 300"), 0) == 0
 	&& memcmp_packet_line(packet,3, NDPI_STATICSTRING("Connection: Keep-alive"), 0) == 0
-	&& memcmp_packet_line(packet,4, NDPI_STATICSTRING("Accpet: */*"), 0) == 0
+	&& ( memcmp_packet_line(packet,4, NDPI_STATICSTRING("Accpet: */*"), 0) == 0 ||
+	     memcmp_packet_line(packet,4, NDPI_STATICSTRING("Accept: */*"), 0) == 0)
 	&& memcmp_packet_line(packet,5, NDPI_STATICSTRING("Range: bytes="), 0) == 0
 	&& memcmp_packet_line(packet,7, NDPI_STATICSTRING("Pragma: no-cache"), 0) == 0
 	&& memcmp_packet_line(packet,8, NDPI_STATICSTRING("Cache-Control: no-cache"), 0) == 0) {
 
-      bt_save_hash(ndpi_struct, flow, -1);
-      NDPI_LOG_INFO(ndpi_struct, "Bitcomet LTS detected\n");
+      NDPI_LOG_INFO(ndpi_struct, "found BT: Bitcomet LTS\n");
       ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_UNSAFE_DETECTION,
-					NDPI_PROTOCOL_PLAIN_DETECTION, 0);
+			NDPI_PROTOCOL_UNSAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION,0);
       return 1;
 
     }
@@ -1322,7 +1322,6 @@ static void ndpi_int_search_bittorrent_tcp(struct ndpi_detection_module_struct *
   return;
 }
 
-static char *bt_search = "BT-SEARCH * HTTP/1.1\r\n";
 static char *bt_code_text[8] = {
 	"BAD",		//0
 	"Struct",	//1
@@ -1333,6 +1332,8 @@ static char *bt_code_text[8] = {
 	"BAD",		//6
 	"BDEC+Sign+Struct"
 	};
+
+static char *bt_search = "BT-SEARCH * HTTP/1.1\r\n";
 
 void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
@@ -1375,12 +1376,19 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
   }
     /* check for tcp retransmission here */
 
-    if( (packet->tcp != NULL) &&
-	 (packet->tcp_retransmission == 0 || packet->num_retried_bytes)) {
-	ndpi_int_search_bittorrent_tcp(ndpi_struct, flow);
-	return;
+    if(packet->tcp != NULL) {
+      ndpi_int_search_bittorrent_tcp(ndpi_struct, flow);
+      return;
     }
-    if(packet->udp == NULL)  return;
+    if(packet->udp == NULL) return;
+
+      /* UDP */
+
+      if((ntohs(packet->udp->source) < 1024)
+	 || (ntohs(packet->udp->dest) < 1024) /* High ports only */) {
+	NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+	return;
+      }
 
       /*
 	Check for uTP http://www.bittorrent.org/beps/bep_0029.html
@@ -1455,15 +1463,16 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
         NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
       }  
       return;
+      /* UDP */
 
-      bittorrent_found:
+  bittorrent_found:
         NDPI_LOG_INFO(ndpi_struct,
 	     "BT: BitTorrent protocol detected: %s\n",detect_type ? detect_type : "(NULL)");
         ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
 				      NDPI_PROTOCOL_SAFE_DETECTION,
 				      NDPI_PROTOCOL_PLAIN_DETECTION,
 				      utp_type);
-    return;
+  return;
 }
 
 int ndpi_search_dht_again(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
@@ -1517,7 +1526,7 @@ void init_bittorrent_dissector(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_set_bitmask_protocol_detection("BitTorrent", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_BITTORRENT,
 				      ndpi_search_bittorrent,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_OR_UDP,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITHOUT_RETRANSMISSION,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
   *id += 1;

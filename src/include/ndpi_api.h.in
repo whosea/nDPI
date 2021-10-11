@@ -692,6 +692,13 @@ extern "C" {
   void ndpi_dump_protocols(struct ndpi_detection_module_struct *mod);
 
   /**
+   * Generate Options list used in OPNsense firewall plugin
+   *
+   * @par  opt = The Option list to generate
+   */
+  void ndpi_generate_options(u_int opt);
+
+  /**
    * Write the list of the scores and their associated risks
    *
    * @par  ndpi_mod = the detection module
@@ -1641,6 +1648,26 @@ extern "C" {
 
   char* ndpi_get_flow_name(struct ndpi_flow_struct *flow);
   
+  /* ******************************* */
+
+  ndpi_bitmap* ndpi_bitmap_alloc();
+  void ndpi_bitmap_free(ndpi_bitmap* b);
+  u_int64_t ndpi_bitmap_cardinality(ndpi_bitmap* b);
+  void ndpi_bitmap_set(ndpi_bitmap* b, u_int32_t value);
+  void ndpi_bitmap_unset(ndpi_bitmap* b, u_int32_t value);
+  bool ndpi_bitmap_isset(ndpi_bitmap* b, u_int32_t value);
+  void ndpi_bitmap_clear(ndpi_bitmap* b);
+
+  size_t ndpi_bitmap_serialize(ndpi_bitmap* b, char **buf);
+  ndpi_bitmap* ndpi_bitmap_deserialize(char *buf);
+
+  void ndpi_bitmap_and(ndpi_bitmap* a, ndpi_bitmap* b_and);
+  void ndpi_bitmap_or(ndpi_bitmap* a, ndpi_bitmap* b_or);
+  
+  ndpi_bitmap_iterator* ndpi_bitmap_iterator_alloc(ndpi_bitmap* b);
+  void ndpi_bitmap_iterator_free(ndpi_bitmap* b);
+  bool ndpi_bitmap_iterator_next(ndpi_bitmap_iterator* i, uint32_t *value);
+
   /* ******************************* */
   
 #ifdef __cplusplus

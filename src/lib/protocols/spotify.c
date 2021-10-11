@@ -67,7 +67,7 @@ static void ndpi_check_spotify(struct ndpi_detection_module_struct *ndpi_struct,
 
 
     if(packet->iph /* IPv4 Only: we need to support packet->iphv6 at some point */) {
-      /* if(packet->detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN) */ {
+      /* if(flow->detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN) */ {
 	/*
 	Spotify
 
@@ -121,15 +121,11 @@ static void ndpi_check_spotify(struct ndpi_detection_module_struct *ndpi_struct,
 
 void ndpi_search_spotify(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &flow->packet;
-
   NDPI_LOG_DBG(ndpi_struct, "search spotify\n");
 
   /* skip marked packets */
-  if (packet->detected_protocol_stack[0] != NDPI_PROTOCOL_SPOTIFY) {
-    if (packet->tcp_retransmission == 0) {
-      ndpi_check_spotify(ndpi_struct, flow);
-    }
+  if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_SPOTIFY) {
+    ndpi_check_spotify(ndpi_struct, flow);
   }
 }
 
@@ -139,7 +135,7 @@ void init_spotify_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_
   ndpi_set_bitmask_protocol_detection("SPOTIFY", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_SPOTIFY,
 				      ndpi_search_spotify,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITH_PAYLOAD,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

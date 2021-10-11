@@ -23,6 +23,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     ndpi_network_list.c.inc \
 		     ndpi_main.c \
 		     ndpi_utils.c \
+		     ndpi_bitmap.c \
 		     ndpi_analyze.c \
 		     ndpi_classify.c \
 		     ndpi_serializer.c \
@@ -42,6 +43,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/bittorrent.c \
 		     protocols/bjnp.c \
 		     protocols/capwap.c \
+		     protocols/cassandra.c \
 		     protocols/checkmk.c \
 		     protocols/ciscovpn.c \
 		     protocols/citrix.c \

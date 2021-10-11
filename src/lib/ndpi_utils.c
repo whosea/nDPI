@@ -1581,7 +1581,7 @@ static int ndpi_is_rce_injection(char* query) {
 
   size_t ushlen = sizeof(ush_commands) / sizeof(ush_commands[0]);
 
-  for(int i = 0; i < ushlen; i++) {
+  for(unsigned long i = 0; i < ushlen; i++) {
     if(strstr(query, ush_commands[i]) != NULL) {
       return 1;
     }
@@ -1589,7 +1589,7 @@ static int ndpi_is_rce_injection(char* query) {
 
   size_t pwshlen = sizeof(pwsh_commands) / sizeof(pwsh_commands[0]);
 
-  for(int i = 0; i < pwshlen; i++) {
+  for(unsigned long i = 0; i < pwshlen; i++) {
     if(strstr(query, pwsh_commands[i]) != NULL) {
       return 1;
     }
@@ -1712,7 +1712,7 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("Self-signed Certificate");
 
   case NDPI_TLS_OBSOLETE_VERSION:
-    return("Obsolete TLS version (< 1.1)");
+    return("Obsolete TLS version (older than 1.1)");
 
   case NDPI_TLS_WEAK_CIPHER:
     return("Weak TLS cipher");
@@ -1797,7 +1797,16 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
 
   case NDPI_SUSPICIOUS_ENTROPY:
     return("Suspicious entropy");
-
+      
+  case NDPI_CLEAR_TEXT_CREDENTIALS:
+    return("Clear-text credentials");
+    
+  case NDPI_DNS_LARGE_PACKET:
+    return("DNS packet larger than 512 bytes");
+    
+  case NDPI_DNS_FRAGMENTED:
+    return("Fragmented DNS message");
+      
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
     return(buf);
@@ -2266,3 +2275,4 @@ u_int8_t ndpi_is_encrypted_proto(struct ndpi_detection_module_struct *ndpi_str,
   } else
     return(0);
 }
+

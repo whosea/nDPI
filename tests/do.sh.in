@@ -4,9 +4,17 @@ cd "$(dirname "${0}")"
 
 FUZZY_TESTING_ENABLED=@BUILD_FUZZTARGETS@
 
+#Remember: valgrind and *SAN are incompatible!
+VALGRIND=""
+if [ "$NDPI_TESTS_VALGRIND" = "1" ]; then
+   VALGRIND="valgrind -q --leak-check=full"
+fi
+
 GCRYPT_ENABLED=@GCRYPT_ENABLED@
+PCRE_ENABLED=@PCRE_ENABLED@
+PCRE_PCAPS="WebattackRCE.pcap"
 GCRYPT_PCAPS="gquic.pcap quic-23.pcap quic-24.pcap quic-27.pcap quic-28.pcap quic-29.pcap quic-mvfst-22.pcap quic-mvfst-27.pcapng quic-mvfst-exp.pcap quic_q50.pcap quic_t50.pcap quic_t51.pcap quic_0RTT.pcap quic_interop_V.pcapng quic-33.pcapng doq.pcapng doq_adguard.pcapng dlt_ppp.pcap os_detected.pcapng quic_frags_ch_out_of_order_same_packet_craziness.pcapng quic_frags_ch_in_multiple_packets.pcapng"
-READER="../example/ndpiReader -p ../example/protos.txt -c ../example/categories.txt -r ../example/risky_domains.txt -j ../example/ja3_fingerprints.csv -S ../example/sha1_fingerprints.csv"
+READER="$VALGRIND ../example/ndpiReader -p ../example/protos.txt -c ../example/categories.txt -r ../example/risky_domains.txt -j ../example/ja3_fingerprints.csv -S ../example/sha1_fingerprints.csv"
 
 RC=0
 PCAPS=`cd pcap; /bin/ls *.pcap *.pcapng`
@@ -50,6 +58,14 @@ check_results() {
 	        fi
 	      done
 	    fi
+	    if [ $PCRE_ENABLED -eq 0 ]; then
+	      for p in $PCRE_PCAPS; do
+	        if [ $f = $p ]; then
+	          SKIP_PCAP=1
+	          break
+	        fi
+	      done
+	    fi
 	    if [ $SKIP_PCAP -eq 1 ]; then
 	        printf "%-32s\tSKIPPED\n" "$f"
 	        continue
@@ -61,9 +77,9 @@ check_results() {
 	    NUM_DIFF=`diff result/$f.out /tmp/reader.out | wc -l`
 
 	    if [ $NUM_DIFF -eq 0 ]; then
-		printf "%-32s\tOK\n" "$f"
+		printf "%-48s\tOK\n" "$f"
 	    else
-		printf "%-32s\tERROR\n" "$f"
+		printf "%-48s\tERROR\n" "$f"
 		echo "$CMD [old vs new]"
 		diff result/$f.out /tmp/reader.out
 		RC=1

@@ -675,6 +675,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 						 u_int16_t ip_offset,
 						 u_int16_t ipsize,
 						 u_int16_t l4_packet_len,
+						 u_int16_t l4_offset,
 						 struct ndpi_tcphdr **tcph,
 						 struct ndpi_udphdr **udph,
 						 u_int16_t *sport, u_int16_t *dport,
@@ -685,7 +686,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 						 u_int16_t *payload_len,
 						 u_int8_t *src_to_dst_direction,
                                                  pkt_timeval when) {
-  u_int32_t idx, l4_offset, hashval;
+  u_int32_t idx, hashval;
   struct ndpi_flow_info flow;
   void *ret;
   const u_int8_t *l3, *l4;
@@ -703,11 +704,9 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
        /* || (iph->frag_off & htons(0x1FFF)) != 0 */)
       return NULL;
 
-    l4_offset = iph->ihl * 4;
     l3 = (const u_int8_t*)iph;
   } else {
-    l4_offset = sizeof(struct ndpi_ipv6hdr);
-    if(sizeof(struct ndpi_ipv6hdr) > ipsize)
+    if(l4_offset > ipsize)
       return NULL;
 
     l3 = (const u_int8_t*)iph6;
@@ -994,7 +993,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info6(struct ndpi_workflow * workflo
 
   return(get_ndpi_flow_info(workflow, 6, vlan_id, tunnel_type,
 			    &iph, iph6, ip_offset, ipsize,
-			    ntohs(iph6->ip6_hdr.ip6_un1_plen),
+			    ip_len, l4ptr - (const u_int8_t *)iph6,
 			    tcph, udph, sport, dport,
 			    src, dst, proto, payload,
 			    payload_len, src_to_dst_direction, when));
@@ -1333,6 +1332,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 			      tunnel_type, iph, NULL,
 			      ip_offset, ipsize,
 			      ntohs(iph->tot_len) - (iph->ihl * 4),
+			      iph->ihl * 4,
 			      &tcph, &udph, &sport, &dport,
 			      &src, &dst, &proto,
 			      &payload, &payload_len, &src_to_dst_direction, when);

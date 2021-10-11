@@ -35,6 +35,11 @@
 #define LLMNR_PORT 5355
 #define MDNS_PORT  5353
 
+#define PKT_LEN_ALERT 512
+
+/* ndpi_main.c */
+extern u_int8_t ndpi_iph_is_valid_and_not_fragmented(const struct ndpi_iphdr *iph, const u_int16_t ipsize);
+
 static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct,
 			    struct ndpi_flow_struct *flow);
 
@@ -303,8 +308,8 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
 	}
       }
 
-      if((flow->packet.detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
-	 || (flow->packet.detected_protocol_stack[1] == NDPI_PROTOCOL_DNS)) {
+      if((flow->detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
+	 || (flow->detected_protocol_stack[1] == NDPI_PROTOCOL_DNS)) {
 	/* Request already set the protocol */
 	// flow->extra_packets_func = NULL; /* Removed so the caller can keep dissecting DNS flows */
       } else {
@@ -380,7 +385,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 
       for(i=idx; i<flow->packet.payload_packet_len;) {
 	u_int8_t is_ptr = 0, name_len = flow->packet.payload[i]; /* Lenght of the individual name blocks aaa.bbb.com */
-	
+
 	if(name_len == 0) {
 	  tot_len++; /* \0 */
 	  /* End of query */
@@ -391,18 +396,18 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 #ifdef DNS_DEBUG
 	if((!is_ptr) && (name_len > 0)) {
 	  printf("[DNS] [name_len: %u][", name_len);
-	  
+
 	  {
 	    int idx;
-	    
+
 	    for(idx=0; idx<name_len; idx++)
 	      printf("%c", flow->packet.payload[i+1+idx]);
-	    
+
 	    printf("]\n");
 	  }
 	}
 #endif
-	
+
 	i += name_len+1, tot_len += name_len+1;
 	if(is_ptr) break;
       } /* for */
@@ -495,7 +500,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 		  );
 #endif
 
-    if(flow->packet.detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN) {
+    if(flow->detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN) {
       /**
 	 Do not set the protocol with DNS if ndpi_match_host_subprotocol() has
 	 matched a subprotocol
@@ -503,8 +508,8 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
       NDPI_LOG_INFO(ndpi_struct, "found DNS\n");
       ndpi_set_detected_protocol(ndpi_struct, flow, ret.app_protocol, ret.master_protocol);
     } else {
-      if((flow->packet.detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
-	 || (flow->packet.detected_protocol_stack[1] == NDPI_PROTOCOL_DNS))
+      if((flow->detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
+	 || (flow->detected_protocol_stack[1] == NDPI_PROTOCOL_DNS))
 	;
       else
 	NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
@@ -513,7 +518,34 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 
   if(flow->packet_counter > 3)
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+
+  if((flow->detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
+     || (flow->detected_protocol_stack[1] == NDPI_PROTOCOL_DNS)) {
+    /* TODO: add support to RFC6891 to avoid some false positives */
+    if(flow->packet.udp != NULL && flow->packet.payload_packet_len > PKT_LEN_ALERT)
+      ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_LARGE_PACKET);
+
+    if(flow->packet.iph != NULL) {
+      /* IPv4 */
+      u_int8_t flags = ((u_int8_t*)flow->packet.iph)[6];
+
+      /* 0: fragmented; 1: not fragmented */
+      if((flags & 0x20)
+	 || (ndpi_iph_is_valid_and_not_fragmented(flow->packet.iph, flow->packet.l3_packet_len) == 0)) {
+	ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_FRAGMENTED);
+      }
+    } else if(flow->packet.iphv6 != NULL) {
+      /* IPv6 */
+      const struct ndpi_ip6_hdrctl *ip6_hdr = &flow->packet.iphv6->ip6_hdr;
+
+      if(ip6_hdr->ip6_un1_nxt == 0x2C /* Next Header: Fragment Header for IPv6 (44) */) {
+	ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_FRAGMENTED);
+      }	
+    }
+  }
 }
+
+/* *********************************************** */
 
 void init_dns_dissector(struct ndpi_detection_module_struct *ndpi_struct,
 			u_int32_t *id, NDPI_PROTOCOL_BITMASK *detection_bitmask) {
@@ -525,4 +557,5 @@ void init_dns_dissector(struct ndpi_detection_module_struct *ndpi_struct,
 				      ADD_TO_DETECTION_BITMASK);
 
   *id += 1;
+
 }

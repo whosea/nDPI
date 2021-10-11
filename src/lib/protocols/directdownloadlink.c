@@ -39,11 +39,7 @@
 static void ndpi_int_direct_download_link_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 							 struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &flow->packet;
-
   ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_DIRECT_DOWNLOAD_LINK, NDPI_PROTOCOL_UNKNOWN);
-
-  flow->l4.tcp.ddlink_server_direction = packet->packet_direction;
 }
 
 
@@ -706,10 +702,8 @@ u_int8_t search_ddl_domains(struct ndpi_detection_module_struct *ndpi_struct, st
 
 void ndpi_search_direct_download_link_tcp(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &flow->packet;
-
   /* do not detect again if it is already ddl */
-  if (packet->detected_protocol_stack[0] != NDPI_PROTOCOL_DIRECT_DOWNLOAD_LINK) {
+  if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_DIRECT_DOWNLOAD_LINK) {
     if (search_ddl_domains(ndpi_struct, flow) != 0) {
       return;
     }

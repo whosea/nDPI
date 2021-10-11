@@ -462,7 +462,8 @@ static void help(u_int long_help) {
 	 "[-f <filter>][-s <duration>][-m <duration>][-b <num bin clusters>]\n"
 	 "          [-p <protos>][-l <loops> [-q][-d][-J][-h][-D][-e <len>][-t][-v <level>]\n"
 	 "          [-n <threads>][-w <file>][-c <file>][-C <file>][-j <file>][-x <file>]\n"
-	 "          [-r <file>][-j <file>][-S <file>][-T <num>][-U <num>] [-x <domain>][-z]\n\n"
+	 "          [-r <file>][-j <file>][-S <file>][-T <num>][-U <num>] [-x <domain>][-z]\n"
+	 "          [-a <mode>]\n\n"
 	 "Usage:\n"
 	 "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
 	 "                            | device for live capture (comma-separated list)\n"
@@ -477,6 +478,10 @@ static void help(u_int long_help) {
 #ifdef linux
          "  -g <id:id...>             | Thread affinity mask (one core id per thread)\n"
 #endif
+	 "  -a <mode>                 | Generates option values for GUIs\n"
+	 "                            | 0 - List known protocols\n"
+	 "                            | 1 - List known categories\n"
+	 "                            | 2 - List known risks\n"
 	 "  -d                        | Disable protocol guess and use only DPI\n"
 	 "  -e <len>                  | Min human readeable string match len. Default %u\n"
 	 "  -q                        | Quiet mode\n"
@@ -822,9 +827,10 @@ static void parseOptions(int argc, char **argv) {
   int option_idx = 0;
   int opt;
 #ifndef USE_DPDK
-  char *__pcap_file = NULL, *bind_mask = NULL;
+  char *__pcap_file = NULL;
   int thread_id, do_capture = 0;
 #ifdef linux
+  char *bind_mask = NULL;
   u_int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
 #endif
@@ -840,13 +846,17 @@ static void parseOptions(int argc, char **argv) {
   }
 #endif
 
-  while((opt = getopt_long(argc, argv, "b:e:c:C:dDf:g:i:Ij:S:hp:pP:l:r:s:tu:v:V:n:Jrp:x:w:zq0123:456:7:89:m:T:U:",
+  while((opt = getopt_long(argc, argv, "a:b:e:c:C:dDf:g:i:Ij:S:hp:pP:l:r:s:tu:v:V:n:Jrp:x:w:zq0123:456:7:89:m:T:U:",
 			   longopts, &option_idx)) != EOF) {
 #ifdef DEBUG_TRACE
     if(trace) fprintf(trace, " #### Handling option -%c [%s] #### \n", opt, optarg ? optarg : "");
 #endif
 
     switch (opt) {
+    case 'a':
+      ndpi_generate_options(atoi(optarg));
+      break;
+      
     case 'b':
       if((num_bin_clusters = atoi(optarg)) > 32)
 	num_bin_clusters = 32;
@@ -891,9 +901,11 @@ static void parseOptions(int argc, char **argv) {
       break;
 
 #ifndef USE_DPDK
+#ifdef linux
     case 'g':
       bind_mask = optarg;
       break;
+#endif
 #endif
 
     case 'l':
@@ -4415,6 +4427,46 @@ void jitterUnitTest() {
 
 /* *********************************************** */
 
+void compressedBitmapUnitTest() {
+  ndpi_bitmap *b = ndpi_bitmap_alloc(), *b1;
+  u_int i, trace = 0;
+  size_t ser;
+  char *buf;
+  ndpi_bitmap_iterator *it;
+  u_int32_t value;
+  
+  for(i=0; i<1000; i++) {
+    u_int32_t v = rand();
+
+    if(trace) printf("%u ", v);
+    ndpi_bitmap_set(b, v);
+    assert(ndpi_bitmap_isset(b, v));
+  }
+
+  if(trace) printf("\n");
+
+  ser = ndpi_bitmap_serialize(b, &buf);
+  assert(ser > 0);
+
+  if(trace) printf("len: %u\n", (unsigned int)ser);
+  b1 = ndpi_bitmap_deserialize(buf);
+  assert(b1);
+
+  assert((it = ndpi_bitmap_iterator_alloc(b)));
+  while(ndpi_bitmap_iterator_next(it, &value)) {
+    if(trace) printf("%u ", value);
+  }
+  
+  if(trace) printf("\n");
+  ndpi_bitmap_iterator_free(it);
+  
+  ndpi_free(buf);
+  ndpi_bitmap_free(b);
+  ndpi_bitmap_free(b1);
+}
+
+/* *********************************************** */
+
 /**
    @brief MAIN FUNCTION
 **/
@@ -4444,7 +4496,7 @@ int original_main(int argc, char **argv) {
       printf("nDPI Library version mismatch: please make sure this code and the nDPI library are in sync\n");
       return(-1);
     }
-
+   
     if(!skip_unit_tests) {
 #ifndef DEBUG_TRACE
       /* Skip tests when debugging */
@@ -4475,6 +4527,7 @@ int original_main(int argc, char **argv) {
       ndpi_self_check_host_match();
       analysisUnitTest();
       rulesUnitTest();
+      compressedBitmapUnitTest();
 #endif
     }
     

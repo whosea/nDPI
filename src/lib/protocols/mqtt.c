@@ -69,7 +69,7 @@ void ndpi_search_mqtt (struct ndpi_detection_module_struct *ndpi_struct,
 	u_int8_t rl,pt,flags;
 
 	NDPI_LOG_DBG(ndpi_struct, "search Mqtt\n");
-	if (packet->detected_protocol_stack[0] != NDPI_PROTOCOL_UNKNOWN) {
+	if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_UNKNOWN) {
 		return;
 	}
 	if (flow->packet_counter > 10) {

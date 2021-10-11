@@ -202,14 +202,7 @@ int quic_len(const uint8_t *buf, uint64_t *value)
     *value = ntohl(*(uint32_t *)buf) & 0x3FFFFFFF;
     return 4;
   case 3:
-    {
-      u_int64_t n;
-      
-      /* Necessary as simple cast crashes on ARM */
-      memcpy(&n, buf, sizeof(u_int64_t));    
-      
-      *value = ndpi_ntohll(n & 0x3FFFFFFFFFFFFFFF);
-    }
+    *value = ndpi_ntohll(get_u_int64_t(buf, 0)) & 0x3FFFFFFFFFFFFFFF;
     return 8;
   default: /* No Possible */
     return 0;
@@ -946,7 +939,7 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
   uint8_t first_byte;
   uint32_t pkn32, pn_offset, pkn_len, offset;
   quic_ciphers ciphers; /* Client initial ciphers */
-  quic_decrypt_result_t decryption = {0};
+  quic_decrypt_result_t decryption = { 0, 0};
   uint8_t client_secret[HASH_SHA2_256_LENGTH];
 
   memset(&ciphers, '\0', sizeof(ciphers));
@@ -1354,7 +1347,7 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
 #endif
     return;
   }
-  num_tags = (*(uint16_t *)&crypto_data[4]);
+  num_tags = le16toh(*(uint16_t *)&crypto_data[4]);
 
   tag_offset_start = 8 + 8 * num_tags;
   prev_offset = 0;
@@ -1362,7 +1355,7 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
     if(8 + 8 * i + 8 >= crypto_data_len)
       break;
     tag = &crypto_data[8 + 8 * i];
-    offset = *((u_int32_t *)&crypto_data[8 + 8 * i + 4]);
+    offset = le32toh(*((u_int32_t *)&crypto_data[8 + 8 * i + 4]));
     if(prev_offset > offset)
       break;
     len = offset - prev_offset;
