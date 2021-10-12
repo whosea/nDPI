@@ -101,7 +101,7 @@ static u_int32_t someip_data_cover_32(const u_int8_t *data)
 void ndpi_search_someip (struct ndpi_detection_module_struct *ndpi_struct,
 			 struct ndpi_flow_struct *flow)
 {
-  const struct ndpi_packet_struct *packet = &flow->packet;
+  const struct ndpi_packet_struct *packet = &ndpi_struct->packet;
   u_int32_t message_id, request_id, someip_len;
   u_int8_t protocol_version,interface_version,message_type,return_code;
   

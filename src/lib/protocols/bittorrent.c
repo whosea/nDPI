@@ -636,8 +636,9 @@ static inline bool bt_old_pak(const uint8_t *payload, uint32_t len,
 
   if((v0_flags < 6 /* ST_NUM_STATES */)
 	    && (v0_extension < 3 /* EXT_NUM_EXT */)) {
+    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
     u_int32_t ts = ntohl(*((u_int32_t*)&(payload[4])));
-    u_int32_t now = flow->packet.current_time;
+    u_int32_t now = packet->current_time;
 
     if((ts < (now+86400)) && (ts > (now-86400))) {
 	return true;
@@ -722,6 +723,7 @@ static int bdecode(const u_int8_t *b,size_t l,
 	struct ndpi_flow_struct *flow,
 	uint32_t *utp_type)
 {
+struct ndpi_packet_struct *packet = &ndpi_struct->packet;
 bt_parse_data_cb_t x;
 const u_int8_t *s = b;
 const u_int8_t *se = b+l;
@@ -732,7 +734,7 @@ int i;
 char ip6buf[64];
 #endif
 
-u_int32_t p_now = flow->packet.current_time;
+u_int32_t p_now = packet->current_time;
 
 if(!l) return 0;
 
@@ -753,7 +755,7 @@ if(x.p.y_r) *utp_type = 1;
 
 #ifdef BT_ANNOUNCE
 if(ndpi_struct->bt_ann && x.p.a.name) {
-    struct ndpi_packet_struct *packet = &flow->packet;
+    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
     u_int16_t s_port =  packet->udp ? packet->udp->source :
 			 packet->tcp ? packet->tcp->source : 0;
 
@@ -772,7 +774,7 @@ if(ndpi_struct->bt_ann && x.p.a.name) {
 }
 #endif
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
-if(flow->packet.iphv6 && ndpi_struct->bt6_ht) {
+if(packet->iphv6 && ndpi_struct->bt6_ht) {
 NDPI_LOG_DBG2(ndpi_struct,
 	   "BT: detected valid DHT6 %d %d\n",
 	   x.p.r.nn6,x.p.r.nv6);
@@ -853,16 +855,17 @@ static void bt_save_hash(
 		int bt_offset) {
 
     const char *bt_hash = NULL; /* 20 bytes long */
+    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
     
     if(bt_offset == -1) {
-      const char *bt_magic = ndpi_strnstr((const char *)flow->packet.payload, 
-					  "BitTorrent protocol", flow->packet.payload_packet_len);
+      const char *bt_magic = ndpi_strnstr((const char *)packet->payload, 
+					  "BitTorrent protocol", packet->payload_packet_len);
       if(bt_magic &&
-	 flow->packet.payload_packet_len >= (20+19+8 + (bt_magic-(const char*)flow->packet.payload)))
+	 packet->payload_packet_len >= (20+19+8 + (bt_magic-(const char*)packet->payload)))
 	   bt_hash = &bt_magic[19+8];
     } else {
-      if(bt_offset + 20 <= flow->packet.payload_packet_len)
-	      bt_hash = (const char*)&flow->packet.payload[bt_offset];
+      if(bt_offset + 20 <= packet->payload_packet_len)
+	      bt_hash = (const char*)&packet->payload[bt_offset];
     }
  
     if(bt_hash) {
@@ -884,9 +887,8 @@ static void ndpi_add_connection_as_bittorrent(
 		const u_int8_t encrypted_connection,
 		const uint32_t reply)
 {
-    struct ndpi_packet_struct *packet = &flow->packet;
-
   int p1 = 0,p2 = 0;
+  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
 
   ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
   if (packet->tcp != NULL) {
@@ -896,19 +898,19 @@ static void ndpi_add_connection_as_bittorrent(
     if(ndpi_struct->bt6_ht && packet->iphv6) {
 	if(packet->packet_direction)
 		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,
-				packet->tcp->source, flow->packet.current_time,1);
+				packet->tcp->source, packet->current_time,1);
 	   else
 		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,
-				packet->tcp->dest, flow->packet.current_time,1);
+				packet->tcp->dest, packet->current_time,1);
     } else 
 #endif
     if(ndpi_struct->bt_ht && packet->iph) {
 	if(packet->packet_direction)
 		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,
-				packet->tcp->source, flow->packet.current_time,1);
+				packet->tcp->source, packet->current_time,1);
 	   else
 		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,
-				packet->tcp->dest, flow->packet.current_time,1);
+				packet->tcp->dest, packet->current_time,1);
     }
   } /* tcp */
 
@@ -922,18 +924,18 @@ static void ndpi_add_connection_as_bittorrent(
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
     if(ndpi_struct->bt6_ht && packet->iphv6) {
 	hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,
-			packet->udp->source, flow->packet.current_time,1);
+			packet->udp->source, packet->current_time,1);
 	if(reply)
 		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,
-			packet->udp->dest, flow->packet.current_time,1);
+			packet->udp->dest, packet->current_time,1);
     } else
 #endif
     if(ndpi_struct->bt_ht && packet->iph) {
 	hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,
-			packet->udp->source, flow->packet.current_time,1);
+			packet->udp->source, packet->current_time,1);
 	if(reply)
 		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,
-				packet->udp->dest, flow->packet.current_time,1);
+				packet->udp->dest, packet->current_time,1);
     }
   }
 
@@ -953,7 +955,7 @@ static void ndpi_add_connection_as_bittorrent(
 static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
                       *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-    struct ndpi_packet_struct *packet = &flow->packet;
+    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
     void *f1,*f2;
     u_int16_t source,dest;
 
@@ -963,9 +965,9 @@ static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
     if(ndpi_struct->bt6_ht && packet->iphv6) {
 	f1 = hash_ip4p_find(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,source,
-			    flow->packet.current_time);
+			    packet->current_time);
 	f2 = hash_ip4p_find(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,dest,
-			    flow->packet.current_time);
+			    packet->current_time);
 #ifdef __KERNEL__
 	if(f1)	ndpi_ptss++;
 	if(f2)	ndpi_ptdd++;
@@ -975,9 +977,9 @@ static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
 #endif
     if(ndpi_struct->bt_ht && packet->iph) {
 	f1 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,source,
-			    flow->packet.current_time);
+			    packet->current_time);
 	f2 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,dest,
-			    flow->packet.current_time);
+			    packet->current_time);
 #ifdef __KERNEL__
 	if(f1)	ndpi_ptss++;
 	if(f2)	ndpi_ptdd++;
@@ -990,7 +992,7 @@ static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
 static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
                       *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-    struct ndpi_packet_struct *packet = &flow->packet;
+    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
     u_int16_t source,dest;
     void *f1,*f2;
 
@@ -1000,9 +1002,9 @@ static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
     if(ndpi_struct->bt6_ht && packet->iphv6) {
 	f1 = hash_ip4p_find(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,source,
-			    flow->packet.current_time);
+			    packet->current_time);
 	f2 = hash_ip4p_find(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,dest,
-			    flow->packet.current_time);
+			    packet->current_time);
 #ifdef __KERNEL__
 	if(f1) {
 		DIRC(ndpi_pusr,ndpi_pusf);
@@ -1016,9 +1018,9 @@ static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
 #endif
     if(ndpi_struct->bt_ht && packet->iph) {
 	f1 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,source,
-			    flow->packet.current_time);
+			    packet->current_time);
 	f2 = hash_ip4p_find(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,dest,
-			    flow->packet.current_time);
+			    packet->current_time);
 #ifdef __KERNEL__
 	if(f1) {
 		DIRC(ndpi_pusr,ndpi_pusf);
@@ -1035,7 +1037,7 @@ static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
 static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module_struct
 						    *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &flow->packet;
+  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
   u_int16_t a = 0;
 
   if(packet->payload_packet_len == 1 && packet->payload[0] == 0x13) {
@@ -1296,8 +1298,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 /*Search for BitTorrent commands*/
 static void ndpi_int_search_bittorrent_tcp(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-
-  struct ndpi_packet_struct *packet = &flow->packet;
+  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
 
   if(ndpi_search_bittorrent_tcp_old(ndpi_struct,flow)) {
     if(packet->payload_packet_len > 48)
@@ -1337,10 +1338,11 @@ static char *bt_search = "BT-SEARCH * HTTP/1.1\r\n";
 
 void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &flow->packet;
+  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
   uint32_t utp_type = 0;
   int bt_code = 0;
   char *detect_type = NULL;
+//  char *bt_proto = NULL;
 
   NDPI_LOG_DBG(ndpi_struct, "search Bittorrent\n");
   /* This is broadcast */

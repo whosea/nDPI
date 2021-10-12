@@ -1244,6 +1244,8 @@ struct ndpi_detection_module_struct {
   u_int8_t mmdb_city_loaded, mmdb_as_loaded;
 #endif
 #endif
+  /* Current packet */
+  struct ndpi_packet_struct packet;
 };
 
 #endif /* NDPI_LIB_COMPILATION */
@@ -1496,12 +1498,13 @@ struct ndpi_flow_struct {
   u_int8_t ovpn_session_id[8];
   u_int8_t ovpn_counter;
 
+  /* Flow key used to search a match into the mining cache */
+  u_int32_t key_mining_cache;
+
   /* NDPI_PROTOCOL_TINC */
   u_int8_t tinc_state;
   struct tinc_cache_entry tinc_cache_entry;
 
-  /* internal structures to save functions calls */
-  struct ndpi_packet_struct packet;
   struct ndpi_id_struct *src;
   struct ndpi_id_struct *dst;
 };
