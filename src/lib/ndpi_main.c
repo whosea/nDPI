@@ -2063,7 +2063,7 @@ static u_int8_t tor_ptree_match(struct ndpi_detection_module_struct *ndpi_str, s
 /* ******************************************* */
 
 u_int8_t ndpi_is_tor_flow(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
 
   if(packet->tcp != NULL) {
     if(packet->iph) {
@@ -2964,7 +2964,7 @@ u_int8_t is_udp_guessable_protocol(u_int16_t l7_guessed_proto) {
 
 u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
                                  u_int8_t proto, u_int16_t sport, u_int16_t dport, u_int8_t *user_defined_proto) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   *user_defined_proto = 0; /* Default */
 
   if(sport && dport) {
@@ -4491,7 +4491,7 @@ static int ndpi_init_packet(struct ndpi_detection_module_struct *ndpi_str,
 			    const u_int64_t current_time_ms,
 			    const unsigned char *packet_data,
 			    unsigned short packetlen) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   const struct ndpi_iphdr *decaps_iph = NULL;
   u_int16_t l3len;
   u_int16_t l4len;
@@ -4635,7 +4635,7 @@ void ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     return;
   } else {
     /* const for gcc code optimization and cleaner code */
-    struct ndpi_packet_struct *packet = &ndpi_str->packet;
+    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
     const struct ndpi_iphdr *iph = packet->iph;
     const struct ndpi_ipv6hdr *iphv6 = packet->iphv6;
     const struct ndpi_tcphdr *tcph = packet->tcp;
@@ -4876,7 +4876,7 @@ static u_int32_t check_ndpi_tcp_flow_func(struct ndpi_detection_module_struct *n
 					  struct ndpi_flow_struct *flow,
 					  NDPI_SELECTION_BITMASK_PROTOCOL_SIZE *ndpi_selection_packet)
 {
-  if (ndpi_str->packet.payload_packet_len != 0) {
+  if (ndpi_get_packet_struct(ndpi_str)->payload_packet_len != 0) {
     return check_ndpi_detection_func(ndpi_str, flow, *ndpi_selection_packet,
 				     ndpi_str->callback_buffer_tcp_payload,
 				     ndpi_str->callback_buffer_size_tcp_payload);
@@ -4893,11 +4893,12 @@ static u_int32_t check_ndpi_tcp_flow_func(struct ndpi_detection_module_struct *n
 u_int32_t ndpi_check_flow_func(struct ndpi_detection_module_struct *ndpi_str,
 			       struct ndpi_flow_struct *flow,
 			       NDPI_SELECTION_BITMASK_PROTOCOL_SIZE *ndpi_selection_packet) {
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   if(!flow)
     return(0);
-  else if(ndpi_str->packet.tcp != NULL)
+  else if(packet->tcp != NULL)
     return(check_ndpi_tcp_flow_func(ndpi_str, flow, ndpi_selection_packet));
-  else if(ndpi_str->packet.udp != NULL)
+  else if(packet->udp != NULL)
     return(check_ndpi_udp_flow_func(ndpi_str, flow, ndpi_selection_packet));
   else
     return(check_ndpi_other_flow_func(ndpi_str, flow, ndpi_selection_packet));
@@ -4907,7 +4908,7 @@ u_int32_t ndpi_check_flow_func(struct ndpi_detection_module_struct *ndpi_str,
 
 u_int16_t ndpi_guess_host_protocol_id(struct ndpi_detection_module_struct *ndpi_str,
 				      struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   u_int16_t ret = NDPI_PROTOCOL_UNKNOWN;
 
   if(packet->iph) {
@@ -5362,7 +5363,7 @@ static int ndpi_check_protocol_port_mismatch_exceptions(struct ndpi_detection_mo
 static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_str,
 				     struct ndpi_flow_struct *flow,
 				     ndpi_protocol *ret) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
 
 #if 0
   if(flow) {
@@ -5441,7 +5442,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
 /* ****************************************************** */
 static int ndpi_do_guess(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow, ndpi_protocol *ret) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   ret->master_protocol = ret->app_protocol = NDPI_PROTOCOL_UNKNOWN;
 #ifndef __KERNEL__
   ret->category = 0;
@@ -5551,7 +5552,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 					    struct ndpi_flow_struct *flow, const unsigned char *packet_data,
 					    const unsigned short packetlen, const u_int64_t current_time_ms,
 					    struct ndpi_id_struct *src, struct ndpi_id_struct *dst) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   NDPI_SELECTION_BITMASK_PROTOCOL_SIZE ndpi_selection_packet;
   u_int32_t a, num_calls = 0;
   ndpi_protocol ret = { flow->detected_protocol_stack[1], flow->detected_protocol_stack[0]
@@ -5940,7 +5941,7 @@ u_int32_t ndpi_bytestream_to_ipv4(const u_int8_t *str, u_int16_t max_chars_to_re
 /* internal function for every detection to parse one packet and to increase the info buffer */
 void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow) {
   u_int32_t a;
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
 
   if((packet->payload_packet_len < 3) || (packet->payload == NULL))
     return;
@@ -6220,7 +6221,7 @@ void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, 
 /* ********************************************************************************* */
 
 void ndpi_parse_packet_line_info_any(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   u_int32_t a;
   u_int16_t end = packet->payload_packet_len;
 
@@ -6264,7 +6265,7 @@ void ndpi_parse_packet_line_info_any(struct ndpi_detection_module_struct *ndpi_s
 
 u_int16_t ndpi_check_for_email_address(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
 				       u_int16_t counter) {
-  struct ndpi_packet_struct *packet = &ndpi_str->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
 
   NDPI_LOG_DBG2(ndpi_str, "called ndpi_check_for_email_address\n");
 
@@ -7982,3 +7983,9 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 ndpi_risk_info* ndpi_risk2severity(ndpi_risk_enum risk) {
   return(&ndpi_known_risks[risk]);
 }
+
+struct ndpi_packet_struct *
+ndpi_get_packet_struct(struct ndpi_detection_module_struct *ndpi_mod) {
+	return &ndpi_mod->packet_struct;
+}
+

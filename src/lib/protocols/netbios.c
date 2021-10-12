@@ -94,7 +94,7 @@ int ndpi_netbios_name_interpret(u_char *in, u_int in_len, u_char *out, u_int out
 static void ndpi_int_netbios_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					    struct ndpi_flow_struct *flow,
 					    u_int16_t sub_protocol) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   unsigned char name[64];
   u_int off = packet->payload[12] == 0x20 ? 12 : 14;
@@ -117,7 +117,7 @@ static void ndpi_int_netbios_add_connection(struct ndpi_detection_module_struct 
 
 void ndpi_search_netbios(struct ndpi_detection_module_struct *ndpi_struct,
 			 struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int16_t dport;
 
   NDPI_LOG_DBG(ndpi_struct, "search netbios\n");

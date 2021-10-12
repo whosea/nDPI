@@ -63,7 +63,7 @@ static u_int8_t google_ptree_match(struct ndpi_detection_module_struct *ndpi_str
 
 static u_int8_t is_google_flow(struct ndpi_detection_module_struct *ndpi_struct,
 			       struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   
   if(packet->iph) {
     struct in_addr saddr, daddr;
@@ -83,7 +83,7 @@ static u_int8_t is_google_flow(struct ndpi_detection_module_struct *ndpi_struct,
 
 void ndpi_search_hangout(struct ndpi_detection_module_struct *ndpi_struct,
 			 struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct * packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct * packet = ndpi_get_packet_struct(ndpi_struct);
 
   NDPI_LOG_DBG(ndpi_struct, "search Hangout\n");
 

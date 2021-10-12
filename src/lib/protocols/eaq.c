@@ -47,7 +47,7 @@ void ndpi_search_eaq(struct ndpi_detection_module_struct *ndpi_struct, struct nd
   if (!flow) 
     return;
 
-  packet = &ndpi_struct->packet;
+  packet = ndpi_get_packet_struct(ndpi_struct);
 
   if (!packet->udp)
      return;

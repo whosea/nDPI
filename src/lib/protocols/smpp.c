@@ -41,7 +41,7 @@ static  u_int8_t ndpi_check_overflow(u_int32_t current_length, u_int32_t total_l
 void ndpi_search_smpp_tcp(struct ndpi_detection_module_struct* ndpi_struct, 
                           struct ndpi_flow_struct* flow)
 {
-  struct ndpi_packet_struct* packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct* packet = ndpi_get_packet_struct(ndpi_struct);
 
   NDPI_LOG_DBG(ndpi_struct, "search SMPP\n");
   if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_SMPP){

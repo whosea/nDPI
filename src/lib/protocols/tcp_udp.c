@@ -55,7 +55,7 @@ void ndpi_search_tcp_or_udp(struct ndpi_detection_module_struct *ndpi_struct, st
 {
   u_int16_t sport, dport;
   u_int proto;
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   if(flow->host_server_name[0] != '\0')
     return;

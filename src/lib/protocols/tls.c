@@ -113,7 +113,7 @@ static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct
 
 static u_int32_t ndpi_tls_refine_master_protocol(struct ndpi_detection_module_struct *ndpi_struct,
 						 struct ndpi_flow_struct *flow, u_int32_t protocol) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   // protocol = NDPI_PROTOCOL_TLS;
 
@@ -146,7 +146,7 @@ static u_int32_t ndpi_tls_refine_master_protocol(struct ndpi_detection_module_st
 
 void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct,
 				struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int avail_bytes;
 
   /* TCP */
@@ -299,7 +299,7 @@ static int extractRDNSequence(struct ndpi_packet_struct *packet,
 
 static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct,
 				struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   if(flow->detected_protocol_stack[1] == NDPI_PROTOCOL_UNKNOWN) {
     /* Subprotocol not yet set */
@@ -333,7 +333,7 @@ static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct
 static void processCertificateElements(struct ndpi_detection_module_struct *ndpi_struct,
 				       struct ndpi_flow_struct *flow,
 				       u_int16_t p_offset, u_int16_t certificate_len) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int16_t num_found = 0, i;
   char buffer[64] = { '\0' }, rdnSeqBuf[2048];
   u_int rdn_len = 0;
@@ -648,7 +648,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 /* See https://blog.catchpoint.com/2017/05/12/dissecting-tls-using-wireshark/ */
 int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
 		       struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   int is_dtls = packet->udp ? 1 : 0;
   u_int32_t certificates_length, length = (packet->payload[1] << 16) + (packet->payload[2] << 8) + packet->payload[3];
   u_int32_t certificates_offset = 7 + (is_dtls ? 8 : 0);
@@ -781,7 +781,7 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
 
 static int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
 			   struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   int ret;
 
 #ifdef DEBUG_TL
@@ -844,7 +844,7 @@ static void ndpi_looks_like_tls(struct ndpi_detection_module_struct *ndpi_struct
 
 static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 			       struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int8_t something_went_wrong = 0;
 
 #ifdef DEBUG_TLS_MEMORY
@@ -1003,7 +1003,7 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 
 static int ndpi_search_tls_udp(struct ndpi_detection_module_struct *ndpi_struct,
 			       struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int32_t handshake_len;
   u_int16_t p_len, processed;
   const u_int8_t *p;
@@ -1101,7 +1101,7 @@ static int ndpi_search_tls_udp(struct ndpi_detection_module_struct *ndpi_struct,
 
 static void tlsInitExtraPacketProcessing(struct ndpi_detection_module_struct *ndpi_struct,
 					 struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   flow->check_extra_packets = 1;
 
@@ -1143,7 +1143,7 @@ static void tlsCheckUncommonALPN(struct ndpi_detection_module_struct *ndpi_struc
 
 static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow, u_int32_t protocol) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 #ifdef DEBUG_TLS
   printf("[TLS] %s()\n", __FUNCTION__);
 #endif
@@ -1175,7 +1175,7 @@ static void checkExtensions(struct ndpi_detection_module_struct *ndpi_struct,
 			    struct ndpi_flow_struct * const flow, int is_dtls,
                             u_int16_t extension_id, u_int16_t extension_len, u_int16_t extension_payload_offset)
 {
-  struct ndpi_packet_struct const * const packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct const * const packet = ndpi_get_packet_struct(ndpi_struct);
 
   if (extension_payload_offset + extension_len > packet->payload_packet_len)
   {
@@ -1243,7 +1243,7 @@ static void checkExtensions(struct ndpi_detection_module_struct *ndpi_struct,
 
 int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 			     struct ndpi_flow_struct *flow, uint32_t quic_version) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   union ja3_info ja3;
   u_int8_t invalid_ja3 = 0;
   u_int16_t tls_version, ja3_str_len;
@@ -2303,7 +2303,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 /* for kernel: minimal version processClientServerHello() */
 int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 			     struct ndpi_flow_struct *flow, uint32_t quic_version) {
-  struct ndpi_packet_struct *packet = &flow->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int16_t tls_version;
   u_int16_t total_len;
   u_int8_t handshake_type;
@@ -2818,7 +2818,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 
 static void ndpi_search_tls_wrapper(struct ndpi_detection_module_struct *ndpi_struct,
 				    struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
 #ifdef DEBUG_TLS
   printf("==>> %s() %u [len: %u][version: %u]\n",

@@ -178,7 +178,7 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
 			    struct ndpi_flow_struct *flow,
 			    struct ndpi_dns_packet_header *dns_header,
 			    int payload_offset, u_int8_t *is_query) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   int x = payload_offset;
 
   memcpy(dns_header, (struct ndpi_dns_packet_header*)&packet->payload[x],
@@ -339,8 +339,8 @@ static int search_dns_again(struct ndpi_detection_module_struct *ndpi_struct, st
 /* *********************************************** */
 
 static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
-  int payload_offset = 0, x;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
+  int payload_offset = 0;
   u_int8_t is_query;
   u_int16_t s_port = 0, d_port = 0;
 

@@ -50,7 +50,7 @@ u_int8_t sc2_match_logon_ip(struct ndpi_packet_struct* packet)
 */
 u_int8_t ndpi_check_starcraft_tcp(struct ndpi_detection_module_struct* ndpi_struct, struct ndpi_flow_struct* flow)
 {
-  struct ndpi_packet_struct* packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct* packet = ndpi_get_packet_struct(ndpi_struct);
 
   if (sc2_match_logon_ip(packet)
       && packet->tcp->dest == htons(1119)	//bnetgame port
@@ -69,7 +69,7 @@ u_int8_t ndpi_check_starcraft_tcp(struct ndpi_detection_module_struct* ndpi_stru
 */
 u_int8_t ndpi_check_starcraft_udp(struct ndpi_detection_module_struct* ndpi_struct, struct ndpi_flow_struct* flow)
 {
-  struct ndpi_packet_struct* packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct* packet = ndpi_get_packet_struct(ndpi_struct);
 
   /* First off, filter out any traffic not using port 1119, removing the chance of any false positive if we assume that non allowed protocols don't use the port */
   if (packet->udp->source != htons(1119) && packet->udp->dest != htons(1119))
@@ -117,7 +117,7 @@ u_int8_t ndpi_check_starcraft_udp(struct ndpi_detection_module_struct* ndpi_stru
 
 void ndpi_search_starcraft(struct ndpi_detection_module_struct* ndpi_struct, struct ndpi_flow_struct* flow)
 {
-  struct ndpi_packet_struct* packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct* packet = ndpi_get_packet_struct(ndpi_struct);
 
   NDPI_LOG_DBG(ndpi_struct, "search Starcraft\n");
   if (flow->detected_protocol_stack[0] != NDPI_PROTOCOL_STARCRAFT) {

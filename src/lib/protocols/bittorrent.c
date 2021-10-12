@@ -636,7 +636,7 @@ static inline bool bt_old_pak(const uint8_t *payload, uint32_t len,
 
   if((v0_flags < 6 /* ST_NUM_STATES */)
 	    && (v0_extension < 3 /* EXT_NUM_EXT */)) {
-    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
     u_int32_t ts = ntohl(*((u_int32_t*)&(payload[4])));
     u_int32_t now = packet->current_time;
 
@@ -723,7 +723,7 @@ static int bdecode(const u_int8_t *b,size_t l,
 	struct ndpi_flow_struct *flow,
 	uint32_t *utp_type)
 {
-struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 bt_parse_data_cb_t x;
 const u_int8_t *s = b;
 const u_int8_t *se = b+l;
@@ -755,7 +755,7 @@ if(x.p.y_r) *utp_type = 1;
 
 #ifdef BT_ANNOUNCE
 if(ndpi_struct->bt_ann && x.p.a.name) {
-    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
     u_int16_t s_port =  packet->udp ? packet->udp->source :
 			 packet->tcp ? packet->tcp->source : 0;
 
@@ -855,7 +855,7 @@ static void bt_save_hash(
 		int bt_offset) {
 
     const char *bt_hash = NULL; /* 20 bytes long */
-    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
     
     if(bt_offset == -1) {
       const char *bt_magic = ndpi_strnstr((const char *)packet->payload, 
@@ -888,7 +888,7 @@ static void ndpi_add_connection_as_bittorrent(
 		const uint32_t reply)
 {
   int p1 = 0,p2 = 0;
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
   if (packet->tcp != NULL) {
@@ -955,7 +955,7 @@ static void ndpi_add_connection_as_bittorrent(
 static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
                       *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
     void *f1,*f2;
     u_int16_t source,dest;
 
@@ -992,7 +992,7 @@ static int ndpi_search_bittorrent_tcp_old(struct ndpi_detection_module_struct
 static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
                       *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-    struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
     u_int16_t source,dest;
     void *f1,*f2;
 
@@ -1037,7 +1037,7 @@ static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
 static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module_struct
 						    *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int16_t a = 0;
 
   if(packet->payload_packet_len == 1 && packet->payload[0] == 0x13) {
@@ -1298,7 +1298,7 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 /*Search for BitTorrent commands*/
 static void ndpi_int_search_bittorrent_tcp(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   if(ndpi_search_bittorrent_tcp_old(ndpi_struct,flow)) {
     if(packet->payload_packet_len > 48)
@@ -1338,7 +1338,7 @@ static char *bt_search = "BT-SEARCH * HTTP/1.1\r\n";
 
 void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   uint32_t utp_type = 0;
   int bt_code = 0;
   char *detect_type = NULL;

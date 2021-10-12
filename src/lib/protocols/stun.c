@@ -62,7 +62,7 @@ void ndpi_int_stun_add_connection(struct ndpi_detection_module_struct *ndpi_stru
 				  struct ndpi_flow_struct *flow,
 				  u_int proto, u_int app_proto) {
 
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   if(ndpi_stun_cache_enable && ndpi_struct->stun_cache == NULL)
     ndpi_struct->stun_cache = ndpi_lru_cache_init(1024);
@@ -158,7 +158,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 					   struct ndpi_flow_struct *flow,
 					   const u_int8_t * payload,
 					   const u_int16_t payload_length) {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int16_t msg_type, msg_len;
   int rc;
   
@@ -206,7 +206,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     */
     if(payload[0] == 0x16) {
       /* Let's check if this is DTLS used by some socials */
-      struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+      struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
       u_int16_t total_len, version = htons(*((u_int16_t*) &packet->payload[1]));
 
       switch (version) {
@@ -497,7 +497,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 
 void ndpi_search_stun(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   NDPI_LOG_DBG(ndpi_struct, "search stun\n");
 

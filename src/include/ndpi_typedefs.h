@@ -1245,7 +1245,7 @@ struct ndpi_detection_module_struct {
 #endif
 #endif
   /* Current packet */
-  struct ndpi_packet_struct packet;
+  struct ndpi_packet_struct packet_struct;
 };
 
 #endif /* NDPI_LIB_COMPILATION */
