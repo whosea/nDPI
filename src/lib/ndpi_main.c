@@ -7984,8 +7984,9 @@ ndpi_risk_info* ndpi_risk2severity(ndpi_risk_enum risk) {
   return(&ndpi_known_risks[risk]);
 }
 
+#ifndef __KERNEL__
 struct ndpi_packet_struct *
 ndpi_get_packet_struct(struct ndpi_detection_module_struct *ndpi_mod) {
 	return &ndpi_mod->packet_struct;
 }
-
+#endif

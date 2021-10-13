@@ -1648,8 +1648,15 @@ extern "C" {
 
   char* ndpi_get_flow_name(struct ndpi_flow_struct *flow);
 
+#ifndef __KERNEL__
   struct ndpi_packet_struct *
   ndpi_get_packet_struct(struct ndpi_detection_module_struct *ndpi_mod);
+#else
+  static inline struct ndpi_packet_struct *
+  ndpi_get_packet_struct(struct ndpi_detection_module_struct *ndpi_mod) {
+	return &ndpi_mod->packet_struct[get_cpu()];
+  }
+#endif
 
   /* ******************************* */
 

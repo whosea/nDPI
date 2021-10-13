@@ -45,6 +45,7 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0)
 #include <linux/vmalloc.h>
 #endif
+#include <asm/percpu.h>
 
 #ifndef CONFIG_NF_CONNTRACK_CUSTOM
 #define CONFIG_NF_CONNTRACK_CUSTOM 0

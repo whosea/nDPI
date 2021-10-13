@@ -1244,8 +1244,13 @@ struct ndpi_detection_module_struct {
   u_int8_t mmdb_city_loaded, mmdb_as_loaded;
 #endif
 #endif
+
+#ifndef __KERNEL__
   /* Current packet */
   struct ndpi_packet_struct packet_struct;
+#else
+  struct ndpi_packet_struct packet_struct[NR_CPUS];
+#endif
 };
 
 #endif /* NDPI_LIB_COMPILATION */
