@@ -1003,6 +1003,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 	flow->packet_direction = dir;
 	if(ndpi_log_debug > 1)
 		packet_trace(skb,ct,"process    ");
+	preempt_disable();
 	proto = ndpi_detection_process_packet(n->ndpi_struct,flow,
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
 				ip6h ?	(uint8_t *) ip6h :
@@ -1069,6 +1070,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		ct_ndpi->proto.app_protocol = proto.app_protocol;
 		ct_ndpi->proto.master_protocol = proto.master_protocol;
 	}
+	preempt_enable();
 
 	return proto.app_protocol;
 }

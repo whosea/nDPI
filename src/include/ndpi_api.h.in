@@ -1654,7 +1654,7 @@ extern "C" {
 #else
   static inline struct ndpi_packet_struct *
   ndpi_get_packet_struct(struct ndpi_detection_module_struct *ndpi_mod) {
-	return &ndpi_mod->packet_struct[get_cpu()];
+	return &ndpi_mod->packet_struct[smp_processor_id()];
   }
 #endif
 

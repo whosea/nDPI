@@ -88,7 +88,7 @@ static u_int32_t _ticks_per_second = 1000;
   #error "Cant use FRAG_MAN  with _KERNEL_"
   #endif
 #endif
-
+struct ndpi_detection_module_struct xxx0;
 /* ****************************************** */
 
 static ndpi_risk_info ndpi_known_risks[] = {
