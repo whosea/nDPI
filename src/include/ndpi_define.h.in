@@ -195,11 +195,6 @@
 #define NDPI_JABBER_FT_TIMEOUT				         5
 #define NDPI_SOULSEEK_CONNECTION_IP_TICK_TIMEOUT               600
 
-#ifndef _NDPI_CONFIG_H_
-#include "ndpi_config.h"	/* To have access to NDPI_ENABLE_DEBUG_MESSAGES */
-#define _NDPI_CONFIG_H_
-#endif
-
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
  #define NDPI_LOG(proto, m, log_level, args...)		                                 \
   {								                         \
@@ -371,7 +366,15 @@ static inline u_int64_t get_u_int64_t(const u_int8_t* X, int O)
 #if defined(WIN32)
 #undef strtok_r
 #define strtok_r strtok_s
+
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define le16toh(x) (x)
+#define le32toh(x) (x)
+#else
+#error "byte order not supported"
 #endif
+
+#endif /* WIN32 */
 
 #define NDPI_MAX_DNS_REQUESTS                   16
 #define NDPI_MIN_NUM_STUN_DETECTION             8

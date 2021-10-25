@@ -233,7 +233,7 @@ int ndpi_init_serializer_ll(ndpi_serializer *_serializer,
 
   ndpi_reset_serializer(_serializer);
 
-  return(1);
+  return(0);
 }
 
 /* ********************************** */
