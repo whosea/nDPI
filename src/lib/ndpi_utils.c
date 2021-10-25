@@ -2093,7 +2093,6 @@ static u_int64_t ndpi_host_ip_risk_ptree_match(struct ndpi_detection_module_stru
 
 static void ndpi_handle_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str,
 					struct ndpi_flow_struct *flow) {
-  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   char *host;
 
   if(flow->risk == 0) return; /* Nothing to do */
@@ -2127,13 +2126,13 @@ static void ndpi_handle_risk_exceptions(struct ndpi_detection_module_struct *ndp
 
   /* TODO: add IPv6 support */
   if(!flow->ip_risk_mask_evaluated) {
-    if(packet->iph) {
+    if(flow->is_ipv6 == 0) {
       struct in_addr pin;
 
-      pin.s_addr = packet->iph->saddr;
+      pin.s_addr = flow->saddr;
       flow->risk_mask &= ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
 
-      pin.s_addr = packet->iph->daddr;
+      pin.s_addr = flow->daddr;
       flow->risk_mask &= ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
     }
 

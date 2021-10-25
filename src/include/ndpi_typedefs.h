@@ -631,9 +631,6 @@ struct ndpi_id_struct {
   /* NDPI_PROTOCOL_DIRECTCONNECT */
   u_int32_t directconnect_last_safe_access_time;
 
-  /* NDPI_PROTOCOL_SOULSEEK */
-  u_int32_t soulseek_last_safe_access_time;
-
   /* NDPI_PROTOCOL_DIRECTCONNECT */
   u_int16_t detected_directconnect_port;
   u_int16_t detected_directconnect_udp_port;
@@ -647,9 +644,6 @@ struct ndpi_id_struct {
   /* NDPI_PROTOCOL_GNUTELLA */
   u_int16_t detected_gnutella_udp_port1;
   u_int16_t detected_gnutella_udp_port2;
-
-  /* NDPI_PROTOCOL_SOULSEEK */
-  u_int16_t soulseek_listen_port;
 
   /* NDPI_PROTOCOL_IRC */
   u_int8_t irc_number_of_port;
@@ -685,9 +679,6 @@ struct ndpi_flow_tcp_struct {
   u_int32_t irc_stage2:5;
   u_int32_t irc_direction:2;
   u_int32_t irc_0x1000_full:1;
-
-  /* NDPI_PROTOCOL_SOULSEEK */
-  u_int32_t soulseek_stage:2;
 
   /* NDPI_PROTOCOL_USENET */
   u_int32_t usenet_stage:2;
@@ -1183,8 +1174,6 @@ struct ndpi_detection_module_struct {
   u_int32_t gnutella_timeout;
   /* thunder parameters */
   u_int32_t thunder_timeout;
-  /* SoulSeek parameters */
-  u_int32_t soulseek_connection_ip_tick_timeout;
   /* rstp */
   u_int32_t orb_rstp_ts_timeout;
   u_int32_t zattoo_connection_timeout;
@@ -1277,7 +1266,7 @@ struct ndpi_flow_struct {
   /* init parameter, internal used to set up timestamp,... */
   u_int16_t guessed_protocol_id, guessed_host_protocol_id, guessed_category, guessed_header_category;
   u_int8_t l4_proto, protocol_id_already_guessed:1, host_already_guessed:1, fail_with_unknown:1,
-    init_finished:1, setup_packet_direction:1, packet_direction:1, check_extra_packets:1,
+    init_finished:1, setup_packet_direction:1, packet_direction:1, check_extra_packets:1, is_ipv6:1,
     ip_port_finished:1;
 
   /*
@@ -1285,6 +1274,11 @@ struct ndpi_flow_struct {
     tcp sequence number connection tracking
   */
   u_int32_t next_tcp_seq_nr[2];
+
+  /* Flow addresses (used mainly for LRU lookups in ndpi_detection_giveup())
+   * TODO: ipv6. Note that LRU is ipv4 only, for the time being */
+  u_int32_t saddr;
+  u_int32_t daddr;
 
   // -----------------------------------------
 
@@ -1294,6 +1288,8 @@ struct ndpi_flow_struct {
   u_int16_t num_processed_pkts; /* <= WARNING it can wrap but we do expect people to giveup earlier */
 
   int (*extra_packets_func) (struct ndpi_detection_module_struct *, struct ndpi_flow_struct *flow);
+
+  u_int64_t last_packet_time_ms;
 
   /*
     the tcp / udp / other l4 value union
@@ -1497,9 +1493,6 @@ struct ndpi_flow_struct {
   /* NDPI_PROTOCOL_OPENVPN */
   u_int8_t ovpn_session_id[8];
   u_int8_t ovpn_counter;
-
-  /* Flow key used to search a match into the mining cache */
-  u_int32_t key_mining_cache;
 
   /* NDPI_PROTOCOL_TINC */
   u_int8_t tinc_state;
