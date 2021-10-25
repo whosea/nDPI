@@ -1451,7 +1451,6 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 		  detect_type = "String";
 		  goto bittorrent_found;
 	  }
-	  
 	}
 
 	if(ndpi_search_bittorrent_udp_old(ndpi_struct,flow))

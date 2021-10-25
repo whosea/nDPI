@@ -149,7 +149,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/soap.c \
 		     protocols/socks45.c \
 		     protocols/sopcast.c \
-		     protocols/soulseek.c \
 		     protocols/spotify.c \
 		     protocols/ssdp.c \
 		     protocols/ssh.c \

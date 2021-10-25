@@ -97,33 +97,33 @@ static ndpi_risk_info ndpi_known_risks[] = {
   { NDPI_URL_POSSIBLE_SQL_INJECTION,            NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_URL_POSSIBLE_RCE_INJECTION,            NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_BINARY_APPLICATION_TRANSFER,           NDPI_RISK_SEVERE, CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT,   NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_TLS_SELFSIGNED_CERTIFICATE,            NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
-  { NDPI_TLS_OBSOLETE_VERSION,                  NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
-  { NDPI_TLS_WEAK_CIPHER,                       NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT,   NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_TLS_SELFSIGNED_CERTIFICATE,            NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_OBSOLETE_VERSION,                  NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_WEAK_CIPHER,                       NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_TLS_CERTIFICATE_EXPIRED,               NDPI_RISK_HIGH,   CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_TLS_CERTIFICATE_MISMATCH,              NDPI_RISK_HIGH,   CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_HTTP_SUSPICIOUS_USER_AGENT,            NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_USER_AGENT,            NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_HTTP_NUMERIC_IP_HOST,                  NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_HTTP_SUSPICIOUS_URL,                   NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
-  { NDPI_HTTP_SUSPICIOUS_HEADER,                NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_HEADER,                NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_TLS_NOT_CARRYING_HTTPS,                NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_SUSPICIOUS_DGA_DOMAIN,                 NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_MALFORMED_PACKET,                      NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_SSH_OBSOLETE_CLIENT_VERSION_OR_CIPHER, NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_SSH_OBSOLETE_CLIENT_VERSION_OR_CIPHER, NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_SSH_OBSOLETE_SERVER_VERSION_OR_CIPHER, NDPI_RISK_MEDIUM, CLIENT_LOW_RISK_PERCENTAGE  },
-  { NDPI_SMB_INSECURE_VERSION,                  NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
-  { NDPI_TLS_SUSPICIOUS_ESNI_USAGE,             NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_SMB_INSECURE_VERSION,                  NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_SUSPICIOUS_ESNI_USAGE,             NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_UNSAFE_PROTOCOL,                       NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_DNS_SUSPICIOUS_TRAFFIC,                NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
-  { NDPI_TLS_MISSING_SNI,                       NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
-  { NDPI_HTTP_SUSPICIOUS_CONTENT,               NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_DNS_SUSPICIOUS_TRAFFIC,                NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_MISSING_SNI,                       NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_HTTP_SUSPICIOUS_CONTENT,               NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_RISKY_ASN,                             NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_RISKY_DOMAIN,                          NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_MALICIOUS_JA3,                         NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_MALICIOUS_JA3,                         NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_MALICIOUS_SHA1_CERTIFICATE,            NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_DESKTOP_OR_FILE_SHARING_SESSION,       NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
-  { NDPI_TLS_UNCOMMON_ALPN,                     NDPI_RISK_MEDIUM, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_UNCOMMON_ALPN,                     NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_TLS_CERT_VALIDITY_TOO_LONG,            NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_TLS_SUSPICIOUS_EXTENSION,              NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_TLS_FATAL_ALERT,                       NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
@@ -1227,8 +1227,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "Thunder", NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_SOULSEEK,
-			  "Soulseek", NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE,
+			  "FREE", NDPI_PROTOCOL_CATEGORY_DOWNLOAD_FT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_PS_VUE,
@@ -2448,8 +2448,6 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   ndpi_str->zattoo_connection_timeout = NDPI_ZATTOO_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->jabber_stun_timeout = NDPI_JABBER_STUN_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->jabber_file_transfer_timeout = NDPI_JABBER_FT_TIMEOUT * ndpi_str->ticks_per_second;
-  ndpi_str->soulseek_connection_ip_tick_timeout =
-    NDPI_SOULSEEK_CONNECTION_IP_TICK_TIMEOUT * ndpi_str->ticks_per_second;
 
   ndpi_str->ndpi_num_supported_protocols = NDPI_MAX_SUPPORTED_PROTOCOLS;
   ndpi_str->ndpi_num_custom_protocols = 0;
@@ -3746,9 +3744,6 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
   /* APPLEJUICE */
   init_applejuice_dissector(ndpi_str, &a, detection_bitmask);
 
-  /* SOULSEEK */
-  init_soulseek_dissector(ndpi_str, &a, detection_bitmask);
-
   /* SOCKS */
   init_socks_dissector(ndpi_str, &a, detection_bitmask);
 
@@ -4254,18 +4249,19 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
 /* handle extension headers in IPv6 packets
  * arguments:
+ *  l3len: the packet length excluding the IPv6 header
  * 	l4ptr: pointer to the byte following the initial IPv6 header
- * 	l4len: the length of the IPv6 packet excluding the IPv6 header
+ * 	l4len: the length of the IPv6 packet parsed from the IPv6 header
  * 	nxt_hdr: next header value from the IPv6 header
  * result:
- * 	l4ptr: pointer to the start of the actual packet payload
- * 	l4len: length of the actual payload
- * 	nxt_hdr: protocol of the actual payload
+ * 	l4ptr: pointer to the start of the actual layer 4 header
+ * 	l4len: length of the actual layer 4 header
+ * 	nxt_hdr: first byte of the layer 4 packet
  * returns 0 upon success and 1 upon failure
  */
-int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi_str, const u_int8_t **l4ptr,
+int ndpi_handle_ipv6_extension_headers(u_int16_t l3len, const u_int8_t **l4ptr,
                                        u_int16_t *l4len, u_int8_t *nxt_hdr) {
-  while((*nxt_hdr == 0 || *nxt_hdr == 43 || *nxt_hdr == 44 || *nxt_hdr == 60 || *nxt_hdr == 135 || *nxt_hdr == 59)) {
+  while(l3len > 1 && (*nxt_hdr == 0 || *nxt_hdr == 43 || *nxt_hdr == 44 || *nxt_hdr == 60 || *nxt_hdr == 135 || *nxt_hdr == 59)) {
     u_int16_t ehdr_len, frag_offset;
 
     // no next header
@@ -4278,6 +4274,11 @@ int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi
       if(*l4len < 8) {
 	return(1);
       }
+
+      if (l3len < 5) {
+        return 1;
+      }
+      l3len -= 5;
 
       *nxt_hdr = (*l4ptr)[0];
       frag_offset = ntohs(*(u_int16_t *)((*l4ptr) + 2)) >> 3;
@@ -4298,6 +4299,11 @@ int ndpi_handle_ipv6_extension_headers(struct ndpi_detection_module_struct *ndpi
     ehdr_len = (*l4ptr)[1];
     ehdr_len *= 8;
     ehdr_len += 8;
+
+    if (ehdr_len > l3len) {
+      return 1;
+    }
+    l3len -= ehdr_len;
 
     if(*l4len < ehdr_len) {
       return(1);
@@ -4396,7 +4402,7 @@ static u_int8_t ndpi_detection_get_l4_internal(struct ndpi_detection_module_stru
     l4protocol = iph_v6->ip6_hdr.ip6_un1_nxt;
 
     // we need to handle IPv6 extension headers if present
-    if(ndpi_handle_ipv6_extension_headers(ndpi_str, &l4ptr, &l4len, &l4protocol) != 0) {
+    if(ndpi_handle_ipv6_extension_headers(l3_len - sizeof(struct ndpi_ipv6hdr), &l4ptr, &l4len, &l4protocol) != 0) {
       return(1);
     }
 
@@ -4938,6 +4944,91 @@ u_int16_t ndpi_guess_host_protocol_id(struct ndpi_detection_module_struct *ndpi_
 
 /* ********************************************************************************* */
 
+static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_str,
+				     struct ndpi_flow_struct *flow,
+				     ndpi_protocol *ret) {
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
+
+#if 0
+  if(flow) {
+    /* Do not go for DNS when there is an application protocol. Example DNS.Apple */
+    if((flow->detected_protocol_stack[1] != NDPI_PROTOCOL_UNKNOWN)
+       && (flow->detected_protocol_stack[0] /* app */ != flow->detected_protocol_stack[1] /* major */))
+      NDPI_CLR_BIT(flow->risk, NDPI_SUSPICIOUS_DGA_DOMAIN);
+  }
+#endif
+
+  // printf("====>> %u.%u [%u]\n", ret->master_protocol, ret->app_protocol, flow->detected_protocol_stack[0]);
+
+  switch(ret->app_protocol) {
+    /*
+      Skype for a host doing MS Teams means MS Teams
+      (MS Teams uses Skype as transport protocol for voice/video)
+    */
+  case NDPI_PROTOCOL_MSTEAMS:
+    if(packet->iph && packet->tcp) {
+      // printf("====>> NDPI_PROTOCOL_MSTEAMS\n");
+
+      if(ndpi_str->msteams_cache == NULL)
+	ndpi_str->msteams_cache = ndpi_lru_cache_init(1024);
+
+      if(ndpi_str->msteams_cache)
+	ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
+			      packet->iph->saddr,
+			      (packet->current_time_ms / 1000) & 0xFFFF /* 16 bit */);
+    }
+    break;
+
+  case NDPI_PROTOCOL_SKYPE_TEAMS:
+  case NDPI_PROTOCOL_SKYPE_CALL:
+    if(packet->iph
+       && packet->udp
+       && ndpi_str->msteams_cache) {
+      u_int16_t when;
+
+      if(ndpi_lru_find_cache(ndpi_str->msteams_cache, packet->iph->saddr,
+			     &when, 0 /* Don't remove it as it can be used for other connections */)) {
+	u_int16_t tdiff = ((packet->current_time_ms /1000) & 0xFFFF) - when;
+
+	if(tdiff < 60 /* sec */) {
+	  // printf("====>> NDPI_PROTOCOL_SKYPE(_CALL) -> NDPI_PROTOCOL_MSTEAMS [%u]\n", tdiff);
+	  ret->app_protocol = NDPI_PROTOCOL_MSTEAMS;
+
+	  /* Refresh cache */
+	  ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
+				packet->iph->saddr,
+				(packet->current_time_ms / 1000) & 0xFFFF /* 16 bit */);
+	}
+      }
+    }
+    break;
+
+  case NDPI_PROTOCOL_RDP:
+    ndpi_set_risk(ndpi_str, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION); /* Remote assistance */
+    break;
+    
+  case NDPI_PROTOCOL_ANYDESK:
+    if(packet->tcp) /* TCP only */
+      ndpi_set_risk(ndpi_str, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION); /* Remote assistance */
+    break;
+  } /* switch */
+
+  if(flow) {
+    switch(ndpi_get_proto_breed(ndpi_str, ret->app_protocol)) {
+    case NDPI_PROTOCOL_UNSAFE:
+    case NDPI_PROTOCOL_POTENTIALLY_DANGEROUS:
+    case NDPI_PROTOCOL_DANGEROUS:
+      ndpi_set_risk(ndpi_str, flow, NDPI_UNSAFE_PROTOCOL);
+      break;
+    default:
+      /* Nothing to do */
+      break;
+    }
+  }
+}
+
+/* ********************************************************************************* */
+
 ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
 				    u_int8_t enable_guess, u_int8_t *protocol_was_guessed) {
   ndpi_protocol ret = NDPI_PROTOCOL_NULL;
@@ -5079,6 +5170,7 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
   if(ret.app_protocol != NDPI_PROTOCOL_UNKNOWN) {
     *protocol_was_guessed = 1;
     ndpi_fill_protocol_category(ndpi_str, flow, &ret);
+    ndpi_reconcile_protocols(ndpi_str, flow, &ret);
   }
 
   return(ret);
@@ -5356,88 +5448,6 @@ static int ndpi_check_protocol_port_mismatch_exceptions(struct ndpi_detection_mo
   }
 
   return(0);
-}
-
-/* ********************************************************************************* */
-
-static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_str,
-				     struct ndpi_flow_struct *flow,
-				     ndpi_protocol *ret) {
-  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
-
-#if 0
-  if(flow) {
-    /* Do not go for DNS when there is an application protocol. Example DNS.Apple */
-    if((flow->detected_protocol_stack[1] != NDPI_PROTOCOL_UNKNOWN)
-       && (flow->detected_protocol_stack[0] /* app */ != flow->detected_protocol_stack[1] /* major */))
-      NDPI_CLR_BIT(flow->risk, NDPI_SUSPICIOUS_DGA_DOMAIN);
-  }
-#endif
-
-  // printf("====>> %u.%u [%u]\n", ret->master_protocol, ret->app_protocol, flow->detected_protocol_stack[0]);
-
-  switch(ret->app_protocol) {
-    /*
-      Skype for a host doing MS Teams means MS Teams
-      (MS Teams uses Skype as transport protocol for voice/video)
-    */
-  case NDPI_PROTOCOL_MSTEAMS:
-    if(packet->iph && packet->tcp) {
-      // printf("====>> NDPI_PROTOCOL_MSTEAMS\n");
-
-      if(ndpi_str->msteams_cache == NULL)
-	ndpi_str->msteams_cache = ndpi_lru_cache_init(1024);
-
-      if(ndpi_str->msteams_cache)
-	ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
-			      packet->iph->saddr,
-			      packet->current_time & 0xFFFF /* 16 bit */);
-    }
-    break;
-
-  case NDPI_PROTOCOL_SKYPE_TEAMS:
-  case NDPI_PROTOCOL_SKYPE_CALL:
-    if(packet->iph
-       && packet->udp
-       && ndpi_str->msteams_cache) {
-      u_int16_t when;
-
-      if(ndpi_lru_find_cache(ndpi_str->msteams_cache, packet->iph->saddr,
-			     &when, 0 /* Don't remove it as it can be used for other connections */)) {
-	u_int16_t tdiff = (packet->current_time & 0xFFFF) - when;
-
-	if(tdiff < 60 /* sec */) {
-	  // printf("====>> NDPI_PROTOCOL_SKYPE(_CALL) -> NDPI_PROTOCOL_MSTEAMS [%u]\n", tdiff);
-	  ret->app_protocol = NDPI_PROTOCOL_MSTEAMS;
-
-	  /* Refresh cache */
-	  ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
-				packet->iph->saddr,
-				packet->current_time & 0xFFFF /* 16 bit */);
-	}
-      }
-    }
-    break;
-
-  case NDPI_PROTOCOL_ANYDESK:
-    if(packet->tcp) /* TCP only */
-      ndpi_set_risk(ndpi_str, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION); /* Remote assistance */
-    break;
-  } /* switch */
-
-  if(flow) {
-    switch(ndpi_get_proto_breed(ndpi_str, ret->app_protocol)) {
-    case NDPI_PROTOCOL_UNSAFE:
-    case NDPI_PROTOCOL_POTENTIALLY_DANGEROUS:
-    case NDPI_PROTOCOL_DANGEROUS:
-      ndpi_set_risk(ndpi_str, flow, NDPI_UNSAFE_PROTOCOL);
-      break;
-    default:
-      /* Nothing to do */
-      break;
-    }
-  }
-
 }
 
 /* ****************************************************** */
@@ -7210,6 +7220,7 @@ int ndpi_match_hostname_protocol(struct ndpi_detection_module_struct *ndpi_struc
   else
     what = name, what_len = name_len;
 
+  memset(&ret_match, 0, sizeof(ret_match));
   subproto = ndpi_match_host_subprotocol(ndpi_struct, flow, what, what_len,
 					 &ret_match, master_protocol);
 
@@ -7646,10 +7657,12 @@ static int enough(int a, int b) {
 
 /* ******************************************************************** */
 
-static u_int8_t endsWith(char *str, char *ends, u_int8_t ends_len) {
+u_int8_t ndpi_ends_with(char *str, char *ends) {
   u_int str_len = str ? strlen(str) : 0;
+  u_int8_t ends_len = strlen(ends);
   u_int8_t rc;
 
+  
   if(str_len < ends_len) return(0);
 
   rc = (strncmp(&str[str_len-ends_len], ends, ends_len) != 0) ? 0 : 1;
@@ -7712,12 +7725,12 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
     
     if((!name)
        || (strchr(name, '_') != NULL)
-       || (endsWith(name, "in-addr.arpa", 12))
-       || (endsWith(name, "ip6.arpa", 8))
+       || (ndpi_ends_with(name, "in-addr.arpa"))
+       || (ndpi_ends_with(name, "ip6.arpa"))
        /* Ignore TLD .local .lan and .home */
-       || (endsWith(name, ".local", 6))
-       || (endsWith(name, ".lan", 4))
-       || (endsWith(name, ".home", 5))
+       || (ndpi_ends_with(name, ".local"))
+       || (ndpi_ends_with(name, ".lan"))
+       || (ndpi_ends_with(name, ".home"))
        )
       return(0);
 
