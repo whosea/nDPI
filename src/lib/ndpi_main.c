@@ -7729,10 +7729,10 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 
     if(isdigit(name[0])) {
       struct in_addr ip_addr;
-      char buf[22];
+      char buf[22],buf2[22];
       
       ip_addr.s_addr = inet_addr(buf);
-      if(strcmp(inet_ntoa(ip_addr), buf) == 0)
+      if(strcmp(inet_ntop(AF_INET,&ip_addr,buf2,sizeof(buf2)), buf) == 0)
 	return(0); /* Ignore numeric IPs */
     }
     
