@@ -2291,6 +2291,12 @@ int np,nh,err=0;
     return err;
 }
 
+#if  LINUX_VERSION_CODE > KERNEL_VERSION(5,10,0)
+static ssize_t ndpi_read_iter(struct kiocb *iocb, struct iov_iter *iter) {
+       return -EIO;
+}
+#endif
+
 #if  LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
 #define PROC_OPS(s,o,r,w,l,d) static const struct file_operations s = { \
         .open    = o , \
@@ -2300,12 +2306,23 @@ int np,nh,err=0;
 	.release = d \
 }
 #else
-#define PROC_OPS(s,o,r,w,l,d) static const struct proc_ops s = { \
+  #if  LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
+    #define PROC_OPS(s,o,r,w,l,d) static const struct proc_ops s = { \
+        .proc_open    = o , \
+        .proc_read    = r , \
+        .proc_read_iter = ndpi_read_iter , \
+        .proc_write   = w , \
+	.proc_lseek   = l , \
+	.proc_release = d  \
+    }
+  #else
+    #define PROC_OPS(s,o,r,w,l,d) static const struct proc_ops s = { \
         .proc_open    = o , \
         .proc_read    = r , \
         .proc_write   = w , \
 	.proc_release = d \
-}
+    }
+  #endif
 #endif
 PROC_OPS(nproto_proc_fops, ninfo_proc_open,nproto_proc_read,nproto_proc_write,noop_llseek,nproto_proc_close);
 PROC_OPS(ninfo_proc_fops, ninfo_proc_open,ninfo_proc_read,ninfo_proc_write,noop_llseek,ninfo_proc_close);
