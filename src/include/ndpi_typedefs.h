@@ -126,6 +126,7 @@ typedef enum {
   NDPI_CLEAR_TEXT_CREDENTIALS,
   NDPI_DNS_LARGE_PACKET,
   NDPI_DNS_FRAGMENTED,
+  NDPI_INVALID_CHARACTERS,
   
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 63 due to (**) */
@@ -1148,8 +1149,6 @@ struct ndpi_detection_module_struct {
   int ac_automa_finalized;
   /* HTTP/DNS/HTTPS/QUIC host matching */
   ndpi_automa host_automa,                     /* Used for DNS/HTTPS */
-    content_automa,                            /* Used for HTTP subprotocol_detection */
-    subprotocol_automa,                        /* Used for HTTP subprotocol_detection */
     risky_domain_automa, tls_cert_subject_automa,
     malicious_ja3_automa, malicious_sha1_automa,
     host_risk_mask_automa, common_alpns_automa;  
@@ -1198,6 +1197,9 @@ struct ndpi_detection_module_struct {
 
   /* NDPI_PROTOCOL_TINC */
   struct cache *tinc_cache;
+
+  /* NDPI_PROTOCOL_BITTORRENT */
+  struct ndpi_lru_cache *bittorrent_cache;
 
   /* NDPI_PROTOCOL_STUN and subprotocols */
   struct ndpi_lru_cache *stun_cache;
@@ -1418,8 +1420,8 @@ struct ndpi_flow_struct {
     } http;
 
     struct {
-      u_int8_t auth_found:1, auth_failed:1, auth_tls:1, _pad:5;
-      char username[16], password[16];
+      u_int8_t auth_found:1, auth_failed:1, auth_tls:1, auth_done:1, _pad:4;
+      char username[32], password[16];
     } ftp_imap_pop_smtp;
 
     struct {
@@ -1525,7 +1527,7 @@ typedef struct {
 typedef struct {
   u_int32_t network;
   u_int8_t cidr;
-  u_int8_t value;
+  u_int16_t value;
 } ndpi_network;
 
 typedef u_int32_t ndpi_init_prefs;

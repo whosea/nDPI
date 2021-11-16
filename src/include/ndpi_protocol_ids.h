@@ -91,7 +91,7 @@ typedef enum {
   NDPI_PROTOCOL_MONGODB               = 60, /* Leonn Paiva <leonn.paiva@gmail.com> */
   NDPI_PROTOCOL_QQLIVE                = 61,
   NDPI_PROTOCOL_THUNDER               = 62,
-  NDPI_PROTOCOL_FREE                  = 63, /* FREE */
+  NDPI_PROTOCOL_OCSP                  = 63,
   NDPI_PROTOCOL_PS_VUE                = 64,
   NDPI_PROTOCOL_IRC                   = 65,
   NDPI_PROTOCOL_AYIYA                 = 66,
@@ -293,6 +293,7 @@ typedef enum {
   NDPI_PROTOCOL_GITLAB                = 262,
   NDPI_PROTOCOL_AVAST_SECUREDNS       = 263, /* Toni Uhlig <matzeton@googlemail.com> */
   NDPI_PROTOCOL_CASSANDRA             = 264, /* Lucas Santos <lfneiva.santos@gmail.com> */
+  NDPI_PROTOCOL_AMAZON_AWS            = 265,
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_protocol_ids.h"

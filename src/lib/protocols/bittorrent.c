@@ -890,7 +890,6 @@ static void ndpi_add_connection_as_bittorrent(
   int p1 = 0,p2 = 0;
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
-  ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
   if (packet->tcp != NULL) {
     p1 = packet->tcp->source;
     p2 = packet->tcp->dest;
@@ -948,6 +947,28 @@ static void ndpi_add_connection_as_bittorrent(
 
   }
 
+  ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
+#ifndef __KERNEL__
+
+  if(packet->udp) {
+    if(ndpi_struct->bittorrent_cache == NULL)
+      ndpi_struct->bittorrent_cache = ndpi_lru_cache_init(1024);
+
+    if(ndpi_struct->bittorrent_cache && packet->iph && packet->udp) {
+      u_int32_t key = packet->iph->saddr + packet->udp->source;
+
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key, NDPI_PROTOCOL_BITTORRENT);
+
+      key = packet->iph->daddr + packet->udp->dest;
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key, NDPI_PROTOCOL_BITTORRENT);
+
+#ifdef CACHE_DEBUG
+      printf("[BitTorrent] *** ADDING ports %u / %u\n", ntohs(packet->udp->source), ntohs(packet->udp->dest));
+#endif
+    }
+  }
+
+#endif
 }
 
 #define DIRC(a,b) if(packet->packet_direction) b++ ; else a++
@@ -1099,7 +1120,6 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     const u_int8_t *ptr = &packet->payload[4];
     u_int16_t len = packet->payload_packet_len - 4;
     a = 0;
-
 
     /* parse complete get packet here into line structure elements */
     ndpi_parse_packet_line_info(ndpi_struct, flow);
@@ -1336,6 +1356,10 @@ static char *bt_code_text[8] = {
 
 static char *bt_search = "BT-SEARCH * HTTP/1.1\r\n";
 
+static u_int8_t is_port(u_int16_t a, u_int16_t b, u_int16_t what) {
+  return(((what == a) || (what == b)) ? 1 : 0);
+}
+
 void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
@@ -1346,13 +1370,21 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 
   NDPI_LOG_DBG(ndpi_struct, "search Bittorrent\n");
   /* This is broadcast */
-  if(packet->iph
-     && (((packet->iph->saddr == 0xFFFFFFFF) || (packet->iph->daddr == 0xFFFFFFFF))
-	 || (packet->udp
-	     && ((ntohs(packet->udp->source) == 3544) /* teredo.c */
-		 || (ntohs(packet->udp->dest) == 3544))))) {
-    NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
-    return;
+
+  if(packet->iph) {
+    if((packet->iph->saddr == 0xFFFFFFFF) || (packet->iph->daddr == 0xFFFFFFFF))
+      goto exclude_bt;
+
+    if(packet->udp) {
+      u_int16_t sport = ntohs(packet->udp->source), dport = ntohs(packet->udp->dest);
+
+      if(is_port(sport, dport, 3544) /* teredo */
+	 || is_port(sport, dport, 5246) || is_port(sport, dport, 5247) /* CAPWAP */) {
+      exclude_bt:
+	NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+	return;
+      }
+    }
   }
 #ifndef __KERNEL__
   NDPI_LOG_DBG2(ndpi_struct,
@@ -1376,8 +1408,35 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	    }
 	return;
   }
-    /* check for tcp retransmission here */
 
+    /* check for tcp retransmission here */
+#ifndef __KERNEL__
+    if((flow->packet_counter == 0 /* Do the check once */) && ndpi_struct->bittorrent_cache) {
+      u_int32_t key = packet->udp ? (packet->iph->saddr + packet->udp->source) : (packet->iph->saddr + packet->tcp->source);
+	u_int16_t cached_proto;
+	u_int8_t found = 0;
+
+#ifdef CACHE_DEBUG
+	if(packet->udp)
+	  printf("[BitTorrent] *** SEARCHING ports %u / %u\n", ntohs(packet->udp->source), ntohs(packet->udp->dest));
+	else
+	  printf("[BitTorrent] *** SEARCHING ports %u / %u\n", ntohs(packet->tcp->source), ntohs(packet->tcp->dest));
+#endif
+	
+	if(ndpi_lru_find_cache(ndpi_struct->bittorrent_cache, key,
+			       &cached_proto, 0 /* Don't remove it as it can be used for other connections */))
+	  found = 1;
+	else {
+	  key = packet->udp ? (packet->iph->daddr + packet->udp->dest) : (packet->iph->daddr + packet->tcp->dest);
+
+	  found = ndpi_lru_find_cache(ndpi_struct->bittorrent_cache, key,
+				      &cached_proto, 0 /* Don't remove it as it can be used for other connections */);
+	}
+
+	if(found)
+	  goto bittorrent_found;
+      }
+#endif
     if(packet->tcp != NULL) {
       ndpi_int_search_bittorrent_tcp(ndpi_struct, flow);
       return;
@@ -1412,11 +1471,42 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	
         if(packet->iph && bt_old_pak(packet->payload, packet->payload_packet_len,
 				ndpi_struct,flow)) {
-		detect_type = "Format1"; 
+		detect_type = "Format1";
 		goto bittorrent_found;
 	}
+	  /* Check if this is protocol v0 */
+	  u_int8_t v0_extension = packet->payload[17];
+	  u_int8_t v0_flags     = packet->payload[18];
 
-      }
+	  if(is_utpv1_pkt(packet->payload, packet->payload_packet_len)) {
+	    bt_proto = ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20);
+	    goto bittorrent_found;
+	  } else if((packet->payload[0]== 0x60)
+	     && (packet->payload[1]== 0x0)
+	     && (packet->payload[2]== 0x0)
+	     && (packet->payload[3]== 0x0)
+	     && (packet->payload[4]== 0x0)) {
+	    /* Heuristic */
+	    bt_proto = ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20);
+	    goto bittorrent_found;
+	    /* CSGO/DOTA conflict */
+	  } else if((v0_flags < 6 /* ST_NUM_STATES */) && (v0_extension < 3 /* EXT_NUM_EXT */)) {
+	    u_int32_t ts = ntohl(*((u_int32_t*)&(packet->payload[4])));
+	    u_int32_t now;
+
+	    now = (u_int32_t)time(NULL);
+
+	    if((ts < (now+86400)) && (ts > (now-86400))) {
+	      bt_proto = ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20);
+	      goto bittorrent_found;
+	    }
+	  } else if(ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20)
+		    ) {
+	    goto bittorrent_found;
+	  }
+
+	}
+
       if(match_utp_query_reply((uint32_t *)packet->payload,&flow->bittorrent_seq,
 			       packet->payload_packet_len,&utp_type)) {
 	      if(utp_type == 0xffff) {
