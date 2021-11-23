@@ -343,6 +343,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
   int payload_offset = 0;
   u_int8_t is_query;
   u_int16_t s_port = 0, d_port = 0;
+  u_int8_t hostname_is_valid = 0;
 
   NDPI_LOG_DBG(ndpi_struct, "search DNS\n");
 
@@ -433,7 +434,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
       }
     } /* for */
 
-    u_int8_t hostname_is_valid = 1;
+    hostname_is_valid = 1;
     while((j < max_len) && (off < packet->payload_packet_len) && (packet->payload[off] != '\0')) {
       uint8_t c, cl = packet->payload[off++];
 

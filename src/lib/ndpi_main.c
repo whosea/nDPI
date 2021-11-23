@@ -2582,11 +2582,7 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
       automa = &ndpi_str->common_alpns_automa;
       break;
 
-    case 7:
-      automa = &ndpi_str->subprotocol_automa;
-      break;
-
-    case 8:
+    case 6:
       automa = &ndpi_str->risky_domain_automa;
       break;
 

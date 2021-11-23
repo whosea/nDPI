@@ -2169,8 +2169,8 @@ void ndpi_set_risk(struct ndpi_detection_module_struct *ndpi_str,
 
 int ndpi_is_printable_string(char * const str, size_t len) {
   int retval = 1;
-
-  for (size_t i = 0; i < len; ++i) {
+  size_t i;
+  for (i = 0; i < len; ++i) {
     if (ndpi_isprint(str[i]) == 0) {
       str[i] = '?';
       retval = 0;

@@ -110,7 +110,7 @@ close(F);
 die "Missing host_protocol_list\n" if !$ev1;
 die "host_protocol_list not closed!\n" if !$ev2;
 
-foreach my $proto (qw(TOR AMAZON WHATSAPP std)) {
+foreach my $proto (qw(TOR AMAZON_AWS WHATSAPP std)) {
 	my $f = 'ndpi_network_list_'.lc($proto).'.yaml';
 	if(-f $f) {
 		print STDERR "$f exists!\n";

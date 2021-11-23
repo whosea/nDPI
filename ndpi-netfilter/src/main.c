@@ -2669,7 +2669,7 @@ static int __net_init ndpi_net_init(struct net *net)
 			sml = strlen(hm->string_to_match);
 			/* Beginning checking for duplicates */
 			i2 = ndpi_match_string_subprotocol(n->ndpi_struct,
-								hm->string_to_match,sml,&s_ret,1);
+								hm->string_to_match,sml,&s_ret);
 			if(i2 == NDPI_PROTOCOL_UNKNOWN || i != i2) {
 				pr_err("xt_ndpi: Warning! Hostdef '%s' %s! proto_id %u != %u, p:%u. Skipping.\n",
 						i != i2 ? "missmatch":"unknown",
