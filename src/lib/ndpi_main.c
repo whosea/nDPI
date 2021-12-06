@@ -4650,6 +4650,7 @@ void ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
       flow->daddr = packet->iph->daddr;
     }
     flow->last_packet_time_ms = packet->current_time_ms;
+    flow->last_packet_time = packet->current_time;
 
     packet->packet_lines_parsed_complete = 0;
 
@@ -4966,7 +4967,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
       if(ndpi_str->msteams_cache)
 	ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
 			      flow->saddr,
-			      (flow->last_packet_time_ms / 1000) & 0xFFFF /* 16 bit */);
+			      flow->last_packet_time & 0xFFFF /* 16 bit */);
     }
     break;
 
@@ -4979,7 +4980,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
       if(ndpi_lru_find_cache(ndpi_str->msteams_cache, flow->saddr,
 			     &when, 0 /* Don't remove it as it can be used for other connections */)) {
-	u_int16_t tdiff = ((flow->last_packet_time_ms /1000) & 0xFFFF) - when;
+	u_int16_t tdiff = (flow->last_packet_time & 0xFFFF) - when;
 
 	if(tdiff < 60 /* sec */) {
 	  // printf("====>> NDPI_PROTOCOL_SKYPE(_CALL) -> NDPI_PROTOCOL_MSTEAMS [%u]\n", tdiff);
@@ -4988,7 +4989,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 	  /* Refresh cache */
 	  ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
 				flow->saddr,
-				(flow->last_packet_time_ms / 1000) & 0xFFFF /* 16 bit */);
+				flow->last_packet_time & 0xFFFF /* 16 bit */);
 	}
       }
     }

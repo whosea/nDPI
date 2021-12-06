@@ -1292,6 +1292,7 @@ struct ndpi_flow_struct {
   int (*extra_packets_func) (struct ndpi_detection_module_struct *, struct ndpi_flow_struct *flow);
 
   u_int64_t last_packet_time_ms;
+  u_int64_t last_packet_time;
 
   /*
     the tcp / udp / other l4 value union
