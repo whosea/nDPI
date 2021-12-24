@@ -11,6 +11,8 @@ function init(){
     #rpm编译包
     yum install -y rpm-build rpmdevtools
     yum -y install zip unzip
+    yum install -y dos2unix
+
     #初始化工作空间
     rpmdev-setuptree
 #    ~/rpmbuild/SPECS	    %_specdir	Spec 文件目录	保存 RPM 包配置（.spec）文件
@@ -28,12 +30,14 @@ function init(){
 
 
     #下载源码到对应的空间
-    wget -P /root https://github.com/whosea/nDPI/archive/refs/heads/flow_info.zip
+    cd /root
+    wget -P /root -O flow_info.zip https://github.com/whosea/nDPI/archive/refs/heads/flow_info.zip
     rm -rf /root/rpmbuild/SOURCES/flow_info.zip
     rm -rf /root/rpmbuild/SOURCES/nDPI-flow_info
     cp -f /root/flow_info.zip  /root/rpmbuild/SOURCES
     cd /root
     unzip /root/rpmbuild/SOURCES/flow_info.zip -d /root/rpmbuild/SOURCES
+    dos2unix /root/rpmbuild/SOURCES/nDPI-flow_info-4/xt-kmod/kmodtool-xt_ndpi-el7.sh
 
     echo "复制所需文件到对应rpmbuild文件夹"
     cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info/xt-kmod/xt_ndpi-kmod.spec /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
@@ -53,6 +57,14 @@ function init(){
     modprobe xt_ndpi
     #验证安装成功
     cat /proc/net/xt_ndpi/proto | head -n5
+
+    #更新内核模块的依赖关系
+    depmod -a
+    #查看模块是否加载
+    lsmod | grep ndpi
+    #查看内核加载信息
+    dmesg | tail
+
     #iptables -m ndpi --help
 }
 
