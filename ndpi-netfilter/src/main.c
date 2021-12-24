@@ -67,6 +67,7 @@
 
 #include "../lib/third_party/include/ndpi_patricia.h"
 
+#define LINUX_VERSION_CODE KERNEL_VERSION(4,10,0)
 extern ndpi_protocol_match host_match[];
 
 /* Only for debug! */
@@ -117,13 +118,13 @@ static inline void *PDE_DATA(const struct inode *inode)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
 static inline struct net *xt_net(const struct xt_action_param *par)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
+//#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
         const struct net_device *dev = par->in;
         if(!dev) dev = par->out;
         return dev ? dev_net(dev): NULL;
-#else
-        return par->net;
-#endif
+//#else
+//        return par->net;
+//#endif
 }
 static inline u_int8_t xt_family(const struct xt_action_param *par)
 {
@@ -142,10 +143,10 @@ static inline const struct net_device *xt_out(const struct xt_action_param *par)
         return par->out;
 }
 #endif
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
+//#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
 #define nf_register_net_hooks(net,a,s) nf_register_hooks(a,s)
 #define nf_unregister_net_hooks(net,a,s) nf_unregister_hooks(a,s)
-#endif
+//#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,11,0)
 #define refcount_dec_and_test(a) atomic_sub_and_test((int) 1,(a))
