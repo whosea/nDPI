@@ -30,7 +30,8 @@ function init(){
 
 
     #下载源码到对应的空间
-    wget -P /root -O flow_info-4.zip https://github.com/whosea/nDPI/archive/refs/heads/flow_info-4.zip
+    cd /root
+    wget -P /root/ -O flow_info-4.zip https://github.com/whosea/nDPI/archive/refs/heads/flow_info-4.zip
     rm -rf /root/rpmbuild/SOURCES/flow_info-4.zip
     rm -rf /root/rpmbuild/SOURCES/nDPI-flow_info-4
     cp -f /root/flow_info-4.zip  /root/rpmbuild/SOURCES
