@@ -34,6 +34,8 @@
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 
+#include <linux/time.h>
+
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -67,6 +69,7 @@
 #include "xt_ndpi.h"
 
 #include "../lib/third_party/include/ndpi_patricia.h"
+#define LINUX_VERSION_CODE KERNEL_VERSION(4,10,0)
 
 extern ndpi_protocol_match host_match[];
 
@@ -118,13 +121,13 @@ static inline void *PDE_DATA(const struct inode *inode)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
 static inline struct net *xt_net(const struct xt_action_param *par)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
+//#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
         const struct net_device *dev = par->in;
         if(!dev) dev = par->out;
         return dev ? dev_net(dev): NULL;
-#else
-        return par->net;
-#endif
+//#else
+//        return par->net;
+//#endif
 }
 static inline u_int8_t xt_family(const struct xt_action_param *par)
 {
@@ -143,10 +146,10 @@ static inline const struct net_device *xt_out(const struct xt_action_param *par)
         return par->out;
 }
 #endif
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
+//#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
 #define nf_register_net_hooks(net,a,s) nf_register_hooks(a,s)
 #define nf_unregister_net_hooks(net,a,s) nf_unregister_hooks(a,s)
-#endif
+//#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,11,0)
 #define refcount_dec_and_test(a) atomic_sub_and_test((int) 1,(a))
@@ -1846,7 +1849,11 @@ static void bt_port_gc(unsigned long data) {
 	if(!read_trylock(&n->ndpi_busy)) return; // ndpi_net_exit() started!
 
 	st_j = READ_ONCE(jiffies);
-	tm=ktime_get_real_seconds();
+//	tm=ktime_get_real_seconds();
+    struct timeval ts;
+	do_gettimeofday(&ts);
+	tm=ts.tv_sec;
+
 	now32 = (uint32_t)tm; // BUG AFTER YAER 2105
 	{
 	    struct hash_ip4p_table *ht = READ_ONCE(ndpi_struct->bt_ht);

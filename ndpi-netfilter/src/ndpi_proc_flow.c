@@ -22,7 +22,11 @@
 void nflow_proc_read_start(struct ndpi_net *n) {
 	time64_t tm;
 
-	tm=ktime_get_real_seconds();
+//	tm=ktime_get_real_seconds();
+	struct timeval ts;
+    do_gettimeofday(&ts);
+    tm=ts.tv_sec;
+
 	n->acc_end  = 0;
 	n->acc_open_time = tm;
 	n->flow_l   = NULL;

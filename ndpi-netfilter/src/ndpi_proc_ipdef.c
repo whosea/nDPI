@@ -6,6 +6,7 @@
 
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/time.h>
 
 #include "ndpi_config.h"
 #undef HAVE_HYPERSCAN

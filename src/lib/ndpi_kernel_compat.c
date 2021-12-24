@@ -20,6 +20,7 @@
 #ifdef __KERNEL__
 
 #include <ndpi_kernel_compat.h>
+#include <linux/time.h>
 
 #ifndef IN6ADDRSZ
 #define IN6ADDRSZ 16
@@ -377,8 +378,11 @@ int atoi(const char *buf) {
 }
 
 void gettimeofday64(struct timespec64 *tv, void *tz) {
-	tv->tv_sec = ktime_get_real_seconds();
-	tv->tv_nsec = 0;
+	//tv->tv_sec = ktime_get_real_seconds();
+    struct timeval ts;
+    do_gettimeofday(&ts);
+    tv->tv_sec = ts.tv_sec;
+    tv->tv_nsec = 0;
 }
 
 char *strtok_r (char *s, const char *delim, char **save_ptr)

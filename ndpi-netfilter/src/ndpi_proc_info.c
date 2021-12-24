@@ -6,6 +6,7 @@
 
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/time.h>
 
 #include "ndpi_config.h"
 #undef HAVE_HYPERSCAN
@@ -109,7 +110,11 @@ ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
 		struct hash_ip4p_node *x = t->top;
 	 	time64_t tm;
 
-	        tm=ktime_get_real_seconds();
+        struct timeval ts;
+        do_gettimeofday(&ts);
+        tm=ts.tv_sec;
+//        tm=ktime_get_real_seconds();
+
 		while(x && p < count - 128) {
 		        l =  inet_ntop_port(family,&x->ip,x->port,lbuf,sizeof(lbuf)-2);
 			l += snprintf(&lbuf[l],sizeof(lbuf)-l-1, " %d %x %u\n",
