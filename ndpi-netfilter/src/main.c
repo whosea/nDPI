@@ -34,6 +34,8 @@
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 
+#include <linux/time.h>
+
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -1852,7 +1854,11 @@ static void bt_port_gc(unsigned long data) {
 	if(!read_trylock(&n->ndpi_busy)) return; // ndpi_net_exit() started!
 
 	st_j = READ_ONCE(jiffies);
-	tm=ktime_get_real_seconds();
+	//tm=ktime_get_real_seconds();
+	struct timeval ts;
+	do_gettimeofday(&ts);
+	tm=ts.tv_sec;
+
 	now32 = (uint32_t)tm; // BUG AFTER YAER 2105
 	{
 	    struct hash_ip4p_table *ht = READ_ONCE(ndpi_struct->bt_ht);
