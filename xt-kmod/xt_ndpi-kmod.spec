@@ -23,7 +23,8 @@ ExclusiveArch: x86_64
 
 # Sources.
 #Source0: https://github.com/vel21ripn/nDPI/archive/%{ndpi_git_ver}.tar.gz
-Source0: https://github.com/vel21ripn/nDPI/archive/refs/heads/%{ndpi_git_ver}.zip
+#Source0: https://github.com/vel21ripn/nDPI/archive/refs/heads/%{ndpi_git_ver}.zip
+Source0: https://github.com/whosea/nDPI/archive/refs/heads/%{ndpi_git_ver}.zip
 Source5:  GPL-v2.0.txt
 Source10: kmodtool-%{kmod_name}-el7.sh
 #Patch1: ndpi-netfilter_rhel7.5.patch
