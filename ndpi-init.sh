@@ -25,17 +25,20 @@ function init(){
     echo "内核版本"
     uname -r
 
-    
+
 
     #下载源码到对应的空间
-    wget https://github.com/whosea/nDPI/archive/refs/heads/flow_info-3.2.zip
-    cp -f /root/flow_info-3.2.zip  /root/rpmbuild/SOURCES/flow_info-3.2.zip
-    unzip /root/rpmbuild/SOURCES/flow_info-3.2.zip
+    wget -P /root https://github.com/whosea/nDPI/archive/refs/heads/flow_info-3.2.zip
+    rm -rf /root/rpmbuild/SOURCES/flow_info-3.2.zip
+    rm -rf /root/rpmbuild/SOURCES/nDPI-flow_info
+    cp -f /root/flow_info-3.2.zip  /root/rpmbuild/SOURCES
+    cd /root
+    unzip /root/rpmbuild/SOURCES/flow_info-3.2.zip -d /root/rpmbuild/SOURCES
 
     echo "复制所需文件到对应rpmbuild文件夹"
     cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-3.2/xt-kmod/xt_ndpi-kmod.spec /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
     cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-3.2/xt-kmod/kmodtool-xt_ndpi-el7.sh /root/rpmbuild/SOURCES/kmodtool-xt_ndpi-el7.sh
-    cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-3.2/xt-kmod/ndpi-netfilter_rhel7.6.patch /root/rpmbuild/SOURCES/GPL-v2.0.txt
+    cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-3.2/xt-kmod/GPL-v2.0.txt /root/rpmbuild/SOURCES/GPL-v2.0.txt
 
     #编译rpm包
     rpmbuild -ba /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
@@ -45,6 +48,12 @@ function init(){
     #本地安装
     yum localinstall -y /root/rpmbuild/RPMS/x86_64/kmod-xt_ndpi-2.8.2-1.el7.x86_64.rpm
 
+
+    echo "模块xt_ndpi安装"
+    modprobe xt_ndpi
+    #验证安装成功
+    cat /proc/net/xt_ndpi/proto | head -n5
+    #iptables -m ndpi --help
 }
 
 
