@@ -7,6 +7,7 @@
 
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/time.h>
 
 #include "ndpi_config.h"
 #undef HAVE_HYPERSCAN
@@ -21,8 +22,11 @@
 
 void nflow_proc_read_start(struct ndpi_net *n) {
 	time64_t tm;
+    
+	struct timeval ts;
+	do_gettimeofday(&ts);
 
-	tm=ktime_get_real_seconds();
+	tm=ts.tv_sec;
 	n->acc_end  = 0;
 	n->acc_open_time = tm;
 	n->flow_l   = NULL;
