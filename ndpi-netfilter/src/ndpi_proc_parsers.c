@@ -839,6 +839,8 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 		for(i=0; i < NDPI_NUM_BITS; i++) {
 			n->mark[i].mark = i;
 			n->mark[i].mask = 0x1ff;
+//			n->mark[i].mark = i << 8;
+//          n->mark[i].mask = 0xff00;
 		}
 		return 0;
 	}
