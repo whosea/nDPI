@@ -57,6 +57,14 @@ function init(){
     modprobe xt_ndpi
     #验证安装成功
     cat /proc/net/xt_ndpi/proto | head -n5
+
+    #更新内核模块的依赖关系
+    depmod -a
+    #查看模块是否加载
+    lsmod | grep ndpi
+    #查看内核加载信息
+    dmesg | tail
+
     #iptables -m ndpi --help
 }
 
