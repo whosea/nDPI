@@ -31,7 +31,7 @@ function init(){
     cp -rf /root/vel21ripn-nDPI/xt-kmod/ndpi-netfilter_rhel7.6.patch /root/rpmbuild/SOURCES/GPL-v2.0.txt
 
     #下载源码到对应的空间
-    wget https://github.com/vel21ripn/nDPI/archive/refs/heads/flow_info.zip
+    wget https://github.com/whosea/nDPI/archive/refs/heads/flow_info.zip
     cp -f /root/flow_info.zip  /root/rpmbuild/SOURCES/flow_info.zip
     unzip /root/rpmbuild/SOURCES/flow_info.zip
 
