@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="50c7fc3e-584b-4d9f-bee6-218e090b0617" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/xt-kmod/xt_ndpi-kmod.spec" beforeDir="false" afterPath="$PROJECT_DIR$/xt-kmod/xt_ndpi-kmod.spec" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ndpi-init.sh" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-init.sh" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />

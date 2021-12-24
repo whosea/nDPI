@@ -25,15 +25,17 @@ function init(){
     echo "内核版本"
     uname -r
 
-    echo "复制所需文件到对应rpmbuild文件夹"
-    cp -rf /root/vel21ripn-nDPI/xt-kmod/xt_ndpi-kmod.spec /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
-    cp -rf /root/vel21ripn-nDPI/xt-kmod/kmodtool-xt_ndpi-el7.sh /root/rpmbuild/SOURCES/kmodtool-xt_ndpi-el7.sh
-    cp -rf /root/vel21ripn-nDPI/xt-kmod/ndpi-netfilter_rhel7.6.patch /root/rpmbuild/SOURCES/GPL-v2.0.txt
+
 
     #下载源码到对应的空间
     wget https://github.com/whosea/nDPI/archive/refs/heads/flow_info.zip
     cp -f /root/flow_info.zip  /root/rpmbuild/SOURCES/flow_info.zip
     unzip /root/rpmbuild/SOURCES/flow_info.zip
+
+    echo "复制所需文件到对应rpmbuild文件夹"
+    cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info/xt-kmod/xt_ndpi-kmod.spec /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
+    cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info/xt-kmod/kmodtool-xt_ndpi-el7.sh /root/rpmbuild/SOURCES/kmodtool-xt_ndpi-el7.sh
+    cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info/xt-kmod/ndpi-netfilter_rhel7.6.patch /root/rpmbuild/SOURCES/GPL-v2.0.txt
 
     #编译rpm包
     rpmbuild -ba /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
