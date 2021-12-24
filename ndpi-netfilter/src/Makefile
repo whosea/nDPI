@@ -11,7 +11,12 @@ ifndef $(KERNEL_DIR)
 KERNEL_DIR := /lib/modules/$(shell uname -r)/build
 endif
 
-ifeq ($(shell grep -qc userid $(KERNEL_DIR)/source/include/linux/skbuff.h),1)
+MODULES_DIR := /lib/modules/$(shell uname -r)
+KERNEL_DIR := ${MODULES_DIR}/build
+
+ifeq ($(shell grep -c userid ${MODULES_DIR}/source/include/linux/skbuff.h),1)
+# ifeq ($(shell grep -qc userid $(KERNEL_DIR)/source/include/linux/skbuff.h),1)
+
 ccflags-y += -DUSE_HACK_USERID=1
 endif
 
