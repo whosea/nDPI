@@ -11,6 +11,8 @@ function init(){
     #rpm编译包
     yum install -y rpm-build rpmdevtools
     yum -y install zip unzip
+    yum install -y dos2unix
+
     #初始化工作空间
     rpmdev-setuptree
 #    ~/rpmbuild/SPECS	    %_specdir	Spec 文件目录	保存 RPM 包配置（.spec）文件
@@ -28,17 +30,19 @@ function init(){
 
 
     #下载源码到对应的空间
-    wget -P /root https://github.com/whosea/nDPI/archive/refs/heads/flow_info-4.zip
+    wget -P /root -O flow_info-4.zip https://github.com/whosea/nDPI/archive/refs/heads/flow_info-4.zip
     rm -rf /root/rpmbuild/SOURCES/flow_info-4.zip
     rm -rf /root/rpmbuild/SOURCES/nDPI-flow_info-4
     cp -f /root/flow_info-4.zip  /root/rpmbuild/SOURCES
     cd /root
     unzip /root/rpmbuild/SOURCES/flow_info-4.zip -d /root/rpmbuild/SOURCES
+    dos2unix /root/rpmbuild/SOURCES/nDPI-flow_info-4/xt-kmod/kmodtool-xt_ndpi-el7.sh
 
     echo "复制所需文件到对应rpmbuild文件夹"
     cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-4/xt-kmod/xt_ndpi-kmod.spec /root/rpmbuild/SPECS/xt_ndpi-kmod.spec
     cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-4/xt-kmod/kmodtool-xt_ndpi-el7.sh /root/rpmbuild/SOURCES/kmodtool-xt_ndpi-el7.sh
     cp -rf /root/rpmbuild/SOURCES/nDPI-flow_info-4/xt-kmod/GPL-v2.0.txt /root/rpmbuild/SOURCES/GPL-v2.0.txt
+
 
     #编译rpm包
     rpmbuild -ba /root/rpmbuild/SPECS/xt_ndpi-kmod.spec

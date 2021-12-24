@@ -3,14 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="26e7539c-7677-4a56-a7bf-7fab414857db" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/src/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/src/Makefile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/src/main.c" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/src/main.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/src/ndpi_proc_flow.c" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/src/ndpi_proc_flow.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/src/ndpi_proc_info.c" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/src/ndpi_proc_info.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/src/ndpi_proc_ipdef.c" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/src/ndpi_proc_ipdef.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/tests/test_init.sh" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/tests/test_init.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ndpi-netfilter/tests/test_init2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-netfilter/tests/test_init2.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/lib/ndpi_kernel_compat.c" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib/ndpi_kernel_compat.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ndpi-init.sh" beforeDir="false" afterPath="$PROJECT_DIR$/ndpi-init.sh" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -33,6 +26,7 @@
   </component>
   <component name="ProjectId" id="22jsK74LzOTwMnsFuV1wotaXwWk" />
   <component name="PropertiesComponent">
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="aspect.path.notification.shown" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$/../mynDPI" />
@@ -59,7 +53,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1640362263662</updated>
-      <workItem from="1640362265157" duration="408000" />
+      <workItem from="1640362265157" duration="956000" />
     </task>
     <servers />
   </component>
