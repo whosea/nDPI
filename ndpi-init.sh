@@ -53,7 +53,7 @@ usage(){
 }
 
 
-#yum install -y dos2unix && dos2unix ndpi-init.sh.sh && sh ndpi-init.sh init
+#yum install -y dos2unix && dos2unix ndpi-init.sh && sh ndpi-init.sh init
 case "$1" in
     "init")
         init $2 $3 $4 $5
