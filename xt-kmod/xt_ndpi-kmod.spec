@@ -1,10 +1,10 @@
 # Define the kmod package name here.
 %define kmod_name xt_ndpi
-#%define ndpi_git_ver 96cf7764577603f1bd2896d414532afe625f6667
 %define ndpi_git_ver flow_info-4
 
 # If kversion isn't defined on the rpmbuild line, define it here.
-%{!?kversion: %define kversion 3.10.0-1160.49.1.el7.%{_target_cpu}}
+#%{!?kversion: %define kversion 3.10.0-1160.49.1.el7.%{_target_cpu}}
+%{!?kversion: %define kversion 3.10.0-1160.el7.%{_target_cpu}}
 
 Name:    %{kmod_name}-kmod
 Version: 4.0.0
@@ -17,8 +17,8 @@ URL:     http://www.kernel.org/
 #sudo apt-get install build-essential bison flex libpcap-dev libtool-bin autoconf pkg-config libjson-c-dev libnuma-dev libgcrypt20-dev libpcre2-dev
 
 BuildRequires: redhat-rpm-config, perl, kernel-devel, gcc, iptables-devel, libpcap-devel, autogen, autoconf, automake, libtool, flex, bison
-BuildRequires: kernel = 3.10.0-1160.49.1.el7, kernel-devel = 3.10.0-1160.49.1.el7
-Requires: kernel >= 3.10.0-1160.6.1
+BuildRequires: kernel = 3.10.0-1160.el7, kernel-devel = 3.10.0-1160.el7
+Requires: kernel >= 3.10.0-1160
 ExclusiveArch: x86_64
 
 # Sources.
@@ -86,6 +86,9 @@ done
 
 %clean
 %{__rm} -rf %{buildroot}
+
+%changelog
+* test other kernel
 
 %changelog
 * Fri Nov 20 2020 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.8.2-1
