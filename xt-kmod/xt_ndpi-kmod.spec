@@ -87,8 +87,6 @@ done
 %clean
 %{__rm} -rf %{buildroot}
 
-%changelog
-* test other kernel
 
 %changelog
 * Fri Nov 20 2020 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.8.2-1
