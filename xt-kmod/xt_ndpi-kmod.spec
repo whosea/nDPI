@@ -16,8 +16,8 @@ URL:     http://www.kernel.org/
 #sudo apt-get install build-essential bison flex libpcap-dev libtool-bin autoconf pkg-config libjson-c-dev libnuma-dev libgcrypt20-dev libpcre2-dev
 
 BuildRequires: redhat-rpm-config, perl, kernel-devel, gcc, iptables-devel, libpcap-devel, autogen, autoconf, automake, libtool, flex, bison
-#BuildRequires: kernel = 3.10.0-1160.49.1.el7, kernel-devel = 3.10.0-1160.49.1.el7
-Requires: kernel >= 3.10.0-1160
+BuildRequires: kernel = 3.10.0-1160.49.1.el7, kernel-devel = 3.10.0-1160.49.1.el7
+Requires: kernel >= 3.10.0-1160.6.1
 ExclusiveArch: x86_64
 
 # Sources.
@@ -56,6 +56,16 @@ echo "override %{kmod_name} * weak-updates/%{kmod_name}" > kmod-%{kmod_name}.con
 %build
 
 %install
+echo "buildroot: %{buildroot}"
+echo "ko name: ndpi-netfilter/src/%{kmod_name}.ko"
+echo "kmod path: %{buildroot}/lib/modules/%{kversion}/extra/%{kmod_name}/"
+echo "depmod path: %{buildroot}%{_sysconfdir}/depmod.d/"
+echo "conf name: kmod-%{kmod_name}.conf"
+echo "source new path: %{buildroot}%{_defaultdocdir}/kmod-%{kmod_name}-%{version}/"
+echo "source path: %{SOURCE5}"
+echo "strip: %{__strip}"
+
+
 #创建xtables目录，位于~/rpmbuild/BUILDROOT/
 %{__install} -d %{buildroot}/usr/lib64/xtables
 install ndpi-netfilter/ipt/libxt_ndpi.so %{buildroot}/usr/lib64/xtables

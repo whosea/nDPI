@@ -182,6 +182,8 @@ EOF
 cat <<EOF
 %post          -n kmod-${kmod_name}${dashvariant}
 echo "Working. This may take some time ..."
+echo "kmod name: kmod-${kmod_name}${dashvariant}"
+
 if [ -e "/boot/System.map-${verrel}${dotvariant}" ]; then
     /usr/sbin/depmod -aeF "/boot/System.map-${verrel}${dotvariant}" "${verrel}${dotvariant}" > /dev/null || :
 fi
@@ -200,6 +202,8 @@ EOF
 cat <<EOF
 %postun        -n kmod-${kmod_name}${dashvariant}
 echo "Working. This may take some time ..."
+echo "kmod name: kmod-${kmod_name}${dashvariant}"
+
 if [ -e "/boot/System.map-${verrel}${dotvariant}" ]; then
     /usr/sbin/depmod -aeF "/boot/System.map-${verrel}${dotvariant}" "${verrel}${dotvariant}" > /dev/null || :
 fi
