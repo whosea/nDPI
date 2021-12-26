@@ -7,7 +7,7 @@
 %{!?kversion: %define kversion 3.10.0-1160.49.1.el7.%{_target_cpu}}
 
 Name:    %{kmod_name}-kmod
-Version: 2.8.2
+Version: 4.0.0
 Release: 1%{?dist}
 Group:   System Environment/Kernel
 License: GPLv2
