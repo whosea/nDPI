@@ -996,7 +996,7 @@ extern "C" {
   /* Return a flow info string (summarized). Does only work for DNS/HTTP/TLS/QUIC. */
   const char* ndpi_get_flow_info(struct ndpi_flow_struct const * const flow,
                                  ndpi_protocol const * const l7_protocol);
-  char* ndpi_ssl_version2str(struct ndpi_flow_struct *flow,
+  char* ndpi_ssl_version2str(char *buf, int buf_len,
                              u_int16_t version, u_int8_t *unknown_tls_version);
   int ndpi_netbios_name_interpret(u_char *in, u_int in_len, u_char *out, u_int out_len);
   void ndpi_patchIPv6Address(char *str);
@@ -1109,6 +1109,12 @@ extern "C" {
    * @param serializer The serializer handle
    */
   void ndpi_reset_serializer(ndpi_serializer *serializer);
+
+  /**
+   * Hint to not create the header (used to avoid creaign the header when not used)
+   * @param serializer The serializer handle
+   */
+  void ndpi_serializer_skip_header(ndpi_serializer *serializer);
 
   /**
    * Serialize a 32-bit unsigned int key and a 32-bit unsigned int value
@@ -1562,9 +1568,11 @@ extern "C" {
 
   u_int8_t ndpi_is_protocol_detected(struct ndpi_detection_module_struct *ndpi_str,
 				     ndpi_protocol proto);
-  void ndpi_serialize_risk(ndpi_serializer *serializer, struct ndpi_flow_struct *flow);
+  void ndpi_serialize_risk(ndpi_serializer *serializer, ndpi_risk_enum risk);
+  void ndpi_serialize_proto(struct ndpi_detection_module_struct *ndpi_struct,
+                            ndpi_serializer *serializer, ndpi_risk_enum risk,
+                            ndpi_protocol l7_protocol);
 #endif /* KERNEL */
-
   const char* ndpi_risk2str(ndpi_risk_enum risk);
   const char* ndpi_severity2str(ndpi_risk_severity s);
   ndpi_risk_info* ndpi_risk2severity(ndpi_risk_enum risk);
@@ -1589,16 +1597,17 @@ extern "C" {
 
   /* ******************************* */
 
-  int  ndpi_init_bin(struct ndpi_bin *b, enum ndpi_bin_family f, u_int8_t num_bins);
+  int  ndpi_init_bin(struct ndpi_bin *b, enum ndpi_bin_family f, u_int16_t num_bins);
   void ndpi_free_bin(struct ndpi_bin *b);
   struct ndpi_bin* ndpi_clone_bin(struct ndpi_bin *b);
-  void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val);
-  void ndpi_set_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t value);
-  u_int32_t ndpi_get_bin_value(struct ndpi_bin *b, u_int8_t slot_id);
+  void ndpi_inc_bin(struct ndpi_bin *b, u_int16_t slot_id, u_int32_t val);
+  void ndpi_set_bin(struct ndpi_bin *b, u_int16_t slot_id, u_int32_t value);
+  u_int32_t ndpi_get_bin_value(struct ndpi_bin *b, u_int16_t slot_id);
   void ndpi_reset_bin(struct ndpi_bin *b);
   void ndpi_normalize_bin(struct ndpi_bin *b);
   char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf, u_int out_buf_len);
-  float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t normalize_first);
+  float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2,
+			    u_int8_t normalize_first, float similarity_max_threshold);
   int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 			u_int8_t num_clusters, u_int16_t *cluster_ids,
 			struct ndpi_bin *centroids);

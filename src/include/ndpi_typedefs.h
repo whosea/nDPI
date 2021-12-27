@@ -503,7 +503,7 @@ struct ndpi_vxlanhdr {
 
 typedef struct message {
   u_int8_t *buffer;
-  u_int buffer_len, buffer_used, max_expected;
+  u_int buffer_len, buffer_used;
   u_int32_t next_seq[2]; /* Directions */
 } message_t;
 
@@ -620,12 +620,6 @@ struct ndpi_id_struct {
   /* NDPI_PROTOCOL_GNUTELLA */
   u_int32_t gnutella_ts;
 
-  /* NDPI_PROTOCOL_THUNDER */
-  u_int32_t thunder_ts;
-
-  /* NDPI_PROTOCOL_ZATTOO */
-  u_int32_t zattoo_ts;
-
   /* NDPI_PROTOCOL_JABBER */
   u_int32_t jabber_stun_or_ft_ts;
 
@@ -656,6 +650,17 @@ struct ndpi_id_struct {
 /* ************************************************** */
 
 struct ndpi_flow_tcp_struct {
+
+  /* NDPI_PROTOCOL_MAIL_SMTP */
+  /* NDPI_PROTOCOL_MAIL_POP */
+  /* NDPI_PROTOCOL_MAIL_IMAP */
+  /* NDPI_PROTOCOL_MAIL_FTP */
+  /* TODO: something clever to save memory */
+  struct {
+    u_int8_t auth_found:1, auth_failed:1, auth_tls:1, auth_done:1, _pad:4;
+    char username[32], password[16];
+  } ftp_imap_pop_smtp;
+
   /* NDPI_PROTOCOL_MAIL_SMTP */
   u_int16_t smtp_command_bitmask;
 
@@ -667,7 +672,6 @@ struct ndpi_flow_tcp_struct {
 
   /* NDPI_PROTOCOL_IRC */
   u_int8_t irc_stage;
-  u_int8_t irc_port;
 
   /* NDPI_PROTOCOL_H323 */
   u_int8_t h323_valid_packets;
@@ -820,6 +824,9 @@ struct ndpi_flow_udp_struct {
 
   /* NDPI_PROTOCOL_RDP */
   u_int8_t rdp_to_srv[3], rdp_from_srv[3], rdp_to_srv_pkts, rdp_from_srv_pkts;   
+
+  /* NDPI_PROTOCOL_IMO */
+  u_int8_t imo_last_one_byte_pkt, imo_last_byte;
 };
 
 /* ************************************************** */
@@ -1171,11 +1178,7 @@ struct ndpi_detection_module_struct {
   u_int32_t irc_timeout;
   /* gnutella parameters */
   u_int32_t gnutella_timeout;
-  /* thunder parameters */
-  u_int32_t thunder_timeout;
   /* rstp */
-  u_int32_t orb_rstp_ts_timeout;
-  u_int32_t zattoo_connection_timeout;
   u_int32_t jabber_stun_timeout;
   u_int32_t jabber_file_transfer_timeout;
   u_int8_t ip_version_limit;
@@ -1278,10 +1281,14 @@ struct ndpi_flow_struct {
   u_int32_t next_tcp_seq_nr[2];
 
   /* Flow addresses (used mainly for LRU lookups in ndpi_detection_giveup())
-   * TODO: ipv6. Note that LRU is ipv4 only, for the time being */
-  u_int32_t saddr;
-  u_int32_t daddr;
+     and ports. All in *network* byte order
 
+     TODO
+     - IPv6. Note that LRU is ipv4 only, for the time being 
+   */
+  u_int32_t saddr, daddr;
+  u_int16_t sport, dport;
+  
   // -----------------------------------------
 
   u_int8_t max_extra_packets_to_check;
@@ -1309,8 +1316,14 @@ struct ndpi_flow_struct {
   /* Place textual flow info here */
   char flow_extra_info[16];
 
-  /* HTTP host or DNS query */
-  u_char host_server_name[240];
+  /* General purpose field used to save mainly hostname/SNI information.
+   * In details it used for: DNS and NETBIOS name, HTTP and DHCP hostname,
+   * WHOIS request, TLS/QUIC server name and STUN realm.
+   *
+   * Please, think *very* hard before increasing its size!
+   */
+  char host_server_name[80];
+
   u_int8_t initial_binary_bytes[8], initial_binary_bytes_len;
   u_int8_t risk_checked:1, ip_risk_mask_evaluated:1, host_risk_mask_evaluated:1, _notused:5;
   ndpi_risk risk_mask; /* Stores the flow risk mask for flow peers */
@@ -1325,11 +1338,11 @@ struct ndpi_flow_struct {
   */
   struct {
     ndpi_http_method method;
-    char *url, *content_type /* response */, *request_content_type /* e.g. for POST */, *user_agent;
-    u_int8_t num_request_headers, num_response_headers;
     u_int8_t request_version; /* 0=1.0 and 1=1.1. Create an enum for this? */
     u_int16_t response_status_code; /* 200, 404, etc. */
-    u_char detected_os[32]; /* Via HTTP/QUIC User-Agent */
+    char *url, *content_type /* response */, *request_content_type /* e.g. for POST */, *user_agent;
+    char *detected_os; /* Via HTTP/QUIC User-Agent */
+    char *nat_ip; /* Via HTTP X-Forwarded-For */
   } http;
 
   /*
@@ -1341,6 +1354,11 @@ struct ndpi_flow_struct {
     char *pktbuf;
     u_int16_t pktbuf_maxlen, pktbuf_currlen;
   } kerberos_buf;
+
+  struct {
+    u_int8_t num_udp_pkts, num_binding_requests;
+    u_int16_t num_processed_pkts;
+  } stun;
 
   union {
     /* the only fields useful for nDPI and ntopng */
@@ -1360,48 +1378,34 @@ struct ndpi_flow_struct {
     } kerberos;
 
     struct {
-      struct {
-        char ssl_version_str[12];
-	u_int16_t ssl_version, server_names_len;
-	char client_requested_server_name[256], /* SNI hostname length: RFC 4366 */
-	  *server_names, *alpn, *tls_supported_versions, *issuerDN, *subjectDN;
-	u_int32_t notBefore, notAfter;
-	char ja3_client[33], ja3_server[33];
-	u_int16_t server_cipher;
-	u_int8_t sha1_certificate_fingerprint[20];
-	u_int8_t hello_processed:1, subprotocol_detected:1, _pad:6;
+      char *server_names, *alpn, *tls_supported_versions, *issuerDN, *subjectDN;
+      u_int32_t notBefore, notAfter;
+      char ja3_client[33], ja3_server[33];
+      u_int16_t server_cipher;
+      u_int8_t sha1_certificate_fingerprint[20];
+      u_int8_t hello_processed:1, subprotocol_detected:1, _pad:6;
 
 #ifdef TLS_HANDLE_SIGNATURE_ALGORITMS
-	/* Under #ifdef to save memory for those who do not need them */
-	u_int8_t num_tls_signature_algorithms;
-	u_int16_t client_signature_algorithms[MAX_NUM_TLS_SIGNATURE_ALGORITHMS];
+      /* Under #ifdef to save memory for those who do not need them */
+      u_int8_t num_tls_signature_algorithms;
+      u_int16_t client_signature_algorithms[MAX_NUM_TLS_SIGNATURE_ALGORITHMS];
 #endif
 
-	struct tls_heuristics browser_heuristics;
+      struct tls_heuristics browser_heuristics;
 
-	struct {
-	  u_int16_t cipher_suite;
-	  char *esni;
-	} encrypted_sni;
-	ndpi_cipher_weakness server_unsafe_cipher;
-      } tls_quic;
+      u_int16_t ssl_version, server_names_len;
 
       struct {
-		    u_int8_t num_udp_pkts, num_binding_requests;
-        u_int16_t num_processed_pkts;
-      } stun;
-
-      /* We can have STUN over SSL/TLS thus they need to live together */
-    } tls_quic_stun;
+        u_int16_t cipher_suite;
+        char *esni;
+      } encrypted_sni;
+      ndpi_cipher_weakness server_unsafe_cipher;
+    } tls_quic;
 
     struct {
       char client_signature[48], server_signature[48];
       char hassh_client[33], hassh_server[33];
     } ssh;
-
-    struct {
-      u_int8_t last_one_byte_pkt, last_byte;
-    } imo;
 
     struct {
       u_int8_t username_detected:1, username_found:1,
@@ -1415,16 +1419,9 @@ struct ndpi_flow_struct {
       char version[32];
     } ubntac2;
 
-    struct {
-      /* Via HTTP X-Forwarded-For */
-      u_char nat_ip[24];
-    } http;
-
-    struct {
-      u_int8_t auth_found:1, auth_failed:1, auth_tls:1, auth_done:1, _pad:4;
-      char username[32], password[16];
-    } ftp_imap_pop_smtp;
-
+    /* In TLS.Bittorent flows there is no hash.
+       Nonetheless, we must pay attention to NOT write to /read from this field
+       with these flows */
     struct {
       /* Bittorrent hash */
       u_char hash[20];
@@ -1453,6 +1450,7 @@ struct ndpi_flow_struct {
   /* NDPI_PROTOCOL_BITTORRENT */
   u_int32_t bittorrent_seq;
   u_int8_t bittorrent_stage;		      // can be 0 - 255
+  u_int8_t bt_check_performed : 1;
 
   /* NDPI_PROTOCOL_DIRECTCONNECT */
   u_int8_t directconnect_stage:2;	      // 0 - 1
@@ -1690,7 +1688,8 @@ enum ndpi_bin_family {
 };
 
 struct ndpi_bin {
-  u_int8_t num_bins, is_empty;
+  u_int8_t is_empty;
+  u_int16_t num_bins;
   enum ndpi_bin_family family;
 
   union {

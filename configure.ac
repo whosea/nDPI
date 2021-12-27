@@ -106,8 +106,14 @@ CFLAGS="-W -Wall -Wno-unused-parameter -Wno-unused-function $CFLAGS $JSONC_CFLAG
 
 AC_CHECK_HEADERS([netinet/in.h stdint.h stdlib.h string.h unistd.h math.h float.h])
 AC_CHECK_LIB([m], [sqrt], [], [LIBM="-lm"])
+AC_CHECK_LIB([rrd], [rrd_fetch_r], [LIBRRD=-lrrd])
 
-ADDITIONAL_LIBS="$LIBM"
+if test "x$ac_cv_lib_rrd_rrd_fetch_r" = xyes; then :
+   AC_DEFINE_UNQUOTED(HAVE_RRDTOOL, "1", [rrdtool is present])
+   EXTRA_TARGETS="$EXTRA_TARGETS rrdtool"
+fi
+
+ADDITIONAL_LIBS="$LIBRRD $LIBM"
 PCAP_HOME=$HOME/PF_RING/userland
 
 DPDK_TARGET=
@@ -261,7 +267,16 @@ if test "${with_maxminddb+set}" = set; then :
   fi
 fi
 
-AC_CONFIG_FILES([Makefile example/Makefile example/Makefile.dpdk tests/Makefile tests/unit/Makefile tests/dga/Makefile libndpi.pc src/include/ndpi_define.h src/lib/Makefile python/Makefile fuzz/Makefile src/include/ndpi_api.h])
+dnl> Curl
+dnl> AC_CHECK_LIB([curl], [curl_easy_perform])
+dnl> if test ${ac_cv_lib_curl_curl_easy_perform} = "no"; then
+dnl>    echo "Please install libcurl4-openssl-dev (http://curl.haxx.se/) in order to enable curl support"
+dnl> else
+dnl>   ADDITIONAL_LIBS="${ADDITIONAL_LIBS} -lcurl"
+dnl>   AC_DEFINE_UNQUOTED(HAVE_CURL, 1, [curl is present])
+dnl> fi
+
+AC_CONFIG_FILES([Makefile example/Makefile example/Makefile.dpdk tests/Makefile tests/unit/Makefile tests/dga/Makefile rrdtool/Makefile libndpi.pc src/include/ndpi_define.h src/lib/Makefile python/Makefile fuzz/Makefile src/include/ndpi_api.h])
 AC_CONFIG_FILES([tests/do.sh], [chmod +x tests/do.sh])
 AC_CONFIG_HEADERS(src/include/ndpi_config.h)
 AC_SUBST(GIT_RELEASE)

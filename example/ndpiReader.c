@@ -269,7 +269,7 @@ u_int check_bin_doh_similarity(struct ndpi_bin *bin, float *similarity) {
   float lowest_similarity = 9999999999.0f;
 
   for(i=0; i<NUM_DOH_BINS; i++) {
-    *similarity = ndpi_bin_similarity(&doh_ndpi_bins[i], bin, 0);
+    *similarity = ndpi_bin_similarity(&doh_ndpi_bins[i], bin, 0, 0);
 
     if(*similarity <= doh_max_distance)
       return(1);
@@ -368,47 +368,50 @@ flowGetBDMeanandVariance(struct ndpi_flow_info* flow) {
   uint32_t tmp[256], i;
   unsigned int num_bytes;
   double mean = 0.0, variance = 0.0;
-  struct ndpi_entropy last_entropy = flow->last_entropy;
+  struct ndpi_entropy *last_entropy = flow->last_entropy;
 
   fflush(out);
+
+  if(!last_entropy)
+   return;
 
   /*
    * Sum up the byte_count array for outbound and inbound flows,
    * if this flow is bidirectional
    */
   if (!flow->bidirectional) {
-    array = last_entropy.src2dst_byte_count;
-    num_bytes = last_entropy.src2dst_l4_bytes;
+    array = last_entropy->src2dst_byte_count;
+    num_bytes = last_entropy->src2dst_l4_bytes;
     for (i=0; i<256; i++) {
-      tmp[i] = last_entropy.src2dst_byte_count[i];
+      tmp[i] = last_entropy->src2dst_byte_count[i];
     }
 
-    if (last_entropy.src2dst_num_bytes != 0) {
-      mean = last_entropy.src2dst_bd_mean;
-      variance = last_entropy.src2dst_bd_variance/(last_entropy.src2dst_num_bytes - 1);
+    if (last_entropy->src2dst_num_bytes != 0) {
+      mean = last_entropy->src2dst_bd_mean;
+      variance = last_entropy->src2dst_bd_variance/(last_entropy->src2dst_num_bytes - 1);
       variance = sqrt(variance);
 
-      if (last_entropy.src2dst_num_bytes == 1) {
+      if (last_entropy->src2dst_num_bytes == 1) {
         variance = 0.0;
       }
     }
   } else {
     for (i=0; i<256; i++) {
-      tmp[i] = last_entropy.src2dst_byte_count[i] + last_entropy.dst2src_byte_count[i];
+      tmp[i] = last_entropy->src2dst_byte_count[i] + last_entropy->dst2src_byte_count[i];
     }
     array = tmp;
-    num_bytes = last_entropy.src2dst_l4_bytes + last_entropy.dst2src_l4_bytes;
+    num_bytes = last_entropy->src2dst_l4_bytes + last_entropy->dst2src_l4_bytes;
 
-    if (last_entropy.src2dst_num_bytes + last_entropy.dst2src_num_bytes != 0) {
-      mean = ((double)last_entropy.src2dst_num_bytes)/((double)(last_entropy.src2dst_num_bytes+last_entropy.dst2src_num_bytes))*last_entropy.src2dst_bd_mean +
-             ((double)last_entropy.dst2src_num_bytes)/((double)(last_entropy.dst2src_num_bytes+last_entropy.src2dst_num_bytes))*last_entropy.dst2src_bd_mean;
+    if (last_entropy->src2dst_num_bytes + last_entropy->dst2src_num_bytes != 0) {
+      mean = ((double)last_entropy->src2dst_num_bytes)/((double)(last_entropy->src2dst_num_bytes+last_entropy->dst2src_num_bytes))*last_entropy->src2dst_bd_mean +
+             ((double)last_entropy->dst2src_num_bytes)/((double)(last_entropy->dst2src_num_bytes+last_entropy->src2dst_num_bytes))*last_entropy->dst2src_bd_mean;
 
-      variance = ((double)last_entropy.src2dst_num_bytes)/((double)(last_entropy.src2dst_num_bytes+last_entropy.dst2src_num_bytes))*last_entropy.src2dst_bd_variance +
-                 ((double)last_entropy.dst2src_num_bytes)/((double)(last_entropy.dst2src_num_bytes+last_entropy.src2dst_num_bytes))*last_entropy.dst2src_bd_variance;
+      variance = ((double)last_entropy->src2dst_num_bytes)/((double)(last_entropy->src2dst_num_bytes+last_entropy->dst2src_num_bytes))*last_entropy->src2dst_bd_variance +
+                 ((double)last_entropy->dst2src_num_bytes)/((double)(last_entropy->dst2src_num_bytes+last_entropy->src2dst_num_bytes))*last_entropy->dst2src_bd_variance;
 
-      variance = variance/((double)(last_entropy.src2dst_num_bytes + last_entropy.dst2src_num_bytes - 1));
+      variance = variance/((double)(last_entropy->src2dst_num_bytes + last_entropy->dst2src_num_bytes - 1));
       variance = sqrt(variance);
-      if (last_entropy.src2dst_num_bytes + last_entropy.dst2src_num_bytes == 1) {
+      if (last_entropy->src2dst_num_bytes + last_entropy->dst2src_num_bytes == 1) {
         variance = 0.0;
       }
     }
@@ -774,7 +777,7 @@ void extcap_capture() {
 void printCSVHeader() {
   if(!csv_fp) return;
 
-  fprintf(csv_fp, "#flow_id,protocol,first_seen,last_seen,duration,src_ip,src_port,dst_ip,dst_port,ndpi_proto_num,ndpi_proto,server_name,");
+  fprintf(csv_fp, "#flow_id,protocol,first_seen,last_seen,duration,src_ip,src_port,dst_ip,dst_port,ndpi_proto_num,ndpi_proto,server_name_sni,");
   fprintf(csv_fp, "benign_score,dos_slow_score,dos_goldeneye_score,dos_hulk_score,ddos_score,hearthbleed_score,ftp_patator_score,ssh_patator_score,infiltration_score,");
   fprintf(csv_fp, "c_to_s_pkts,c_to_s_bytes,c_to_s_goodput_bytes,s_to_c_pkts,s_to_c_bytes,s_to_c_goodput_bytes,");
   fprintf(csv_fp, "data_ratio,str_data_ratio,c_to_s_goodput_ratio,s_to_c_goodput_ratio,");
@@ -799,7 +802,7 @@ void printCSVHeader() {
   fprintf(csv_fp, "c_to_s_init_win,s_to_c_init_win,");
 
   /* Flow info */
-  fprintf(csv_fp, "client_info,server_info,");
+  fprintf(csv_fp, "server_info,");
   fprintf(csv_fp, "tls_version,ja3c,tls_client_unsafe,");
   fprintf(csv_fp, "ja3s,tls_server_unsafe,");
   fprintf(csv_fp, "tls_alpn,tls_supported_versions,");
@@ -1220,7 +1223,7 @@ static char* is_unsafe_cipher(ndpi_cipher_weakness c) {
 /* ********************************** */
 
 void print_bin(FILE *fout, const char *label, struct ndpi_bin *b) {
-  u_int8_t i;
+  u_int16_t i;
   const char *sep = label ? "," : ";";
 
   ndpi_normalize_bin(b);
@@ -1253,6 +1256,7 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
   FILE *out = results_file ? results_file : stdout;
   u_int8_t known_tls;
   char buf[32], buf1[64];
+  char buf_ver[16];
   u_int i;
 
   double dos_ge_score;
@@ -1343,12 +1347,11 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
    /* TCP window */
    fprintf(csv_fp, "%u,%u,", flow->c_to_s_init_win, flow->s_to_c_init_win);
 
-    fprintf(csv_fp, "%s,%s,",
-	    (flow->ssh_tls.client_requested_server_name[0] != '\0')  ? flow->ssh_tls.client_requested_server_name : "",
+    fprintf(csv_fp, "%s,",
 	    (flow->ssh_tls.server_info[0] != '\0')  ? flow->ssh_tls.server_info : "");
 
     fprintf(csv_fp, "%s,%s,%s,%s,%s,",
-	    (flow->ssh_tls.ssl_version != 0)        ? ndpi_ssl_version2str(flow->ndpi_flow, flow->ssh_tls.ssl_version, &known_tls) : "0",
+	    (flow->ssh_tls.ssl_version != 0)        ? ndpi_ssl_version2str(buf_ver, sizeof(buf_ver), flow->ssh_tls.ssl_version, &known_tls) : "0",
 	    (flow->ssh_tls.ja3_client[0] != '\0')   ? flow->ssh_tls.ja3_client : "",
 	    (flow->ssh_tls.ja3_client[0] != '\0')   ? is_unsafe_cipher(flow->ssh_tls.client_unsafe_cipher) : "0",
 	    (flow->ssh_tls.ja3_server[0] != '\0')   ? flow->ssh_tls.ja3_server : "",
@@ -1416,7 +1419,7 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
     /* Print entropy values for monitored flows. */
     flowGetBDMeanandVariance(flow);
     fflush(out);
-    fprintf(out, "[score: %.4f]", flow->entropy.score);
+    fprintf(out, "[score: %.4f]", flow->entropy->score);
   }
 
   if(csv_fp) fprintf(csv_fp, "\n");
@@ -1460,10 +1463,10 @@ if(!rep_mini) {
   else
     fprintf(out, "[< 1 sec]");
 
-  if(flow->telnet.username[0] != '\0')  fprintf(out, "[Username: %s]", flow->telnet.username);
-  if(flow->telnet.password[0] != '\0')  fprintf(out, "[Password: %s]", flow->telnet.password);
-}
-  if(flow->host_server_name[0] != '\0') fprintf(out, "[Host: %s]", flow->host_server_name);
+  if(flow->telnet.username)  fprintf(out, "[Username: %s]", flow->telnet.username);
+  if(flow->telnet.password)  fprintf(out, "[Password: %s]", flow->telnet.password);
+
+  if(flow->host_server_name[0] != '\0') fprintf(out, "[Hostname/SNI: %s]", flow->host_server_name);
 
   if(flow->info[0] != '\0') fprintf(out, "[%s]", flow->info);
   if(flow->flow_extra_info[0] != '\0') fprintf(out, "[%s]", flow->flow_extra_info);
@@ -1523,9 +1526,8 @@ if(!rep_mini) {
     fprintf(out, "[Risk Score: %u]", ndpi_risk2score(flow->risk, &cli_score, &srv_score));
   }
   
-  if(flow->ssh_tls.ssl_version != 0) fprintf(out, "[%s]", ndpi_ssl_version2str(flow->ndpi_flow, flow->ssh_tls.ssl_version, &known_tls));
-  if(flow->ssh_tls.client_requested_server_name[0] != '\0') fprintf(out, "[Client: %s]", flow->ssh_tls.client_requested_server_name);
-if(!rep_mini) {
+  if(flow->ssh_tls.ssl_version != 0) fprintf(out, "[%s]", ndpi_ssl_version2str(buf_ver, sizeof(buf_ver), flow->ssh_tls.ssl_version, &known_tls));
+
   if(flow->ssh_tls.client_hassh[0] != '\0') fprintf(out, "[HASSH-C: %s]", flow->ssh_tls.client_hassh);
 
   if(flow->ssh_tls.ja3_client[0] != '\0') fprintf(out, "[JA3C: %s%s]", flow->ssh_tls.ja3_client,
@@ -1578,10 +1580,12 @@ if(!rep_mini) {
 
   if(flow->ssh_tls.server_cipher != '\0') fprintf(out, "[Cipher: %s]",
 						  ndpi_cipher2str(flow->ssh_tls.server_cipher));
-  if(flow->bittorent_hash[0] != '\0') fprintf(out, "[BT Hash: %s]",
+  if(flow->bittorent_hash) fprintf(out, "[BT Hash: %s]",
 					      flow->bittorent_hash);
-  if(flow->dhcp_fingerprint[0] != '\0') fprintf(out, "[DHCP Fingerprint: %s]",
+  if(flow->dhcp_fingerprint) fprintf(out, "[DHCP Fingerprint: %s]",
 						flow->dhcp_fingerprint);
+  if(flow->dhcp_class_ident) fprintf(out, "[DHCP Class Ident: %s]",
+						flow->dhcp_class_ident);
 
   if(flow->has_human_readeable_strings) fprintf(out, "[PLAIN TEXT (%s)]",
 		                                flow->human_readeable_string_buffer);
@@ -2472,7 +2476,7 @@ static void printFlowsStats() {
 	    newHost->host_server_info_hasht = NULL;
 	    newHost->ip_string = all_flows[i].flow->src_name;
 	    newHost->ip = all_flows[i].flow->src_ip;
-	    newHost->dns_name = all_flows[i].flow->ssh_tls.client_requested_server_name;
+	    newHost->dns_name = all_flows[i].flow->host_server_name;
 
 	    ndpi_ja3_info *newJA3 = ndpi_malloc(sizeof(ndpi_ja3_info));
 	    newJA3->ja3 = all_flows[i].flow->ssh_tls.ja3_client;
@@ -2505,7 +2509,7 @@ static void printFlowsStats() {
 
 	    newHost->ip = all_flows[i].flow->src_ip;
 	    newHost->ip_string = all_flows[i].flow->src_name;
-	    newHost->dns_name = all_flows[i].flow->ssh_tls.client_requested_server_name;;
+	    newHost->dns_name = all_flows[i].flow->host_server_name;
 
 	    ndpi_ja3_fingerprints_host *newElement = ndpi_malloc(sizeof(ndpi_ja3_fingerprints_host));
 	    newElement->ja3 = all_flows[i].flow->ssh_tls.ja3_client;
@@ -2522,7 +2526,7 @@ static void printFlowsStats() {
 	      ndpi_ip_dns *newInnerElement = ndpi_malloc(sizeof(ndpi_ip_dns));
 	      newInnerElement->ip = all_flows[i].flow->src_ip;
 	      newInnerElement->ip_string = all_flows[i].flow->src_name;
-	      newInnerElement->dns_name = all_flows[i].flow->ssh_tls.client_requested_server_name;
+	      newInnerElement->dns_name = all_flows[i].flow->host_server_name;
 	      HASH_ADD_INT(hostByJA3Found->ipToDNS_ht, ip, newInnerElement);
 	    }
 	  }
@@ -2875,10 +2879,10 @@ static void printFlowsStats() {
 
 	      print_bin(out, NULL, &bins[i]);
 	      printf("][similarity: %f]",
-		     (similarity = ndpi_bin_similarity(&centroids[j], &bins[i], 0)));
+		     (similarity = ndpi_bin_similarity(&centroids[j], &bins[i], 0, 0)));
 
-	      if(all_flows[i].flow->ssh_tls.client_requested_server_name[0] != '\0')
-		fprintf(out, "[%s]", all_flows[i].flow->ssh_tls.client_requested_server_name);
+	      if(all_flows[i].flow->host_server_name[0] != '\0')
+		fprintf(out, "[%s]", all_flows[i].flow->host_server_name);
 
 	      if(enable_doh_dot_detection) {
 		if(((all_flows[i].flow->detected_protocol.master_protocol == NDPI_PROTOCOL_TLS)

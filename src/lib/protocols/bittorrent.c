@@ -86,6 +86,9 @@ d[i >= n ? n-1:i]++;
 }
 
 #endif
+#define BITTORRENT_PROTO_STRING          "BitTorrent protocol"
+
+// #define BITTORRENT_CACHE_DEBUG 1
 
 struct ndpi_utp_hdr {
   u_int8_t h_version:4, h_type:4, next_extension;
@@ -93,6 +96,25 @@ struct ndpi_utp_hdr {
   u_int32_t ts_usec, tdiff_usec, window_size;
   u_int16_t sequence_nr, ack_nr;
 };
+
+/* Forward declaration */
+static void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct,
+				   struct ndpi_flow_struct *flow);
+static void ndpi_search_bittorrent_hash(struct ndpi_detection_module_struct *ndpi_struct,
+					struct ndpi_flow_struct *flow, int bt_offset);
+
+/* *********************************************** */
+
+static int search_bittorrent_again(struct ndpi_detection_module_struct *ndpi_struct,
+				   struct ndpi_flow_struct *flow) {
+  ndpi_search_bittorrent(ndpi_struct, flow);
+  ndpi_search_bittorrent_hash(ndpi_struct, flow, -1);
+  
+  /* Possibly more processing */
+  return(1);
+}
+
+/* *********************************************** */
 
 static u_int8_t is_utpv1_pkt(const u_int8_t *payload, u_int payload_len) {
   struct ndpi_utp_hdr *h = (struct ndpi_utp_hdr*)payload;
@@ -871,43 +893,69 @@ if(x.p.peers && x.p.n_peers) {
 return r >= 0;
 }
 
-static void bt_save_hash(
-		struct ndpi_detection_module_struct *ndpi_struct,
-		struct ndpi_flow_struct *flow,
-		int bt_offset) {
+/* *********************************************** */
+static void ndpi_bt_add_peer_cache(struct ndpi_detection_module_struct *ndpi_struct,
+struct ndpi_packet_struct *packet, uint16_t p_src, uint16_t p_dst) {
 
-    const char *bt_hash = NULL; /* 20 bytes long */
-    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
-    
-    if(bt_offset == -1) {
-      const char *bt_magic = ndpi_strnstr((const char *)packet->payload, 
-					  "BitTorrent protocol", packet->payload_packet_len);
-      if(bt_magic &&
-	 packet->payload_packet_len >= (20+19+8 + (bt_magic-(const char*)packet->payload)))
-	   bt_hash = &bt_magic[19+8];
-    } else {
-      if(bt_offset + 20 <= packet->payload_packet_len)
-	      bt_hash = (const char*)&packet->payload[bt_offset];
-    }
- 
-    if(bt_hash) {
-	    memcpy(flow->protos.bittorrent.hash, bt_hash, 20);
-	    {
-	    char tmp_hash[42];
-	    int i;
-	    for(i=0; i < 20; i++)
-		    sprintf(&tmp_hash[i*2],"%02x",bt_hash[i] & 0xff);
-	    NDPI_LOG_DBG2(ndpi_struct, "BT: save BitTorrent hash %0.20s\n",tmp_hash);
-	    }
+#ifdef NDPI_DETECTION_SUPPORT_IPV6
+    if(ndpi_struct->bt6_ht && packet->iphv6) {
+	if(packet->packet_direction)
+		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,
+				p_src, packet->current_time,1);
+	   else
+		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,
+				p_dst, packet->current_time,1);
+    } else 
+#endif
+    if(ndpi_struct->bt_ht && packet->iph) {
+	if(packet->packet_direction)
+		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,
+				p_src, packet->current_time,1);
+	   else
+		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,
+				p_dst, packet->current_time,1);
     }
 }
+/* *********************************************** */
+
+static void ndpi_search_bittorrent_hash(struct ndpi_detection_module_struct *ndpi_struct,
+					struct ndpi_flow_struct *flow, int bt_offset) {
+  const char *bt_hash = NULL; /* 20 bytes long */
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
+  
+  if(bt_offset == -1) {
+    const char *bt_magic = ndpi_strnstr((const char *)packet->payload,
+					BITTORRENT_PROTO_STRING, packet->payload_packet_len);
+    
+    if(bt_magic) {
+      if(bt_magic == (const char*)&packet->payload[1])
+	bt_hash = (const char*)&packet->payload[28];
+      else
+	bt_hash = &bt_magic[19];
+    }
+  } else
+    bt_hash = (const char*)&packet->payload[28];
+  
+  if(bt_hash && (packet->payload_packet_len >= (20 + (bt_hash-(const char*)packet->payload)))) {
+    memcpy(flow->protos.bittorrent.hash, bt_hash, 20);
+    {
+    char tmp_hash[42];
+    int i;
+    for(i=0; i < 20; i++)
+	    sprintf(&tmp_hash[i*2],"%02x",bt_hash[i] & 0xff);
+    NDPI_LOG_DBG2(ndpi_struct, "BT: save BitTorrent hash %0.20s\n",tmp_hash);
+    }
+  }
+}
+
+/* *********************************************** */
 
 static void ndpi_add_connection_as_bittorrent(
 		struct ndpi_detection_module_struct *ndpi_struct,
 		struct ndpi_flow_struct *flow,
+		int bt_offset, int check_hash,
 		const u_int8_t save_detection,
-		const u_int8_t encrypted_connection,
-		const uint32_t reply)
+		const u_int8_t encrypted_connection)
 {
   int p1 = 0,p2 = 0;
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
@@ -915,24 +963,7 @@ static void ndpi_add_connection_as_bittorrent(
   if (packet->tcp != NULL) {
     p1 = packet->tcp->source;
     p2 = packet->tcp->dest;
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-    if(ndpi_struct->bt6_ht && packet->iphv6) {
-	if(packet->packet_direction)
-		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,
-				packet->tcp->source, packet->current_time,1);
-	   else
-		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,
-				packet->tcp->dest, packet->current_time,1);
-    } else 
-#endif
-    if(ndpi_struct->bt_ht && packet->iph) {
-	if(packet->packet_direction)
-		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,
-				packet->tcp->source, packet->current_time,1);
-	   else
-		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,
-				packet->tcp->dest, packet->current_time,1);
-    }
+    ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
   } /* tcp */
 
   if (packet->udp != NULL) {
@@ -942,32 +973,19 @@ static void ndpi_add_connection_as_bittorrent(
 
     p1 = packet->udp->source;
     p2 = packet->udp->dest;
-#ifdef NDPI_DETECTION_SUPPORT_IPV6
-    if(ndpi_struct->bt6_ht && packet->iphv6) {
-	hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_src,
-			packet->udp->source, packet->current_time,1);
-	if(reply)
-		hash_ip4p_add(ndpi_struct->bt6_ht,(ndpi_ip_addr_t *)&packet->iphv6->ip6_dst,
-			packet->udp->dest, packet->current_time,1);
-    } else
-#endif
-    if(ndpi_struct->bt_ht && packet->iph) {
-	hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->saddr,
-			packet->udp->source, packet->current_time,1);
-	if(reply)
-		hash_ip4p_add(ndpi_struct->bt_ht,(ndpi_ip_addr_t *)&packet->iph->daddr,
-				packet->udp->dest, packet->current_time,1);
-    }
+    ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
   }
 
   if(packet->iph) {
-  char ip1[32],ip2[32];
-  inet_ntop(AF_INET,(void *)&packet->iph->saddr,ip1,sizeof(ip1));
-  inet_ntop(AF_INET,(void *)&packet->iph->daddr,ip2,sizeof(ip2));
-  NDPI_LOG_DBG2(ndpi_struct, "BT: add connection %s %s:%d<->%s:%d!\n",
+    char ip1[32],ip2[32];
+    inet_ntop(AF_INET,(void *)&packet->iph->saddr,ip1,sizeof(ip1));
+    inet_ntop(AF_INET,(void *)&packet->iph->daddr,ip2,sizeof(ip2));
+    NDPI_LOG_DBG2(ndpi_struct, "BT: add connection %s %s:%d<->%s:%d!\n",
 		   packet->tcp ? "tcp":"udp", ip1,htons(p1),ip2,htons(p2));
 
   }
+  if(check_hash)
+    ndpi_search_bittorrent_hash(ndpi_struct, flow, bt_offset);
 
   ndpi_int_change_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
 #ifndef __KERNEL__
@@ -976,20 +994,21 @@ static void ndpi_add_connection_as_bittorrent(
     if(ndpi_struct->bittorrent_cache == NULL)
       ndpi_struct->bittorrent_cache = ndpi_lru_cache_init(1024);
 
-    if(ndpi_struct->bittorrent_cache && packet->iph && packet->udp) {
-      u_int32_t key = packet->iph->saddr + packet->udp->source;
+    if(ndpi_struct->bittorrent_cache && packet->iph) {
+      u_int32_t key1, key2, i;
+      if(packet->udp)
+	key1 = ndpi_bittorrent_hash_funct(packet->iph->saddr, packet->udp->source), key2 = ndpi_bittorrent_hash_funct(packet->iph->daddr, packet->udp->dest);
+      else
+	key1 = ndpi_bittorrent_hash_funct(packet->iph->saddr, packet->tcp->source), key2 = ndpi_bittorrent_hash_funct(packet->iph->daddr, packet->tcp->dest);
 
-      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key, NDPI_PROTOCOL_BITTORRENT);
-
-      key = packet->iph->daddr + packet->udp->dest;
-      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key, NDPI_PROTOCOL_BITTORRENT);
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key1, NDPI_PROTOCOL_BITTORRENT);
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key1, NDPI_PROTOCOL_BITTORRENT);
 
 #ifdef CACHE_DEBUG
       printf("[BitTorrent] *** ADDING ports %u / %u\n", ntohs(packet->udp->source), ntohs(packet->udp->dest));
 #endif
     }
   }
-
 #endif
 }
 
@@ -1077,6 +1096,8 @@ static int ndpi_search_bittorrent_udp_old(struct ndpi_detection_module_struct
     return 0;
 }
 
+/* ************************************* */
+
 static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module_struct
 						    *ndpi_struct, struct ndpi_flow_struct *flow)
 {
@@ -1089,56 +1110,47 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     return 0;
   }
   if(flow->packet_counter == 2 && packet->payload_packet_len > 20) {
-
-    if(memcmp(&packet->payload[0], "BitTorrent protocol", 19) == 0) {
-      bt_save_hash(ndpi_struct, flow, 19+8);
-      NDPI_LOG_INFO(ndpi_struct, "BT: plain BitTorrent protocol detected\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_SAFE_DETECTION,
-					NDPI_PROTOCOL_PLAIN_DETECTION,0);
+    if(memcmp(&packet->payload[0], BITTORRENT_PROTO_STRING, 19) == 0) {
+      NDPI_LOG_INFO(ndpi_struct, "found BT: plain\n");
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, 19, 1,
+					NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
       return 1;
     }
   }
 
 
   if(packet->payload_packet_len > 20) {
-    /* test for match 0x13+"BitTorrent protocol" */
+    /* test for match 0x13+BITTORRENT_PROTO_STRING */
     if(packet->payload[0] == 0x13) {
-      if(memcmp(&packet->payload[1], "BitTorrent protocol", 19) == 0) {
-        bt_save_hash(ndpi_struct, flow, 20+8);
-	NDPI_LOG_INFO(ndpi_struct, "BT: plain BitTorrent protocol detected\n");
-	ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					  NDPI_PROTOCOL_SAFE_DETECTION,
-					  NDPI_PROTOCOL_PLAIN_DETECTION,0);
+      if(memcmp(&packet->payload[1], BITTORRENT_PROTO_STRING, 19) == 0) {
+	NDPI_LOG_INFO(ndpi_struct, "found BT: plain\n");
+	ndpi_add_connection_as_bittorrent(ndpi_struct, flow, 20, 1,
+					  NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
 	return 1;
       }
     }
   }
 
   if(packet->payload_packet_len > 23 && memcmp(packet->payload, "GET /webseed?info_hash=", 23) == 0) {
-    bt_save_hash(ndpi_struct, flow, -1);
-    NDPI_LOG_INFO(ndpi_struct, "BT: plain webseed BitTorrent protocol detected\n");
-    ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-				      NDPI_PROTOCOL_SAFE_DETECTION,
-				      NDPI_PROTOCOL_WEBSEED_DETECTION, 0);
+    NDPI_LOG_INFO(ndpi_struct, "found BT: plain webseed\n");
+    ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+				      NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_WEBSEED_DETECTION);
     return 1;
   }
   /* seen Azureus as server for webseed, possibly other servers existing, to implement */
   /* is Server: hypertracker Bittorrent? */
   /* no asymmetric detection possible for answer of pattern "GET /data?fid=". */
   if(packet->payload_packet_len > 60
-      && memcmp(packet->payload, "GET /data?fid=", 14) == 0 && memcmp(&packet->payload[54], "&size=", 6) == 0) {
-    bt_save_hash(ndpi_struct, flow, -1);
-    NDPI_LOG_INFO(ndpi_struct, "BT: plain Bitcomet persistent seed protocol detected\n");
-    ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-				      NDPI_PROTOCOL_SAFE_DETECTION,
-				      NDPI_PROTOCOL_WEBSEED_DETECTION, 0);
+     && memcmp(packet->payload, "GET /data?fid=", 14) == 0 && memcmp(&packet->payload[54], "&size=", 6) == 0) {
+    NDPI_LOG_INFO(ndpi_struct, "found BT: plain Bitcomet persistent seed\n");
+    ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+				      NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_WEBSEED_DETECTION);
     return 1;
   }
 
 
   if(packet->payload_packet_len > 90 && (memcmp(packet->payload, "GET ", 4) == 0
-					  || memcmp(packet->payload, "POST ", 5) == 0)) {
+					 || memcmp(packet->payload, "POST ", 5) == 0)) {
     const u_int8_t *ptr = &packet->payload[4];
     u_int16_t len = packet->payload_packet_len - 4;
     a = 0;
@@ -1149,21 +1161,17 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     if(     memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Azureus "), 0) == 0
 	 || memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("BitTorrent"), 0) == 0
 	 || memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("BTWebClient"), 0) == 0) {
-      bt_save_hash(ndpi_struct, flow, -1);
       NDPI_LOG_INFO(ndpi_struct, "Azureus /Bittorrent user agent line detected\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_SAFE_DETECTION,
-					NDPI_PROTOCOL_WEBSEED_DETECTION, 0);
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_WEBSEED_DETECTION);
       return 1;
     }
 
     if( memcmp_packet_hdr(packet,user_agent_line_idx, NDPI_STATICSTRING("Shareaza "),0) == 0 &&
 	 memcmp_packet_line(packet,8, NDPI_STATICSTRING("X-Queue: "), 0) == 0) {
-      bt_save_hash(ndpi_struct, flow, -1);
       NDPI_LOG_INFO(ndpi_struct, "Bittorrent Shareaza detected.\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_SAFE_DETECTION,
-					NDPI_PROTOCOL_WEBSEED_DETECTION, 0);
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_WEBSEED_DETECTION);
       return 1;
     }
 
@@ -1179,8 +1187,8 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 	&& memcmp_packet_line(packet,8, NDPI_STATICSTRING("Cache-Control: no-cache"), 0) == 0) {
 
       NDPI_LOG_INFO(ndpi_struct, "found BT: Bitcomet LTS\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-			NDPI_PROTOCOL_UNSAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION,0);
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					NDPI_PROTOCOL_UNSAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
       return 1;
 
     }
@@ -1189,31 +1197,29 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
     if(packet->parsed_lines == 8
 	&& memcmp_packet_hdr(packet,user_agent_line_idx, 
 				NDPI_STATICSTRING("Mozilla/4.0 (compatible; MSIE 6.0;"),0) == 0
+	&& packet->host_line.ptr != NULL && packet->host_line.len >= 7
 	&& memcmp_packet_line(packet,2, NDPI_STATICSTRING("Accept: */*"), 0) == 0
 	&& memcmp_packet_line(packet,3, NDPI_STATICSTRING("Referer: "), 0) == 0
 	&& memcmp_packet_line(packet,5, NDPI_STATICSTRING("Range: bytes="), 0) == 0
 	&& memcmp_packet_line(packet,6, NDPI_STATICSTRING("Connection: Keep-Alive"), 0) == 0) {
 
-      bt_save_hash(ndpi_struct, flow, -1);
-      NDPI_LOG_INFO(ndpi_struct, "FlashGet detected\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_UNSAFE_DETECTION,
-					NDPI_PROTOCOL_PLAIN_DETECTION, 0);
+      NDPI_LOG_INFO(ndpi_struct, "found BT: FlashGet\n");
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					NDPI_PROTOCOL_UNSAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
       return 1;
 
     }
     if(packet->parsed_lines == 7
 	&& memcmp_packet_hdr(packet,user_agent_line_idx,
 		NDPI_STATICSTRING("Mozilla/4.0 (compatible; MSIE 6.0;"),0) == 0
+	&& packet->host_line.ptr != NULL && packet->host_line.len >= 7
 	&& memcmp_packet_line(packet,2, NDPI_STATICSTRING("Accept: */*"),0) == 0
 	&& memcmp_packet_line(packet,3, NDPI_STATICSTRING("Referer: "),0) == 0
 	&& memcmp_packet_line(packet,5, NDPI_STATICSTRING("Connection: Keep-Alive"), 0) == 0) {
 
-      bt_save_hash(ndpi_struct, flow, -1);
-      NDPI_LOG_INFO(ndpi_struct, "FlashGet detected\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_UNSAFE_DETECTION,
-					NDPI_PROTOCOL_PLAIN_DETECTION, 0);
+      NDPI_LOG_INFO(ndpi_struct, "found BT: FlashGet\n");
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					NDPI_PROTOCOL_UNSAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
       return 1;
 
     }
@@ -1279,11 +1285,9 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
       }
     }
 
-    bt_save_hash(ndpi_struct, flow, -1);
-    NDPI_LOG_INFO(ndpi_struct, "BT stat: tracker info hash parsed\n");
-    ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-				      NDPI_PROTOCOL_SAFE_DETECTION,
-				      NDPI_PROTOCOL_PLAIN_DETECTION, 0);
+    NDPI_LOG_INFO(ndpi_struct, "found BT: tracker info hash parsed\n");
+    ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+				      NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
     return 1;
   }
 
@@ -1308,12 +1312,10 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
 
     /* did not see this pattern anywhere */
     if((memcmp(&packet->payload[0], pattern_20_bytes, 20) == 0)
-	&& (memcmp(&packet->payload[52], pattern_12_bytes, 12) == 0)) {
-      bt_save_hash(ndpi_struct, flow, -1);
-      NDPI_LOG_INFO(ndpi_struct, "BT: Warez - Plain BitTorrent protocol detected\n");
-      ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					NDPI_PROTOCOL_SAFE_DETECTION,
-					NDPI_PROTOCOL_PLAIN_DETECTION, 0);
+       && (memcmp(&packet->payload[52], pattern_12_bytes, 12) == 0)) {
+      NDPI_LOG_INFO(ndpi_struct, "found BT: Warez - Plain\n");
+      ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
       return 1;
     }
   }
@@ -1324,11 +1326,9 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
       ndpi_parse_packet_line_info(ndpi_struct, flow);
       /* haven't fount this pattern anywhere */
       if( memcmp_packet_hdr(packet,host_line_idx, NDPI_STATICSTRING("ip2p.com:"),0) == 0) {
-        bt_save_hash(ndpi_struct, flow, -1);
-	NDPI_LOG_INFO(ndpi_struct, "BT: Warez - Plain BitTorrent protocol detected due to Host: ip2p.com: pattern\n");
-	ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
-					  NDPI_PROTOCOL_SAFE_DETECTION,
-					  NDPI_PROTOCOL_WEBSEED_DETECTION, 0);
+	NDPI_LOG_INFO(ndpi_struct, "found BT: Warez - Plain Host: ip2p.com: pattern\n");
+	ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 1,
+					  NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_WEBSEED_DETECTION);
 	return 1;
       }
     }
@@ -1336,8 +1336,9 @@ static u_int8_t ndpi_int_search_bittorrent_tcp_zero(struct ndpi_detection_module
   return 0;
 }
 
+/* ************************************* */
 
-/*Search for BitTorrent commands*/
+/* Search for BitTorrent commands */
 static void ndpi_int_search_bittorrent_tcp(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
@@ -1382,8 +1383,27 @@ static u_int8_t is_port(u_int16_t a, u_int16_t b, u_int16_t what) {
   return(((what == a) || (what == b)) ? 1 : 0);
 }
 
-void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
-{
+static void ndpi_skip_bittorrent(struct ndpi_detection_module_struct *ndpi_struct,
+				 struct ndpi_flow_struct *flow,
+				 struct ndpi_packet_struct *packet) {
+  u_int16_t sport, dport;
+
+  if(packet->udp)
+    sport = packet->udp->source, dport = packet->udp->dest;
+  else
+    sport = packet->tcp->source, dport = packet->tcp->dest;
+  
+  if(ndpi_search_into_bittorrent_cache(ndpi_struct, flow, packet->iph->saddr, sport, packet->iph->daddr, dport))
+    ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 0,
+				      NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
+  else
+    NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+}
+
+/* ************************************* */
+
+static void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct,
+                                   struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   uint32_t utp_type = 0;
   int bt_code = 0;
@@ -1424,14 +1444,12 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	if(packet->udp != NULL &&  packet->payload_packet_len > 28 ) {
 	    if(bt_utp2(packet->payload, packet->payload_packet_len,ndpi_struct,flow,&utp_type))
 		    return;
-
 	    bdecode((const u_int8_t *)packet->payload,packet->payload_packet_len,
 			    ndpi_struct,flow,&utp_type);
 	    }
 	return;
   }
 
-    /* check for tcp retransmission here */
 #ifndef __KERNEL__
     if((flow->packet_counter == 0 /* Do the check once */) && ndpi_struct->bittorrent_cache) {
       u_int32_t key = packet->udp ? (packet->iph->saddr + packet->udp->source) : (packet->iph->saddr + packet->tcp->source);
@@ -1459,17 +1477,25 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	  goto bittorrent_found;
       }
 #endif
+
+  if(flow->detected_protocol_stack[0] != NDPI_PROTOCOL_BITTORRENT) {
+    /* check for tcp retransmission here */
+    
     if(packet->tcp != NULL) {
       ndpi_int_search_bittorrent_tcp(ndpi_struct, flow);
       return;
     }
-    if(packet->udp == NULL) return;
+    if(packet->udp == NULL) {
+      if(flow->packet_counter > 8)
+        ndpi_skip_bittorrent(ndpi_struct, flow, packet);
+      return;
+    }
 
       /* UDP */
 
       if((ntohs(packet->udp->source) < 1024)
 	 || (ntohs(packet->udp->dest) < 1024) /* High ports only */) {
-	NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+	ndpi_skip_bittorrent(ndpi_struct, flow, packet);
 	return;
       }
 
@@ -1503,15 +1529,15 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 
 	  detect_type = "String";
 	  if(is_utpv1_pkt(packet->payload, packet->payload_packet_len)) {
-	    bt_proto = ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20);
+	    bt_proto = ndpi_strnstr((const char *)&packet->payload[20], BITTORRENT_PROTO_STRING, packet->payload_packet_len-20);
 	    goto bittorrent_found;
 	  } else if((packet->payload[0]== 0x60)
-	     && (packet->payload[1]== 0x0)
-	     && (packet->payload[2]== 0x0)
-	     && (packet->payload[3]== 0x0)
-	     && (packet->payload[4]== 0x0)) {
+		    && (packet->payload[1]== 0x0)
+		    && (packet->payload[2]== 0x0)
+		    && (packet->payload[3]== 0x0)
+		    && (packet->payload[4]== 0x0)) {
 	    /* Heuristic */
-	    bt_proto = ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20);
+	    bt_proto = ndpi_strnstr((const char *)&packet->payload[20], BITTORRENT_PROTO_STRING, packet->payload_packet_len-20);
 	    goto bittorrent_found;
 	    /* CSGO/DOTA conflict */
 	  } else if((v0_flags < 6 /* ST_NUM_STATES */) && (v0_extension < 3 /* EXT_NUM_EXT */)) {
@@ -1519,10 +1545,10 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	    u_int32_t now = packet->current_time;
 
 	    if((ts < (now+86400)) && (ts > (now-86400))) {
-	      bt_proto = ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20);
+	      bt_proto = ndpi_strnstr((const char *)&packet->payload[20], BITTORRENT_PROTO_STRING, packet->payload_packet_len-20);
 	      goto bittorrent_found;
 	    }
-	  } else if(ndpi_strnstr((const char *)&packet->payload[20], "BitTorrent protocol", packet->payload_packet_len-20)
+	  } else if(ndpi_strnstr((const char *)&packet->payload[20], BITTORRENT_PROTO_STRING, packet->payload_packet_len-20)
 		    ) {
 	    goto bittorrent_found;
 	  }
@@ -1573,22 +1599,20 @@ void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_struct, st
 	return;
       }
 
-      if(flow->packet_counter > 8) {
-        NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
-      }  
+
+      ndpi_skip_bittorrent(ndpi_struct, flow, packet);
       return;
       /* UDP */
 
   bittorrent_found:
-       if(bt_proto && (packet->payload_packet_len > 47))
-            memcpy(flow->protos.bittorrent.hash, &bt_proto[27], 20);
+       //if(bt_proto && (packet->payload_packet_len > 47))
+       //     memcpy(flow->protos.bittorrent.hash, &bt_proto[27], 20);
 
         NDPI_LOG_INFO(ndpi_struct,
 	     "BT: BitTorrent protocol detected: %s\n",detect_type ? detect_type : "(NULL)");
-        ndpi_add_connection_as_bittorrent(ndpi_struct, flow,
+        ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 0,
 				      NDPI_PROTOCOL_SAFE_DETECTION,
-				      NDPI_PROTOCOL_PLAIN_DETECTION,
-				      utp_type);
+				      NDPI_PROTOCOL_PLAIN_DETECTION);
   return;
 }
 
@@ -1638,12 +1662,13 @@ if(ndpi_struct->bt6_ht) {
 #endif
 }
 
-void init_bittorrent_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_int32_t *id, NDPI_PROTOCOL_BITMASK *detection_bitmask)
+void init_bittorrent_dissector(struct ndpi_detection_module_struct *ndpi_struct,
+			       u_int32_t *id, NDPI_PROTOCOL_BITMASK *detection_bitmask)
 {
   ndpi_set_bitmask_protocol_detection("BitTorrent", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_BITTORRENT,
 				      ndpi_search_bittorrent,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITHOUT_RETRANSMISSION,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
   *id += 1;

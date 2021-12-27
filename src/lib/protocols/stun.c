@@ -174,7 +174,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   } else if(payload_length < sizeof(struct stun_packet_header)) {
     /* This looks like an invalid packet */
 
-    if(flow->protos.tls_quic_stun.stun.num_udp_pkts > 0) {
+    if(flow->stun.num_udp_pkts > 0) {
       // flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
       return(NDPI_IS_STUN);
     } else
@@ -231,7 +231,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     printf("[STUN] Here we go\n");;
 #endif
 
-  if(ndpi_struct->stun_cache) {
+  if(ndpi_struct->stun_cache && packet->iph) { /* TODO: ipv6 */
     u_int16_t proto;
     u_int32_t key = get_stun_lru_key(packet, 0);
     int rc = ndpi_lru_find_cache(ndpi_struct->stun_cache, key, &proto,
@@ -270,17 +270,23 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   }
 
   if(msg_type == 0x01 /* Binding Request */) {
-    flow->protos.tls_quic_stun.stun.num_binding_requests++;
+    flow->stun.num_binding_requests++;
 
     if(!msg_len && flow->guessed_host_protocol_id == NDPI_PROTOCOL_GOOGLE)
       flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
+    else if(flow->guessed_host_protocol_id == NDPI_PROTOCOL_FACEBOOK)
+      flow->guessed_host_protocol_id = NDPI_PROTOCOL_FACEBOOK_VOIP;
     else
       flow->guessed_protocol_id = NDPI_PROTOCOL_STUN;
 
     if(!msg_len) {
-      /* flow->protos.tls_quic_stun.stun.num_udp_pkts++; */
+      /* flow->stun.num_udp_pkts++; */
       return(NDPI_IS_NOT_STUN); /* This to keep analyzing STUN instead of giving up */
     }
+  }
+  if(msg_type == 0x03 /* Allocate Request */) {
+    if(flow->guessed_host_protocol_id == NDPI_PROTOCOL_FACEBOOK)
+      flow->guessed_host_protocol_id = NDPI_PROTOCOL_FACEBOOK_VOIP;
   }
 
   if(!msg_len && flow->guessed_host_protocol_id == NDPI_PROTOCOL_UNKNOWN) {
@@ -288,13 +294,13 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     return(NDPI_IS_NOT_STUN);
   }
 
-  flow->protos.tls_quic_stun.stun.num_udp_pkts++;
+  flow->stun.num_udp_pkts++;
 
   if((payload[0] == 0x80 && payload_length < 512 && ((msg_len+20) <= payload_length))) {
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
     return(NDPI_IS_STUN); /* This is WhatsApp Call */
   } else if((payload[0] == 0x90) && (((msg_len+11) == payload_length) ||
-				     (flow->protos.tls_quic_stun.stun.num_binding_requests >= 4))) {
+				     (flow->stun.num_binding_requests >= 4))) {
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
     return(NDPI_IS_STUN); /* This is WhatsApp Call */
   }
@@ -304,7 +310,8 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   else {
     switch(flow->guessed_protocol_id) {
     case NDPI_PROTOCOL_HANGOUT_DUO:
-    case NDPI_PROTOCOL_MESSENGER:
+    case NDPI_PROTOCOL_FACEBOOK_VOIP:
+    case NDPI_PROTOCOL_SIGNAL_VOIP:
     case NDPI_PROTOCOL_WHATSAPP_CALL:
       /* Don't overwrite the protocol with sub-STUN protocols */
       break;
@@ -359,26 +366,23 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 	    u_int16_t realm_len = ntohs(*((u_int16_t*)&payload[offset+2]));
 
 	    if(flow->host_server_name[0] == '\0') {
-	      u_int i;
 	      u_int k = offset+4;
 
-	      i = ndpi_min(realm_len, sizeof(flow->host_server_name) - 1);
-	      i = ndpi_min(i, payload_length - k);
-	      memcpy(flow->host_server_name, payload + k, i);
-	      flow->host_server_name[i] = '\0';
-	    
+	      ndpi_hostname_sni_set(flow, payload + k, ndpi_min(realm_len, payload_length - k));
+
 #ifdef DEBUG_STUN
 	      printf("==> [%s]\n", flow->host_server_name);
 #endif
 
-	      if(strstr((char*) flow->host_server_name, "google.com") != NULL) {
+	      if(strstr(flow->host_server_name, "google.com") != NULL) {
                 flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
                 return(NDPI_IS_STUN);
-	      } else if(strstr((char*) flow->host_server_name, "whispersystems.org") != NULL) {
-		flow->guessed_host_protocol_id = NDPI_PROTOCOL_SIGNAL;
+	      } else if(strstr(flow->host_server_name, "whispersystems.org") != NULL ||
+	                (strstr(flow->host_server_name, "signal.org") != NULL)) {
+		flow->guessed_host_protocol_id = NDPI_PROTOCOL_SIGNAL_VOIP;
 		return(NDPI_IS_STUN);
-	      } else if(strstr((char*) flow->host_server_name, "facebook") != NULL) {
-		flow->guessed_host_protocol_id = NDPI_PROTOCOL_MESSENGER;
+	      } else if(strstr(flow->host_server_name, "facebook") != NULL) {
+		flow->guessed_host_protocol_id = NDPI_PROTOCOL_FACEBOOK_VOIP;
 		return(NDPI_IS_STUN);
 	      }
 	    }
@@ -388,7 +392,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
         case 0xC057: /* Messeger */
           if(msg_type == 0x0001) {
             if((msg_len == 100) || (msg_len == 104)) {
-              flow->guessed_host_protocol_id = NDPI_PROTOCOL_MESSENGER;
+              flow->guessed_host_protocol_id = NDPI_PROTOCOL_FACEBOOK_VOIP;
               return(NDPI_IS_STUN);
             } else if(msg_len == 76) {
 #if 0
@@ -472,25 +476,27 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     }
   }
 
-  if((flow->protos.tls_quic_stun.stun.num_udp_pkts > 0) && (msg_type <= 0x00FF)) {
+  if((flow->stun.num_udp_pkts > 0) && (msg_type <= 0x00FF)) {
     flow->guessed_host_protocol_id = NDPI_PROTOCOL_WHATSAPP_CALL;
     return(NDPI_IS_STUN);
   } else
     return(NDPI_IS_NOT_STUN);
 
  udp_stun_found:
-  flow->protos.tls_quic_stun.stun.num_processed_pkts++;
+  flow->stun.num_processed_pkts++;
 
 #ifdef DEBUG_STUN
   printf("==>> NDPI_PROTOCOL_WHATSAPP_CALL\n");
 #endif
 
-  if(is_messenger_ip_address(ntohl(packet->iph->saddr)) || is_messenger_ip_address(ntohl(packet->iph->daddr)))      
-    flow->guessed_host_protocol_id = NDPI_PROTOCOL_MESSENGER;
-  else if(is_google_ip_address(ntohl(packet->iph->saddr)) || is_google_ip_address(ntohl(packet->iph->daddr)))
-    flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
+  if(packet->iph) { /* TODO: ipv6 */
+    if(is_messenger_ip_address(ntohl(packet->iph->saddr)) || is_messenger_ip_address(ntohl(packet->iph->daddr)))
+      flow->guessed_host_protocol_id = NDPI_PROTOCOL_FACEBOOK_VOIP;
+    else if(is_google_ip_address(ntohl(packet->iph->saddr)) || is_google_ip_address(ntohl(packet->iph->daddr)))
+      flow->guessed_host_protocol_id = NDPI_PROTOCOL_HANGOUT_DUO;
+  }
   
-  rc = (flow->protos.tls_quic_stun.stun.num_udp_pkts < MAX_NUM_STUN_PKTS) ? NDPI_IS_NOT_STUN : NDPI_IS_STUN;
+  rc = (flow->stun.num_udp_pkts < MAX_NUM_STUN_PKTS) ? NDPI_IS_NOT_STUN : NDPI_IS_STUN;
 
   return rc;
 }
@@ -542,7 +548,7 @@ void ndpi_search_stun(struct ndpi_detection_module_struct *ndpi_struct, struct n
     return;
   }
 
-  if(flow->protos.tls_quic_stun.stun.num_udp_pkts >= MAX_NUM_STUN_PKTS)
+  if(flow->stun.num_udp_pkts >= MAX_NUM_STUN_PKTS)
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
 
   if(flow->packet_counter > 0) {
@@ -557,7 +563,7 @@ void init_stun_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_int
   ndpi_set_bitmask_protocol_detection("STUN", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_STUN,
 				      ndpi_search_stun,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_UDP_WITH_PAYLOAD,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_UDP_WITH_PAYLOAD,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

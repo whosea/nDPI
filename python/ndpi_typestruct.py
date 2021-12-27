@@ -257,10 +257,6 @@ NDPIDetectionModuleStruct._fields_ = [
     ("protocols_ptree", c_void_p),
     ("irc_timeout", c_uint32),
     ("gnutella_timeout", c_uint32),
-    ("battlefield_timeout", c_uint32),
-    ("thunder_timeout", c_uint32),
-    ("tvants_connection_timeout", c_uint32),
-    ("orb_rstp_ts_timeout", c_uint32),
     ("zattoo_connection_timeout", c_uint32),
     ("jabber_stun_timeout", c_uint32),
     ("jabber_file_transfer_timeout", c_uint32),
@@ -309,10 +305,7 @@ class NDPIIdStruct(Structure):
         ('irc_ts', c_uint32),
         ('gnutella_ts', c_uint32),
         ('battlefield_ts', c_uint32),
-        ('thunder_ts', c_uint32),
         ('rtsp_timer', c_uint32),
-        ('oscar_last_safe_access_time', c_uint32),
-        ('zattoo_ts', c_uint32),
         ('jabber_stun_or_ft_ts', c_uint32),
         ('directconnect_last_safe_access_time', c_uint32),
         ('detected_directconnect_port', c_uint16),
@@ -335,7 +328,6 @@ class NDPIFlowTcpStruct(Structure):
         ('pop_command_bitmask', c_uint16),
         ('wa_matched_so_far', c_uint8),
         ('irc_stage', c_uint8),
-        ('irc_port', c_uint8),
         ('h323_valid_packets', c_uint8),
         ('gnutella_msg_id', c_uint8 * 3),
         ('irc_3a_counter', c_uint32, 3),
@@ -406,6 +398,12 @@ class NDPIFlowUdpStruct(Structure):
         ('csgo_state', c_uint8),
         ('csgo_s2', c_uint8),
         ('csgo_id2', c_uint32),
+        ('rdp_to_srv', c_uint8 * 3),
+        ('rdp_from_srv', c_uint8 * 3),
+        ('rdp_to_srv_pkts,', c_uint8),
+        ('rdp_from_srv_pkts', c_uint8),
+        ('imo_last_one_byte_pkt,', c_uint8),
+        ('imo_last_byte', c_uint8),
     ]
 
 
@@ -416,13 +414,13 @@ class L4(Union):
 class Http(Structure):
     _fields_ = [
         ("method", c_int),
-        ("url", c_char_p),
-        ("content_type", c_char_p),
-        ("num_request_headers", c_uint8),
-        ("num_response_headers", c_uint8),
         ("request_version", c_uint8),
         ("response_status_code", c_uint16),
-        ("detected_os", c_char * 32),
+        ("url", c_char_p),
+        ("content_type", c_char_p),
+        ("user_agent", c_char_p),
+        ("detected_os", c_char_p),
+        ("nat_ip", c_char_p),
     ]
 
 
@@ -449,7 +447,7 @@ class Kerberos(Structure):
                 ("realm", c_char * 24)]
 
 
-class Ssl(Structure):
+class QuicSsl(Structure):
     _fields_ = [
         ("ssl_version", c_uint16),
         ("client_certificate", c_char * 64),
@@ -472,23 +470,12 @@ class Stun(Structure):
     ]
 
 
-class StunSsl(Structure):
-    _fields_ = [("ssl", Ssl), ("stun", Stun)]
-
-
 class Ssh(Structure):
     _fields_ = [
         ("client_signature", c_char * 48),
         ("server_signature", c_char * 48),
         ("hassh_client", c_char * 33),
         ("hassh_server", c_char * 33)
-    ]
-
-
-class Imo(Structure):
-    _fields_ = [
-        ("last_one_byte_pkt", c_uint8),
-        ("last_byte", c_uint8)
     ]
 
 
@@ -500,18 +487,14 @@ class Ubntac2(Structure):
     _fields_ = [("version", c_char * 32)]
 
 
-class Http2(Structure):
-    _fields_ = [
-        ("nat_ip", c_char * 24)
-    ]
-
 class FtpImapPopSmtp(Structure):
     _fields_ = [
         ("auth_found", c_uint8, 1),
         ("auth_failed", c_uint8, 1),
         ("auth_tls", c_uint8, 1),
-        ("_pad", c_uint8, 5),
-        ("username", c_char * 16),
+        ("auth_done", c_uint8, 1),
+        ("_pad", c_uint8, 4),
+        ("username", c_char * 32),
         ("password", c_char * 16)
     ]
 
@@ -530,13 +513,10 @@ class Protos(Union):
     _fields_ = [
         ("dns", Dns),
         ("kerberos", Kerberos),
-        ("stun_ssl", StunSsl),
+        ("quic_ssl", QuicSsl),
         ("ssh", Ssh),
-        ("imo", Imo),
         ("mdns", Mdns),
         ("ubntac2", Ubntac2),
-        ("http", Http2),
-        ("ftp_imap_pop_smtp", FtpImapPopSmtp),
         ("bittorrent", Bittorrent),
         ("dhcp", Dhcp)
     ]
@@ -697,8 +677,10 @@ NDPIFlowStruct._fields_ = [
     ("num_processed_pkts", c_uint8),
     ("extra_packets_func", CFUNCTYPE(c_int, POINTER(NDPIDetectionModuleStruct), POINTER(NDPIFlowStruct))),
     ("l4", L4),
-    ("host_server_name", c_ubyte * 256),
+    ("host_server_name", c_char * 80),
     ("http", Http),
+    ("stun", Stun),
+    ("ftp_imap_pop_smtp", FtpImapPopSmtp),
     ("protos", Protos),
     ("excluded_protocol_bitmask", NDPIProtocolBitMask),
     ("category", c_int),

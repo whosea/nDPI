@@ -92,10 +92,6 @@ extern "C" {
   extern u_int16_t ndpi_check_for_email_address(struct ndpi_detection_module_struct *ndpi_struct,
 						struct ndpi_flow_struct *flow, u_int16_t counter);
 
-  extern void ndpi_int_change_protocol(struct ndpi_detection_module_struct *ndpi_struct,
-				       struct ndpi_flow_struct *flow,
-				       u_int16_t upper_detected_protocol,
-				       u_int16_t lower_detected_protocol);
   extern void ndpi_int_change_category(struct ndpi_detection_module_struct *ndpi_struct,
 				       struct ndpi_flow_struct *flow,
 				       ndpi_protocol_category_t protocol_category);
@@ -161,6 +157,9 @@ extern "C" {
   void load_common_alpns(struct ndpi_detection_module_struct *ndpi_str);
   u_int8_t is_a_common_alpn(struct ndpi_detection_module_struct *ndpi_str,
 			    const char *alpn_to_check, u_int alpn_to_check_len);    
+
+  char *ndpi_hostname_sni_set(struct ndpi_flow_struct *flow, const u_int8_t *value, size_t value_len);
+
 #ifdef __cplusplus
 }
 #endif
