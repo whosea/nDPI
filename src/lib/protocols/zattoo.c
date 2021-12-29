@@ -52,8 +52,6 @@ u_int8_t ndpi_int_zattoo_user_agent_set(struct ndpi_detection_module_struct *ndp
 void ndpi_search_zattoo(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
-  struct ndpi_id_struct *src = flow->src;
-  struct ndpi_id_struct *dst = flow->dst;
 
   u_int16_t i;
 

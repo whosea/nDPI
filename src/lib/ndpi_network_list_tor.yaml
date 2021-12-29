@@ -4,7 +4,7 @@ TOR:
 	  - https://torstatus.rueckgr.at/ip_list_all.php/Tor_ip_list_ALL.csv
 	  - From 02.03.2021
 	  - 
-	  - Use utils/toripaddr2list.py to convert them
+	  - Use utils/ipaddr2list.py to convert them
 	ip:
 	  - 2.26.247.176/32
 	  - 2.31.116.225/32

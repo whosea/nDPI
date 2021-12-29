@@ -108,7 +108,8 @@ static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndp
 					struct ndpi_flow_struct *flow, u_int32_t protocol);
 
 static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct,
-				struct ndpi_flow_struct *flow);
+				struct ndpi_flow_struct *flow,
+                                int is_from_client);
 /* **************************************** */
 
 static u_int32_t ndpi_tls_refine_master_protocol(struct ndpi_detection_module_struct *ndpi_struct,
@@ -231,6 +232,8 @@ void ndpi_search_tls_tcp_memory(struct ndpi_detection_module_struct *ndpi_struct
 
 /* **************************************** */
 
+#ifndef __KERNEL__
+
 static void cleanupServerName(char *buffer, u_int buffer_len) {
   u_int i;
 
@@ -240,7 +243,6 @@ static void cleanupServerName(char *buffer, u_int buffer_len) {
 }
 
 /* **************************************** */
-#ifndef __KERNEL__
 /*
   Return code
   -1: error (buffer too short)
@@ -2358,7 +2360,6 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
   u_int16_t tls_version;
   u_int16_t total_len;
   u_int8_t handshake_type;
-  char buffer[64] = { '\0' };
   int is_quic = (quic_version != 0);
   int is_dtls = packet->udp && (!is_quic);
   u_int8_t  session_id_len =  0;
@@ -2411,7 +2412,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
       if((offset+3) > packet->payload_packet_len)
 	return(0); /* Not found */
 
-      flow->protos.tls_quic_stun.tls_quic.server_cipher = ntohs(*((u_int16_t*)&packet->payload[offset]));
+      flow->protos.tls_quic.server_cipher = ntohs(*((u_int16_t*)&packet->payload[offset]));
 
 #ifdef DEBUG_TLS
       printf("TLS [server][session_id_len: %u][cipher: %04X]\n", session_id_len, flow->protos.tls_quic_stun.tls_quic.server_cipher);
@@ -2450,7 +2451,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	    printf("TLS [server] [TLS version: 0x%04X]\n", tls_version);
 #endif
 
-	    flow->protos.tls_quic_stun.tls_quic.ssl_version = tls_version;
+	    flow->protos.tls_quic.ssl_version = tls_version;
 	  }
 	} else if(extension_id == 16 /* application_layer_protocol_negotiation (ALPN) */) {
 	  u_int16_t s_offset = offset+4;
@@ -2493,8 +2494,8 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #ifdef DEBUG_TLS
 	  printf("Server TLS [ALPN: %s][len: %u]\n", alpn_str, alpn_str_len);
 #endif
-	  if(flow->protos.tls_quic_stun.tls_quic.alpn == NULL)
-	    flow->protos.tls_quic_stun.tls_quic.alpn = ndpi_strdup(alpn_str);
+	  if(flow->protos.tls_quic.alpn == NULL)
+	    flow->protos.tls_quic.alpn = ndpi_strdup(alpn_str);
 
 	} else if(extension_id == 11 /* ec_point_formats groups */) {
 
@@ -2510,8 +2511,8 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
       u_int16_t cipher_len, cipher_offset;
       u_int8_t cookie_len = 0;
 
-      flow->protos.tls_quic_stun.tls_quic.ssl_version = tls_version;
-      if(flow->protos.tls_quic_stun.tls_quic.ssl_version < 0x0302) /* TLSv1.1 */
+      flow->protos.tls_quic.ssl_version = tls_version;
+      if(flow->protos.tls_quic.ssl_version < 0x0302) /* TLSv1.1 */
 	ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_OBSOLETE_VERSION);
  
       if((session_id_len+base_offset+3) > packet->payload_packet_len)
@@ -2580,51 +2581,44 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 
 	      if(extension_id == 0 /* server name */) {
 		u_int16_t len;
+		char *sni = NULL;
+		int sni_len = 0;
 
 #ifdef DEBUG_TLS
 		printf("[TLS] Extensions: found server name\n");
 #endif
 
 		len = (packet->payload[offset+extension_offset+3] << 8) + packet->payload[offset+extension_offset+4];
-		len = (u_int)ndpi_min(len, sizeof(buffer)-1);
 
 		if((offset+extension_offset+5+len) <= packet->payload_packet_len) {
-		  strncpy(buffer, (char*)&packet->payload[offset+extension_offset+5], len);
-		  buffer[len] = '\0';
 
-		  cleanupServerName(buffer, sizeof(buffer));
-
-		  snprintf(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name,
-			   sizeof(flow->protos.tls_quic_stun.tls_quic.client_requested_server_name),
-			   "%s", buffer);
+		sni = ndpi_hostname_sni_set(flow, &packet->payload[offset+extension_offset+5], len);
+		sni_len = strlen(sni);
 #ifdef DEBUG_TLS
-		  printf("[TLS] SNI: [%s]\n", buffer);
+		  printf("[TLS] SNI: [%s]\n", sni);
 #endif
 		  if(!is_quic) {
-		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, buffer, strlen(buffer)))
-		      flow->protos.tls_quic_stun.tls_quic.subprotocol_detected = 1;
+		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, sni, sni_len))
+		      flow->protos.tls_quic.subprotocol_detected = 1;
 		  } else {
-		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_QUIC, buffer, strlen(buffer)))
-		      flow->protos.tls_quic_stun.tls_quic.subprotocol_detected = 1;
+		    if(ndpi_match_hostname_protocol(ndpi_struct, flow, NDPI_PROTOCOL_QUIC, sni, sni_len))
+		      flow->protos.tls_quic.subprotocol_detected = 1;
 		  }
 
 		  if(ndpi_check_dga_name(ndpi_struct, flow,
-					 flow->protos.tls_quic_stun.tls_quic.client_requested_server_name, 1)) {
-		    char *sni = flow->protos.tls_quic_stun.tls_quic.client_requested_server_name;
-		    int len = strlen(sni);
-
+					   sni, 1)) {
 #ifdef DEBUG_TLS
-		    printf("[TLS] SNI: (DGA) [%s]\n", flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
+		    printf("[TLS] SNI: (DGA) [%s]\n", sni);
 #endif
 
-		    if((len >= 4)
+		    if((sni_len >= 4)
 		       /* Check if it ends in .com or .net */ 
-		       && ((strcmp(&sni[len-4], ".com") == 0) || (strcmp(&sni[len-4], ".net") == 0))
+		       && ((strcmp(&sni[sni_len-4], ".com") == 0) || (strcmp(&sni[sni_len-4], ".net") == 0))
 		       && (strncmp(sni, "www.", 4) == 0)) /* Not starting with www.... */
 		      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS);
 		  } else {
 #ifdef DEBUG_TLS
-		    printf("[TLS] SNI: (NO DGA) [%s]\n", flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
+		    printf("[TLS] SNI: (NO DGA) [%s]\n", sni);
 #endif
 		  }
 		} else {
@@ -2695,8 +2689,8 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 #ifdef DEBUG_TLS
 		printf("Client TLS [ALPN: %s][len: %u]\n", alpn_str, alpn_str_len);
 #endif
-		if(flow->protos.tls_quic_stun.tls_quic.alpn == NULL)
-		  flow->protos.tls_quic_stun.tls_quic.alpn = ndpi_strdup(alpn_str);
+		if(flow->protos.tls_quic.alpn == NULL)
+		  flow->protos.tls_quic.alpn = ndpi_strdup(alpn_str);
 
 	      } else if(extension_id == 43 /* supported versions */) {
 #ifdef DEBUG_TLS
@@ -2714,7 +2708,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		u_int16_t initial_offset = e_offset;
 		u_int16_t e_sni_len, cipher_suite = ntohs(*((u_int16_t*)&packet->payload[e_offset]));
 
-		flow->protos.tls_quic_stun.tls_quic.encrypted_sni.cipher_suite = cipher_suite;
+		flow->protos.tls_quic.encrypted_sni.cipher_suite = cipher_suite;
 
 		e_offset += 2; /* Cipher suite len */
 
@@ -2736,17 +2730,17 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		      printf("Client TLS [Encrypted Server Name len: %u]\n", e_sni_len);
 #endif
 
-		      if(flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni == NULL) {
-			flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni = (char*)ndpi_malloc(e_sni_len*2+1);
+		      if(flow->protos.tls_quic.encrypted_sni.esni == NULL) {
+			flow->protos.tls_quic.encrypted_sni.esni = (char*)ndpi_malloc(e_sni_len*2+1);
 
-			if(flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni) {
+			if(flow->protos.tls_quic.encrypted_sni.esni) {
 			  u_int16_t i, off;
 
 			  for(i=e_offset, off=0; i<(e_offset+e_sni_len); i++) {
-			    int rc = sprintf(&flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni[off], "%02X", packet->payload[i] & 0XFF);
+			    int rc = sprintf(&flow->protos.tls_quic.encrypted_sni.esni[off], "%02X", packet->payload[i] & 0XFF);
 
 			    if(rc <= 0) {
-			      flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni[off] = '\0';
+			      flow->protos.tls_quic.encrypted_sni.esni[off] = '\0';
 			      break;
 			    } else
 			      off += rc;
@@ -2822,22 +2816,22 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 
 
 	    /* Before returning to the caller we need to make a final check */
-	    if((flow->protos.tls_quic_stun.tls_quic.ssl_version >= 0x0303) /* >= TLSv1.2 */
-	       && (flow->protos.tls_quic_stun.tls_quic.alpn == NULL) /* No ALPN */) {
+	    if((flow->protos.tls_quic.ssl_version >= 0x0303) /* >= TLSv1.2 */
+	       && (flow->protos.tls_quic.alpn == NULL) /* No ALPN */) {
 	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_NOT_CARRYING_HTTPS);
 	    }
 
 	    /* Suspicious Domain Fronting:
 	       https://github.com/SixGenInc/Noctilucent/blob/master/docs/ */
-	    if(flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni &&
-	       flow->protos.tls_quic_stun.tls_quic.client_requested_server_name[0] != '\0') {
+	    if(flow->protos.tls_quic.encrypted_sni.esni &&
+	       flow->host_server_name[0] != '\0') {
 	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_SUSPICIOUS_ESNI_USAGE);
 	    }
 
 	    /* Add check for missing SNI */
-	    if((flow->protos.tls_quic_stun.tls_quic.client_requested_server_name[0] == 0)
-	       && (flow->protos.tls_quic_stun.tls_quic.ssl_version >= 0x0302) /* TLSv1.1 */
-	       && (flow->protos.tls_quic_stun.tls_quic.encrypted_sni.esni == NULL) /* No ESNI */
+	    if(flow->host_server_name[0] == '\0'
+	       && (flow->protos.tls_quic.ssl_version >= 0x0302) /* TLSv1.1 */
+	       && (flow->protos.tls_quic.encrypted_sni.esni == NULL) /* No ESNI */
 	       ) {
 	      /* This is a bit suspicious */
 	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_MISSING_SNI);
