@@ -33,6 +33,9 @@
 #else
 #ifdef HAVE_LIBGCRYPT
 #include <gcrypt.h>
+#else
+#define HAVE_LIBGCRYPT 1
+#include <gcrypt_light.h>
 #endif
 #endif
 
@@ -331,7 +334,7 @@ typedef struct quic_decrypt_result {
   uint32_t data_len;   /* Size of decrypted data. */
 } quic_decrypt_result_t;
 
-
+//#include "../third_party/quic-crypt.c"
 /*
  * From wsutil/wsgcrypt.{c,h}
  */

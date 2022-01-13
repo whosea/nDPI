@@ -45,15 +45,19 @@
 #include "libcache.h"
 
 #ifdef __KERNEL__
-  #undef HAVE_LIBGCRYPT
   #include "ndpi_kernel_compat.c"
   #ifdef HAVE_HYPERSCAN
     #error HYPERSCAN
   #endif
+  #include <gcrypt_light.h>
+  #define HAVE_LIBGCRYPT 1
   #undef MATCH_DEBUG
 #else
   #ifdef HAVE_LIBGCRYPT
   #include <gcrypt.h>
+  #else
+  #include <gcrypt_light.h>
+  #define HAVE_LIBGCRYPT 1
   #endif
 #endif
 
@@ -2443,7 +2447,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 
 #ifdef HAVE_LIBGCRYPT
   if(!(prefs & ndpi_dont_init_libgcrypt)) {
-    if(!gcry_control (GCRYCTL_INITIALIZATION_FINISHED_P)) {
+    if(!gcry_control (GCRYCTL_INITIALIZATION_FINISHED_P,0)) {
       const char *gcrypt_ver = gcry_check_version(NULL);
       if(!gcrypt_ver) {
         NDPI_LOG_ERR(ndpi_str, "Error initializing libgcrypt\n");

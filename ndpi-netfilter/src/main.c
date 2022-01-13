@@ -1141,13 +1141,8 @@ static void ndpi_host_ssl(struct nf_ct_ext_ndpi *ct_ndpi) {
 		ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_TLS ||
 		ct_ndpi->proto.master_protocol == NDPI_PROTOCOL_TLS)) {
     	const char *name_s = ct_ndpi->flow->protos.tls_quic.server_names;
-//    	const char *name_c = ct_ndpi->flow->protos.tls_quic_stun.tls_quic.client_requested_server_name;
 	const size_t s_len = ct_ndpi->flow->protos.tls_quic.server_names_len;
-//	const size_t c_len = sizeof(ct_ndpi->flow->protos.tls_quic_stun.tls_quic.client_requested_server_name);
-//	if(*name_c) {
-//	 	ct_ndpi->ssl = kstrndup(name_c, c_len, GFP_ATOMIC);
-//	} else 
-	  if(name_s) {
+	if(name_s && s_len > 0) {
 		ct_ndpi->ssl = kstrndup(name_s, s_len, GFP_ATOMIC);
 	}
     }

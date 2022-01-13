@@ -17,6 +17,7 @@ libndpi_a_include_HEADERS = ../include/ndpi_api.h \
 			     ../include/ndpi_typedefs.h     \
 			     third_party/include/ndpi_md5.h \
 			     third_party/include/ndpi_sha1.h \
+			     third_party/include/gcrypt_light.h \
 			     third_party/include/libcache.h
 
 libndpi_a_SOURCES = ndpi_content_match.c.inc \
@@ -202,7 +203,8 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     third_party/src/libinjection_xss.c \
 		     third_party/src/libcache.c \
 		     third_party/src/btlib.c \
-		     third_party/src/ndpi_patricia.c
+		     third_party/src/ndpi_patricia.c \
+		     third_party/src/gcrypt.c
 
 lib_LIBRARIES = libndpi.a
 
