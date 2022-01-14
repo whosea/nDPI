@@ -3208,6 +3208,7 @@ int ndpi_add_host_risk_mask(struct ndpi_detection_module_struct *ndpi_str,
 /* ******************************************************************** */
 
 int ndpi_add_trusted_issuer_dn(struct ndpi_detection_module_struct *ndpi_str, char *dn) {
+#ifndef __KERNEL__
   ndpi_list *head;
 
   if(dn == NULL)
@@ -3225,9 +3226,9 @@ int ndpi_add_trusted_issuer_dn(struct ndpi_detection_module_struct *ndpi_str, ch
     if((quote = strchr(buf, '"')) != NULL)
       quote[0] = '\0';
 
-    head->value = strdup(buf);
+    head->value = ndpi_strdup(buf);
   } else
-    head->value = strdup(dn);
+    head->value = ndpi_strdup(dn);
 
   if(head->value == NULL) {
     ndpi_free(head);
@@ -3236,6 +3237,7 @@ int ndpi_add_trusted_issuer_dn(struct ndpi_detection_module_struct *ndpi_str, ch
 
   head->next = ndpi_str->trusted_issuer_dn;
   ndpi_str->trusted_issuer_dn = head;
+#endif
 
   return(0);
 }
@@ -3260,7 +3262,7 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
     }
 
     if(!strcmp(rule_type, "trusted_issuer_dn"))
-      return(ndpi_add_trusted_issuer_dn(ndpi_str, strtok(NULL, ":")));
+      return(ndpi_add_trusted_issuer_dn(ndpi_str, strtok_r(NULL, ":",&saveptr)));
 
     key = strtok_r(NULL, "=", &saveptr);
     if(key) {
@@ -6794,7 +6796,6 @@ ndpi_protocol ndpi_guess_undetected_protocol(struct ndpi_detection_module_struct
 #ifdef BITTORRENT_CACHE_DEBUG
 	  printf("[%s:%u] Guessed %u.%u\n", __FILE__, __LINE__, ret.master_protocol, ret.app_protocol);
 #endif
-
 	  ret.category = ndpi_get_proto_category(ndpi_str, ret);
 #endif
 	  return(ret);
@@ -6807,12 +6808,12 @@ ndpi_protocol ndpi_guess_undetected_protocol(struct ndpi_detection_module_struct
 					 htonl(dhost), htons(dport))) {
       /* This looks like BitTorrent */
       ret.app_protocol = NDPI_PROTOCOL_BITTORRENT;
+#ifndef __KERNEL__
       ret.category = ndpi_get_proto_category(ndpi_str, ret);
-
 #ifdef BITTORRENT_CACHE_DEBUG
       printf("[%s:%u] Guessed %u.%u\n", __FILE__, __LINE__, ret.master_protocol, ret.app_protocol);
 #endif
-
+#endif
       return(ret);
     }
 

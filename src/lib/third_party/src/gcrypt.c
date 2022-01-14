@@ -14,7 +14,7 @@
 
 #include "ndpi_config.h"
 
-#ifndef HAVE_LIBGCRYPT
+#if !defined(HAVE_LIBGCRYPT) || defined(__KERNEL__)
 #include "ndpi_api.h"
 
 /****************************/

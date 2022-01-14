@@ -2638,7 +2638,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		       /* Check if it ends in .com or .net */ 
 		       && ((strcmp(&sni[sni_len-4], ".com") == 0) || (strcmp(&sni[sni_len-4], ".net") == 0))
 		       && (strncmp(sni, "www.", 4) == 0)) /* Not starting with www.... */
-		      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS);
+		      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS, NDPI_CONFIDENCE_DPI);
 		  } else {
 #ifdef DEBUG_TLS
 		    printf("[TLS] SNI: (NO DGA) [%s]\n", sni);

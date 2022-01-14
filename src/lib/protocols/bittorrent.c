@@ -105,17 +105,6 @@ static void ndpi_search_bittorrent_hash(struct ndpi_detection_module_struct *ndp
 
 /* *********************************************** */
 
-static int search_bittorrent_again(struct ndpi_detection_module_struct *ndpi_struct,
-				   struct ndpi_flow_struct *flow) {
-  ndpi_search_bittorrent(ndpi_struct, flow);
-  ndpi_search_bittorrent_hash(ndpi_struct, flow, -1);
-  
-  /* Possibly more processing */
-  return(1);
-}
-
-/* *********************************************** */
-
 static u_int8_t is_utpv1_pkt(const u_int8_t *payload, u_int payload_len) {
   struct ndpi_utp_hdr *h = (struct ndpi_utp_hdr*)payload;
 
@@ -966,6 +955,12 @@ static void ndpi_add_connection_as_bittorrent(
     ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
   } /* tcp */
 
+  if(packet->udp) {
+    p1 = packet->udp->source;
+    p2 = packet->udp->dest;
+    ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
+  }
+
   ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
   
   if(flow->protos.bittorrent.hash[0] == '\0') {
@@ -973,10 +968,6 @@ static void ndpi_add_connection_as_bittorrent(
     flow->check_extra_packets = 1;
     flow->max_extra_packets_to_check = 255;
     flow->extra_packets_func = ndpi_search_dht_again;
-
-    p1 = packet->udp->source;
-    p2 = packet->udp->dest;
-    ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
   }
 
   if(packet->iph) {
@@ -1625,7 +1616,7 @@ static void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_str
 int ndpi_search_dht_again(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
   ndpi_search_bittorrent(ndpi_struct,flow);
-  flow->num_extra_packets_checked = 0;
+  // flow->num_extra_packets_checked = 0;
   return 1;
 }
 

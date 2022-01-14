@@ -26,6 +26,7 @@ long int atol(const char *);
 void gettimeofday64(struct timespec64 *tv, void *tz);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 
+#define le64toh(v) le64_to_cpu(v)
 #define le32toh(v) le32_to_cpu(v)
 #define le16toh(v) le16_to_cpu(v)
 
