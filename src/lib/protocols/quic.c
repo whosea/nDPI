@@ -28,15 +28,13 @@
 #define NDPI_CURRENT_PROTO NDPI_PROTOCOL_QUIC
 #include "ndpi_api.h"
 
-#ifdef __KERNEL__
-#undef HAVE_LIBGCRYPT
+#ifndef __KERNEL__
+ #ifdef HAVE_LIBGCRYPT
+ #include <gcrypt.h>
+ #endif
 #else
-#ifdef HAVE_LIBGCRYPT
-#include <gcrypt.h>
-#else
-#define HAVE_LIBGCRYPT 1
-#include <gcrypt_light.h>
-#endif
+ #define HAVE_LIBGCRYPT 1
+ #include <gcrypt_light.h>
 #endif
 
 // #define DEBUG_CRYPT
@@ -365,6 +363,7 @@ static gcry_error_t hkdf_expand(int hashalgo, const uint8_t *prk, uint32_t prk_l
   uint8_t lastoutput[48];
   gcry_md_hd_t h;
   gcry_error_t err;
+  uint32_t offset;
   const unsigned int hash_len = gcry_md_get_algo_dlen(hashalgo);
 
   /* Some sanity checks */
@@ -378,7 +377,8 @@ static gcry_error_t hkdf_expand(int hashalgo, const uint8_t *prk, uint32_t prk_l
     return err;
   }
 
-  for(uint32_t offset = 0; offset < out_len; offset += hash_len) {
+  for(offset = 0; offset < out_len; offset += hash_len) {
+    uint8_t c;
     gcry_md_reset(h);
     gcry_md_setkey(h, prk, prk_len); /* Set PRK */
     if(offset > 0) {
@@ -386,7 +386,7 @@ static gcry_error_t hkdf_expand(int hashalgo, const uint8_t *prk, uint32_t prk_l
     }
     gcry_md_write(h, info, info_len);                   /* info */
 
-    uint8_t c = offset / hash_len + 1;
+    c = offset / hash_len + 1;
     gcry_md_write(h, &c, sizeof(c));                    /* constant 0x01..N */
 
     memcpy(lastoutput, gcry_md_read(h, hashalgo), hash_len);
@@ -438,6 +438,10 @@ static int tls13_hkdf_expand_label_context(int md, const StringInfo *secret,
   gcry_error_t err;
   const unsigned int label_prefix_length = (unsigned int)strlen(label_prefix);
   const unsigned label_length = (unsigned int)strlen(label);
+  uint32_t info_len = 0;
+  uint8_t *info_data = NULL;
+  uint16_t length;
+  uint8_t label_vector_length;
 #ifdef DEBUG_CRYPT
   char buferr[128];
 #endif
@@ -467,15 +471,15 @@ static int tls13_hkdf_expand_label_context(int md, const StringInfo *secret,
     g_byte_array_append(info, context_hash, context_length);
   }
 #else
-  uint32_t info_len = 0;
-  uint8_t *info_data = (uint8_t *)ndpi_malloc(1024);
+  info_len = 0;
+  info_data = (uint8_t *)ndpi_malloc(1024);
   if(!info_data)
     return 0;
-  const uint16_t length = htons(out_len);
+  length = htons(out_len);
   memcpy(&info_data[info_len], &length, sizeof(length));
   info_len += sizeof(length);
 
-  const uint8_t label_vector_length = label_prefix_length + label_length;
+  label_vector_length = label_prefix_length + label_length;
   memcpy(&info_data[info_len], &label_vector_length, 1);
   info_len += 1;
   memcpy(&info_data[info_len], (const uint8_t *)label_prefix, label_prefix_length);
@@ -689,18 +693,20 @@ static int quic_decrypt_header(const uint8_t *packet_payload,
 			       int hp_cipher_algo, uint8_t *first_byte, uint32_t *pn,
 			       int loss_bits_negotiated)
 {
+  gcry_cipher_hd_t h;
+  uint32_t pkn_len, pkt_pkn, i;
+  uint8_t sample[16],pkn_bytes[4], mask[5] = { 0 }, packet0;
+
   if(!hp_cipher->hp_cipher) {
     /* Need to know the cipher */
     return 0;
   }
-  gcry_cipher_hd_t h = hp_cipher->hp_cipher;
+  h = hp_cipher->hp_cipher;
 
   /* Sample is always 16 bytes and starts after PKN (assuming length 4).
      https://tools.ietf.org/html/draft-ietf-quic-tls-22#section-5.4.2 */
-  uint8_t sample[16];
   memcpy(sample, packet_payload + pn_offset + 4, 16);
 
-  uint8_t mask[5] = { 0 };
   switch (hp_cipher_algo) {
   case GCRY_CIPHER_AES128:
   case GCRY_CIPHER_AES256:
@@ -715,7 +721,7 @@ static int quic_decrypt_header(const uint8_t *packet_payload,
   }
 
   /* https://tools.ietf.org/html/draft-ietf-quic-tls-22#section-5.4.1 */
-  uint8_t packet0 = packet_payload[0];
+  packet0 = packet_payload[0];
   if((packet0 & 0x80) == 0x80) {
     /* Long header: 4 bits masked */
     packet0 ^= mask[0] & 0x0f;
@@ -729,13 +735,12 @@ static int quic_decrypt_header(const uint8_t *packet_payload,
       packet0 ^= mask[0] & 0x07;
     }
   }
-  uint32_t pkn_len = (packet0 & 0x03) + 1;
+  pkn_len = (packet0 & 0x03) + 1;
   /* printf("packet0 0x%x pkn_len %d\n", packet0, pkn_len); */
 
-  uint8_t pkn_bytes[4];
   memcpy(pkn_bytes, packet_payload + pn_offset, pkn_len);
-  uint32_t pkt_pkn = 0;
-  for(uint32_t i = 0; i < pkn_len; i++) {
+  pkt_pkn = 0;
+  for(i = 0; i < pkn_len; i++) {
     pkt_pkn |= (uint32_t)(pkn_bytes[i] ^ mask[1 + i]) << (8 * (pkn_len - 1 - i));
   }
   *first_byte = packet0;
@@ -760,7 +765,7 @@ static void quic_decrypt_message(quic_pp_cipher *pp_cipher, const uint8_t *packe
   uint8_t nonce[TLS13_AEAD_NONCE_LENGTH];
   uint8_t *buffer;
   uint8_t atag[16];
-  uint32_t buffer_length;
+  uint32_t buffer_length, i;
 #ifdef DEBUG_CRYPT
   char buferr[128];
 #endif
@@ -779,7 +784,7 @@ static void quic_decrypt_message(quic_pp_cipher *pp_cipher, const uint8_t *packe
   if(!header)
     return;
   header[0] = first_byte;
-  for(uint32_t i = 0; i < pkn_len; i++) {
+  for(i = 0; i < pkn_len; i++) {
     header[header_length - 1 - i] = (uint8_t)(packet_number >> (8 * i));
   }
 
@@ -1306,12 +1311,14 @@ static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_stru
       return NULL;
     }
 #ifdef HAVE_LIBGCRYPT
-    source_conn_id_len = packet->payload[6 + dest_conn_id_len];
+    {
     const u_int8_t *dest_conn_id = &packet->payload[6];
+    source_conn_id_len = packet->payload[6 + dest_conn_id_len];
     clear_payload = decrypt_initial_packet(ndpi_struct, flow,
 					   dest_conn_id, dest_conn_id_len,
 					   source_conn_id_len, version,
 					   clear_payload_len);
+    }
 #else
     clear_payload = NULL;
 #endif
@@ -1404,7 +1411,6 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
 
       NDPI_LOG_DBG2(ndpi_struct, "SNI: [%s]\n",
                     flow->host_server_name);
-
       ndpi_match_host_subprotocol(ndpi_struct, flow,
                                   flow->host_server_name,
                                   strlen(flow->host_server_name),
