@@ -1,7 +1,7 @@
 /*
  * reader_util.c
  *
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -72,7 +72,7 @@
 #include "reader_util.h"
 #include "ndpi_classify.h"
 
-extern u_int8_t enable_protocol_guess, enable_joy_stats, enable_payload_analyzer;
+extern u_int8_t enable_protocol_guess, enable_flow_stats, enable_payload_analyzer;
 extern u_int8_t verbose, human_readeable_string_len;
 extern u_int8_t max_num_udp_dissected_pkts /* 24 */, max_num_tcp_dissected_pkts /* 80 */;
 static u_int32_t flow_id = 0;
@@ -861,7 +861,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 #else
       ndpi_init_bin(&newflow->payload_len_bin, ndpi_bin_family8, PLEN_NUM_BINS);
 #endif
-      
+
       if(version == IPVERSION) {
 	inet_ntop(AF_INET, &newflow->src_ip, newflow->src_name, sizeof(newflow->src_name));
 	inet_ntop(AF_INET, &newflow->dst_ip, newflow->dst_name, sizeof(newflow->dst_name));
@@ -919,7 +919,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
 
       *src = newflow->src_id, *dst = newflow->dst_id;
 
-      if(enable_joy_stats) {
+      if(enable_flow_stats) {
         newflow->entropy = ndpi_calloc(1, sizeof(struct ndpi_entropy));
         newflow->last_entropy = ndpi_calloc(1, sizeof(struct ndpi_entropy));
         newflow->entropy->src2dst_pkt_len[newflow->entropy->src2dst_pkt_count] = l4_data_len;
@@ -959,7 +959,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
       else
 	*src = rflow->dst_id, *dst = rflow->src_id, *src_to_dst_direction = 0, rflow->bidirectional = 1;
     }
-    if(enable_joy_stats) {
+    if(enable_flow_stats) {
       if(src_to_dst_direction) {
         if(rflow->entropy->src2dst_pkt_count < max_num_packets_per_flow) {
           rflow->entropy->src2dst_pkt_len[rflow->entropy->src2dst_pkt_count] = l4_data_len;
@@ -1052,10 +1052,10 @@ void correct_csv_data_field(char* data) {
 
 /* ****************************************************** */
 
-u_int8_t plen2slot(u_int16_t plen) {  
-  /* 
+u_int8_t plen2slot(u_int16_t plen) {
+  /*
      Slots [32 bytes lenght]
-     0..31, 32..63 ... 
+     0..31, 32..63 ...
   */
 
   if(plen > PLEN_MAX)
@@ -1070,6 +1070,8 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
   u_int i, is_quic = 0;
 
   if(!flow->ndpi_flow) return;
+
+  flow->confidence = flow->ndpi_flow->confidence;
 
   snprintf(flow->host_server_name, sizeof(flow->host_server_name), "%s",
 	   flow->ndpi_flow->host_server_name);
@@ -1206,7 +1208,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
     }
 
     flow->ssh_tls.browser_heuristics = flow->ndpi_flow->protos.tls_quic.browser_heuristics;
-    
+
     if(flow->ndpi_flow->protos.tls_quic.alpn) {
       if((flow->ssh_tls.tls_alpn = ndpi_strdup(flow->ndpi_flow->protos.tls_quic.alpn)) != NULL)
 	correct_csv_data_field(flow->ssh_tls.tls_alpn);
@@ -1214,7 +1216,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 
     if(flow->ndpi_flow->protos.tls_quic.issuerDN)
       flow->ssh_tls.tls_issuerDN = strdup(flow->ndpi_flow->protos.tls_quic.issuerDN);
-    
+
     if(flow->ndpi_flow->protos.tls_quic.subjectDN)
       flow->ssh_tls.tls_subjectDN = strdup(flow->ndpi_flow->protos.tls_quic.subjectDN);
 
@@ -1222,7 +1224,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       flow->ssh_tls.encrypted_sni.esni = strdup(flow->ndpi_flow->protos.tls_quic.encrypted_sni.esni);
       flow->ssh_tls.encrypted_sni.cipher_suite = flow->ndpi_flow->protos.tls_quic.encrypted_sni.cipher_suite;
     }
-    
+
     if(flow->ssh_tls.tls_supported_versions) {
       if((flow->ssh_tls.tls_supported_versions = ndpi_strdup(flow->ndpi_flow->protos.tls_quic.tls_supported_versions)) != NULL)
 	correct_csv_data_field(flow->ssh_tls.tls_supported_versions);
@@ -1250,14 +1252,14 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 	snprintf(flow->info, sizeof(flow->info), "ALPN: %s",
 		 flow->ndpi_flow->protos.tls_quic.alpn);
     }
-        
+
     if(enable_doh_dot_detection) {
       /* For TLS we use TLS block lenght instead of payload lenght */
       ndpi_reset_bin(&flow->payload_len_bin);
-      
+
       for(i=0; i<flow->ndpi_flow->l4.tcp.tls.num_tls_blocks; i++) {
 	u_int16_t len = abs(flow->ndpi_flow->l4.tcp.tls.tls_application_blocks_len[i]);
-	
+
 	/* printf("[TLS_LEN] %u\n", len); */
 	ndpi_inc_bin(&flow->payload_len_bin, plen2slot(len), 1);
       }
@@ -1284,7 +1286,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
  */
 static void
 ndpi_clear_entropy_stats(struct ndpi_flow_info *flow) {
-  if(enable_joy_stats) {
+  if(enable_flow_stats) {
     if(flow->entropy->src2dst_pkt_count + flow->entropy->dst2src_pkt_count == max_num_packets_per_flow) {
       memcpy(flow->last_entropy, flow->entropy,  sizeof(struct ndpi_entropy));
       memset(flow->entropy, 0x00, sizeof(struct ndpi_entropy));
@@ -1364,7 +1366,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
   struct ndpi_proto nproto = NDPI_PROTOCOL_NULL;
 
   if(workflow->prefs.ignore_vlanid)
-    vlan_id = 0;  
+    vlan_id = 0;
 
   if(iph)
     flow = get_ndpi_flow_info(workflow, IPVERSION, vlan_id,
@@ -1438,7 +1440,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       if(payload_len && (flow->src2dst_packets < MAX_NUM_BIN_PKTS))
 	ndpi_inc_bin(&flow->payload_len_bin_src2dst, plen2slot(payload_len));
 #endif
-    } else {      
+    } else {
       if(flow->dst2src_last_pkt_time.tv_sec && (!begin_or_end_tcp)) {
 	ndpi_timer_sub(&when, &flow->dst2src_last_pkt_time, &tdiff);
 
@@ -1473,7 +1475,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 			    payload, payload_len,
 			    workflow->stats.ip_packet_count);
 
-    if(enable_joy_stats) {
+    if(enable_flow_stats) {
       /* Update BD, distribution and mean. */
       ndpi_flow_update_byte_count(flow, payload, payload_len, src_to_dst_direction);
       ndpi_flow_update_byte_dist_mean_var(flow, payload, payload_len, src_to_dst_direction);
@@ -1512,7 +1514,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       memset(&flow->dst2src_last_pkt_time, '\0', sizeof(flow->dst2src_last_pkt_time));
       memset(&flow->flow_last_pkt_time, '\0', sizeof(flow->flow_last_pkt_time));
     }
-    
+
     if((human_readeable_string_len != 0) && (!flow->has_human_readeable_strings)) {
       u_int8_t skip = 0;
 
@@ -1567,7 +1569,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     flow->detected_protocol = ndpi_detection_process_packet(workflow->ndpi_struct, ndpi_flow,
 							    iph ? (uint8_t *)iph : (uint8_t *)iph6,
 							    ipsize, time_ms, src, dst);
-    
+
     if(enough_packets || (flow->detected_protocol.app_protocol != NDPI_PROTOCOL_UNKNOWN)) {
       if((!enough_packets)
 	 && ndpi_extra_dissection_possible(workflow->ndpi_struct, ndpi_flow))
@@ -1638,9 +1640,9 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     }
   }
 #endif
-  
+
   *flow_risk = flow->risk;
-  
+
   return(flow->detected_protocol);
 }
 
@@ -1805,7 +1807,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   u_int8_t vlan_packet = 0;
 
   *flow_risk = 0 /* NDPI_NO_RISK */;
-  
+
   /* Increment raw packet counter */
   workflow->stats.raw_packet_count++;
 
@@ -2077,7 +2079,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   } else if(iph->version == 6) {
     if (h_caplen < ip_offset + sizeof(struct ndpi_ipv6hdr))
       return(nproto); /* Too short for IPv6 header*/
-    
+
     iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
     proto = iph6->ip6_hdr.ip6_un1_nxt;
     ip_len = ntohs(iph6->ip6_hdr.ip6_un1_plen);

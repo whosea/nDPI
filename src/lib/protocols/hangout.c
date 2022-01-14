@@ -1,7 +1,7 @@
 /*
  * hangout.c
  *
- * Copyright (C) 2012-21 - ntop.org
+ * Copyright (C) 2012-22 - ntop.org
  *
  * This module is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -114,7 +114,7 @@ void ndpi_search_hangout(struct ndpi_detection_module_struct *ndpi_struct,
       }
       
       ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_HANGOUT_DUO,
-				 NDPI_PROTOCOL_STUN);
+				 NDPI_PROTOCOL_STUN, NDPI_CONFIDENCE_DPI);
       return;
     }
   }

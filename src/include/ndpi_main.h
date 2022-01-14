@@ -1,7 +1,7 @@
 /*
  * ndpi_main.h
  *
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -82,7 +82,8 @@ extern "C" {
   void ndpi_set_detected_protocol(struct ndpi_detection_module_struct *ndpi_struct,
 				  struct ndpi_flow_struct *flow,
 				  u_int16_t upper_detected_protocol,
-				  u_int16_t lower_detected_protocol);
+				  u_int16_t lower_detected_protocol,
+				  ndpi_confidence_t confidence);
 
   extern void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_struct,
 					  struct ndpi_flow_struct *flow);
@@ -151,6 +152,8 @@ extern "C" {
 					 u_int8_t * nxt_hdr);
   void ndpi_set_risk(struct ndpi_detection_module_struct *ndpi_str,
 		     struct ndpi_flow_struct *flow, ndpi_risk_enum r);
+  int ndpi_isset_risk(struct ndpi_detection_module_struct *ndpi_str,
+		      struct ndpi_flow_struct *flow, ndpi_risk_enum r);
   int ndpi_is_printable_string(char * const str, size_t len);
 #define NDPI_ENTROPY_ENCRYPTED_OR_RANDOM(entropy) (entropy > 7.0f)
   float ndpi_entropy(u_int8_t const * const buf, size_t len);

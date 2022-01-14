@@ -2,7 +2,7 @@
  * bittorrent.c
  *
  * Copyright (C) 2009-11 - ipoque GmbH
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -966,7 +966,10 @@ static void ndpi_add_connection_as_bittorrent(
     ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
   } /* tcp */
 
-  if (packet->udp != NULL) {
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
+  
+  if(flow->protos.bittorrent.hash[0] == '\0') {
+    /* This is necessary to inform the core to call this dissector again */
     flow->check_extra_packets = 1;
     flow->max_extra_packets_to_check = 255;
     flow->extra_packets_func = ndpi_search_dht_again;
@@ -987,7 +990,7 @@ static void ndpi_add_connection_as_bittorrent(
   if(check_hash)
     ndpi_search_bittorrent_hash(ndpi_struct, flow, bt_offset);
 
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
 #ifndef __KERNEL__
 
   if(packet->udp) {
@@ -1348,7 +1351,7 @@ static void ndpi_int_search_bittorrent_tcp(struct ndpi_detection_module_struct *
   if(ndpi_search_bittorrent_tcp_old(ndpi_struct,flow)) {
     if(packet->payload_packet_len > 48)
             ndpi_search_bittorrent_hash(ndpi_struct, flow, -1);
-    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN);
+    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
     return;
   }
   if(packet->payload_packet_len == 0) {
@@ -1432,12 +1435,12 @@ static void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_str
   }
 #ifndef __KERNEL__
   NDPI_LOG_DBG2(ndpi_struct,
-	   "BT: BITTORRENT search packet %s len %d %d:%d tcp_retrans %d num_retries_bytes %d pac_cnt %d dir %d\n",
+	   "BT: BITTORRENT search packet %s len %d %d:%d tcp_retrans %d pac_cnt %d dir %d\n",
 	   packet->tcp ? "tcp" : ( packet->udp ? "udp" : "x"),
 	   packet->payload_packet_len,
 	   htons(packet->tcp ? packet->tcp->source: packet->udp ? packet->udp->source:0),
 	   htons(packet->tcp ? packet->tcp->dest: packet->udp ? packet->udp->dest:0),
-	   packet->tcp_retransmission,packet->num_retried_bytes,
+	   packet->tcp_retransmission,
 	   flow->packet_counter,packet->packet_direction);
   	   if(bt_parse_debug)
 		   dump_hex((u_int8_t *)packet->payload,packet->payload_packet_len,128);
@@ -1598,7 +1601,7 @@ static void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_str
 	if(ndpi_search_bittorrent_udp_old(ndpi_struct,flow))
 		ndpi_set_detected_protocol(ndpi_struct, flow,
 					 NDPI_PROTOCOL_BITTORRENT,
-					 NDPI_PROTOCOL_UNKNOWN);
+					 NDPI_PROTOCOL_UNKNOWN,NDPI_CONFIDENCE_DPI);
 	return;
       }
 

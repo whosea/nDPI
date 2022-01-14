@@ -330,6 +330,8 @@ typedef enum {
   NDPI_CLEAR_TEXT_CREDENTIALS,
   NDPI_DNS_LARGE_PACKET,
   NDPI_DNS_FRAGMENTED,
+  NDPI_INVALID_CHARACTERS,
+  NDPI_POSSIBLE_EXPLOIT,
 
   /* Leave this as last member */
   NDPI_MAX_RISK
@@ -685,14 +687,10 @@ struct ndpi_packet_struct {
   uint8_t http_num_headers; /* number of found (valid) header lines in HTTP request or response */
 
   uint16_t l3_packet_len;
-  uint16_t l4_packet_len;
   uint16_t payload_packet_len;
-  uint16_t actual_payload_len;
-  uint16_t num_retried_bytes;
   uint16_t parsed_lines;
   uint16_t empty_line_position;
   uint8_t tcp_retransmission;
-  uint8_t l4_protocol;
 
   uint8_t packet_lines_parsed_complete:1,
   packet_direction:1, empty_line_position_set:1, http_check_content:1, pad:4;

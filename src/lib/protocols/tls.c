@@ -1,7 +1,7 @@
 /*
  * tls.c - TLS/TLS/DTLS dissector
  *
- * Copyright (C) 2016-21 - ntop.org
+ * Copyright (C) 2016-22 - ntop.org
  *
  * nDPI is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -321,6 +321,7 @@ static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct
 
 	flow->detected_protocol_stack[0] = cached_proto,
 	flow->detected_protocol_stack[1] = NDPI_PROTOCOL_TLS;
+	ndpi_set_detected_protocol(ndpi_struct, flow, cached_proto, NDPI_PROTOCOL_TLS, NDPI_CONFIDENCE_DPI_CACHE);
 #ifndef __KERNEL__
 	{
 	  ndpi_protocol ret = NDPI_PROTOCOL_NULL;
@@ -495,7 +496,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
 	    if(flow->protos.tls_quic.notBefore > TLS_LIMIT_DATE)
 	      if((flow->protos.tls_quic.notAfter-flow->protos.tls_quic.notBefore) > TLS_THRESHOLD)
-		ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_CERT_VALIDITY_TOO_LONG); /* Certificate validity longer than 13 months*/
+		ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_CERT_VALIDITY_TOO_LONG); /* Certificate validity longer than 13 months */
 
 	    if((time_sec < flow->protos.tls_quic.notBefore)
 	       || (time_sec > flow->protos.tls_quic.notAfter))
@@ -661,9 +662,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 	u_int16_t proto_id = (u_int16_t)val;
 	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, proto_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED};
 
-	flow->detected_protocol_stack[0] = proto_id,
-	  flow->detected_protocol_stack[1] = NDPI_PROTOCOL_TLS;
-
+	ndpi_set_detected_protocol(ndpi_struct, flow, proto_id, NDPI_PROTOCOL_TLS, NDPI_CONFIDENCE_DPI);
 	flow->category = ndpi_get_proto_category(ndpi_struct, ret);
 	ndpi_check_subprotocol_risk(ndpi_struct, flow, proto_id);
 
@@ -680,8 +679,24 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
   }
 
   if(flow->protos.tls_quic.subjectDN && flow->protos.tls_quic.issuerDN
-     && (!strcmp(flow->protos.tls_quic.subjectDN, flow->protos.tls_quic.issuerDN)))
+     && (!strcmp(flow->protos.tls_quic.subjectDN, flow->protos.tls_quic.issuerDN))) {
+    /* Last resort: we check if this is a trusted issuerDN */
+    ndpi_list *head = ndpi_struct->trusted_issuer_dn;
+
+    while(head != NULL) {
+#if DEBUG_TLS
+      printf("TLS] %s() issuerDN %s / %s\n", __FUNCTION__,
+	     flow->protos.tls_quic.issuerDN, head->value);
+#endif
+      
+      if(strcmp(flow->protos.tls_quic.issuerDN, head->value) == 0)
+	return; /* This is a trusted DN */
+      else
+	head = head->next;
+    }
+    
     ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_SELFSIGNED_CERTIFICATE);
+  }
 
 #ifdef DEBUG_TLS
   printf("[TLS] %s() SubjectDN [%s]\n", __FUNCTION__, rdnSeqBuf);
@@ -880,7 +895,7 @@ static int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
 
 static void ndpi_looks_like_tls(struct ndpi_detection_module_struct *ndpi_struct,
 				struct ndpi_flow_struct *flow) {
-  // ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, NDPI_PROTOCOL_UNKNOWN);
+  // ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TLS, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 
   if(flow->guessed_protocol_id == NDPI_PROTOCOL_UNKNOWN)
     flow->guessed_protocol_id = NDPI_PROTOCOL_TLS;
@@ -1211,7 +1226,7 @@ static void ndpi_int_tls_add_connection(struct ndpi_detection_module_struct *ndp
   else
     protocol = ndpi_tls_refine_master_protocol(ndpi_struct, flow, protocol);
 
-  ndpi_set_detected_protocol(ndpi_struct, flow, protocol, protocol);
+  ndpi_set_detected_protocol(ndpi_struct, flow, protocol, protocol, NDPI_CONFIDENCE_DPI);
 
   tlsInitExtraPacketProcessing(ndpi_struct, flow);
 }
@@ -1755,6 +1770,14 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 	      checkExtensions(ndpi_struct, flow, is_dtls,
 			      extension_id, extension_len, offset + extension_offset);
 
+	      if(offset + 4 + extension_len > total_len) {
+#ifdef DEBUG_TLS
+	        printf("[TLS] extension length %u too long (%u, offset %u)\n",
+	               extension_len, total_len, offset);
+#endif
+	        break;
+	      }
+
 	      if((extension_id == 0) || (packet->payload[extn_off] != packet->payload[extn_off+1])) {
 		/* Skip GREASE */
 
@@ -1808,7 +1831,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		         /* Check if it ends in .com or .net */
 		         && ((strcmp(&sni[sni_len-4], ".com") == 0) || (strcmp(&sni[sni_len-4], ".net") == 0))
 		         && (strncmp(sni, "www.", 4) == 0)) /* Not starting with www.... */
-		        ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS);
+		        ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TOR, NDPI_PROTOCOL_TLS, NDPI_CONFIDENCE_DPI);
 		    } else {
 #ifdef DEBUG_TLS
 		      printf("[TLS] SNI: (NO DGA) [%s]\n", sni);
@@ -1994,7 +2017,7 @@ int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
 		printf("[SIGNATURE] [is_firefox_tls: %u][is_chrome_tls: %u][is_safari_tls: %u][duplicate_found: %u]\n",
 		       flow->protos.tls_quic.browser_heuristics.is_firefox_tls,
 		       flow->protos.tls_quic.browser_heuristics.is_chrome_tls,
-		       flow->protos..tls_quic.browser_heuristics.is_safari_tls,
+		       flow->protos.tls_quic.browser_heuristics.is_safari_tls,
 		       duplicate_found);
 #endif
 
