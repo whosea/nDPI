@@ -5,6 +5,7 @@ int nflow_proc_open(struct inode *inode, struct file *file);
 
 int nflow_proc_close(struct inode *inode, struct file *file);
 
+size_t ndpi_dump_opt(char *buf, size_t bufsize,const struct ndpi_flow_struct *flow);
 ssize_t ndpi_dump_acct_info(struct ndpi_net *n, struct nf_ct_ext_ndpi *ct);
 
 size_t ndpi_dump_lost_rec(char *buf,size_t bufsize,

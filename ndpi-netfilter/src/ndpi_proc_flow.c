@@ -43,6 +43,7 @@ size_t ndpi_dump_lost_rec(char *buf,size_t bufsize,
 	memset(buf,0,sizeof(struct flow_data_common));
 	c = (struct flow_data_common *)buf;
 	c->rec_type = 3;
+	c->extflag  = 1;
 	c->p[0] = cpi;
 	c->p[1] = cpo;
 	c->b[0] = cbi;
@@ -58,10 +59,59 @@ size_t ndpi_dump_start_rec(char *buf, size_t bufsize, time64_t tm)
 	memset(buf,0,8);
 	c = (struct flow_data_common *)buf;
 	c->rec_type = 1;
+	c->extflag  = 1;
 	c->time_start = (uint32_t)tm; // BUG AFTER YEAR 2105
 	return 8;
 }
 
+size_t ndpi_dump_opt(char *buf, size_t bufsize,const struct ndpi_flow_struct *flow)
+{
+	size_t l = 0,i,flag=0;
+	buf[0] = '\0';
+	for(i=0; i < NDPI_FLOW_OPT_MAX && ndpi_flow_opt[i]; i++) {
+	   switch(ndpi_flow_opt[i]) {
+		case 'S':
+			if(!(flag & 1) && flow->protos.tls_quic.ja3_server[0]) {
+			    l += snprintf(&buf[l],bufsize-1-l,"%sS=%s",buf[0]?" ":"",
+					  flow->protos.tls_quic.ja3_server);
+			    flag |= 1;
+			}
+			break;
+		case 'C':
+			if(!(flag & 2) && flow->protos.tls_quic.ja3_client[0]) {
+			    l += snprintf(&buf[l],bufsize-1-l,"%sC=%s",buf[0]?" ":"",
+					  flow->protos.tls_quic.ja3_client);
+			    flag |= 2;
+			}
+			break;
+		case 'F':
+			if(!(flag & 4) && flow->l4.tcp.tls.fingerprint_set) {
+			    uint32_t * sha1 = (uint32_t *)flow->protos.tls_quic.sha1_certificate_fingerprint;
+			    l += snprintf(&buf[l],bufsize-1-l,"%sF=%08x%08x%08x%08x%08x",buf[0]?" ":"",
+					  sha1[0],sha1[1],sha1[2],sha1[3],sha1[4]);
+			    flag |= 4;
+			}
+			break;
+		case 'V':
+			if(!(flag & 8) && flow->protos.tls_quic.ssl_version) {
+			    char buf_ver[18];
+			    u_int8_t known_tls = 0;
+			    char *r = ndpi_ssl_version2str(buf_ver, sizeof(buf_ver)-1,
+						    flow->protos.tls_quic.ssl_version, &known_tls);
+			    //if(known_tls) {
+				for(;*r;r++) if(*r == ' ') *r = '_';
+				l += snprintf(&buf[l],bufsize-1-l,"%sV=%s",buf[0]?" ":"",buf_ver);
+			    //}
+			    flag |= 8;
+			}
+			break;
+		default:
+			i=NDPI_FLOW_OPT_MAX;
+	   }
+	}
+	buf[l] = '\0';
+	return l;
+}
 ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 		char *buf, size_t buflen, struct nf_ct_ext_ndpi *ct)
 {
@@ -69,14 +119,19 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 	struct flow_data *d;
 	struct flow_info *i;
 	ssize_t ret_len;
-	int c_len,h_len;
+	int o_len,h_len;
 
 	ret_len = v6 ? flow_data_v6_size : flow_data_v4_size;
-	c_len = ct->ssl ? strlen(ct->ssl):0;
 	h_len = ct->host ? strlen(ct->host):0;
-	if(c_len > 255) c_len = 255;
-	if(h_len > 255) h_len = 255;
-	ret_len += c_len + h_len;
+	o_len = ct->flow_opt ? strlen(ct->flow_opt):0;
+	if(h_len != 0 && o_len != 0)
+		o_len++; // Add space before opttions
+
+	if(o_len + h_len > NF_STR_OPTLEN) { /* FIXME */
+		if(h_len > 255) h_len = 255;
+		if(o_len > 255) o_len = NF_STR_OPTLEN - h_len;
+	}
+	ret_len += o_len + h_len;
 
 	if(buflen < ret_len) return 0;
 
@@ -87,9 +142,15 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 
 	c->rec_type	= 2;
 	c->family	= v6 != 0;
+	c->extflag      = 1;
 	c->proto	= ct->l4_proto;
-	c->cert_len	= c_len;
-	c->host_len	= h_len;
+	if( o_len > 255 || h_len > 255) {
+	  c->opt_len	= o_len+h_len-255;
+	  c->host_len	= 255;
+	} else {
+	  c->opt_len	= o_len;
+	  c->host_len	= h_len;
+	}
 	c->time_start	= i->time_start;
 	if((n->acc_read_mode & 0x3) != 2) {
 		c->p[0]		= i->p[0]-i->p[2];
@@ -126,14 +187,16 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 		a->sport = i->sport;
 		a->dport = i->dport;
 	}
-	if(c_len + h_len) {
+	if(o_len + h_len) {
 		char *s = (char *)c + (v6 ? flow_data_v6_size : flow_data_v4_size);
-		if(c_len) {
-			memcpy(s,ct->ssl,c_len);
-			s += c_len;
-		}
-		if(h_len)
+		if(h_len) {
 			memcpy(s,ct->host,h_len);
+			s += h_len;
+			if(o_len)
+			   *s++ = ' ';
+		}
+		if(o_len)
+			memcpy(s,ct->flow_opt,o_len);
 	}
 	n->str_buf_len = ret_len; 
 	return ret_len;
@@ -143,7 +206,7 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 		struct nf_ct_ext_ndpi *ct) {
 	const char *t_proto;
-	ssize_t l = 0,sl = 0;
+	ssize_t l = 0;
 	char *buf = n->str_buf;
 	size_t buflen = NF_STR_LBUF-1;
 	int is_ipv6 = test_ipv6(ct);
@@ -218,17 +281,23 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 	    t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.master_protocol);
 	    l += snprintf(&buf[l],buflen-l,",%s",t_proto);
 	}
-	if(ct->ssl) {
-	    sl = strlen(ct->ssl);
-	    if(sl > 250) sl = 250;
-	    if(l + sl + 6 < buflen)
-		l += snprintf(&buf[l],buflen-l," C=%.250s",ct->ssl);
-	}
-	if(ct->host) {
-	    sl = strlen(ct->host);
-	    if(sl > 250) sl = 250;
-	    if(l + sl + 6 < buflen)
-		l += snprintf(&buf[l],buflen-l," H=%.250s",ct->host);
+	{
+	  int sl_host = 0; 
+	  int sl_opt = 0; 
+	  if(ct->host) {
+	    sl_host = strlen(ct->host);
+	    if(sl_host > 250) sl_host = 250;
+	    if(l + sl_host + 6 > buflen)
+		   sl_host = buflen - 6 - l;
+	    l += snprintf(&buf[l],buflen-l," H=%.*s",sl_host,ct->host);
+	  }
+	  if(ct->flow_opt) {
+	    sl_opt = strlen(ct->flow_opt);
+	    if(sl_opt + sl_host > NF_STR_OPTLEN ) sl_opt = NF_STR_OPTLEN - 4 - sl_host;
+	    if(l + sl_opt + 6 > buflen)
+		   sl_opt = buflen - 6 - l;
+	    l += snprintf(&buf[l],buflen-l," %.*s",sl_opt,ct->flow_opt);
+	  }
 	}
 	buf[l++] = '\n';
 	buf[l] = 0;

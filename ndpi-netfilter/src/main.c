@@ -260,6 +260,9 @@ static ndpi_protocol_nf proto_null = NDPI_PROTOCOL_NULL;
 
 unsigned long int ndpi_flow_limit=10000000; // 4.3Gb
 unsigned long int ndpi_enable_flow=0;
+
+char ndpi_flow_opt[NDPI_FLOW_OPT_MAX+1]="";
+
 unsigned long int ndpi_log_debug=0;
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
 static unsigned long  ndpi_lib_trace=0;
@@ -343,6 +346,9 @@ MODULE_PARM_DESC(bt_hash_timeout,"The expiration time for inactive records in BT
 
 module_param_named(ndpi_enable_flow, ndpi_enable_flow, ulong, 0400);
 MODULE_PARM_DESC(ndpi_enable_flow,"Enable netflow info");
+
+module_param_string(ndpi_flow_opt, ndpi_flow_opt, NDPI_FLOW_OPT_MAX , 0600);
+MODULE_PARM_DESC(ndpi_enable_flow,"Enable flow info option. 'S' - JA3S, 'C' - JA3C, 'F' - tls fingerprint sha1");
 
 module_param_named(ndpi_stun_cache,ndpi_stun_cache_opt,ulong,0600);
 MODULE_PARM_DESC(ndpi_stun_cache,"STUN cache control (0-1). Disabled by default.");
@@ -756,9 +762,9 @@ static inline void __ndpi_free_ct_proto(struct nf_ct_ext_ndpi *ct_ndpi) {
                 kfree(ct_ndpi->host);
                 ct_ndpi->host = NULL;
         }
-        if(ct_ndpi->ssl) {
-                kfree(ct_ndpi->ssl);
-                ct_ndpi->ssl = NULL;
+        if(ct_ndpi->flow_opt) {
+                kfree(ct_ndpi->flow_opt);
+                ct_ndpi->flow_opt = NULL;
         }
 }
 static void
@@ -1123,27 +1129,42 @@ static inline int can_handle(const struct sk_buff *skb,uint8_t *l4_proto)
 	COUNTER(ndpi_p_non_tcpudp);
 	return 1;
 }
+static u_int8_t is_ndpi_proto(struct nf_ct_ext_ndpi *ct_ndpi, u_int16_t id) {
+    return ct_ndpi->proto.master_protocol == id
+           || ct_ndpi->proto.app_protocol == id ? 1:0;
+}
 
-static void ndpi_host_ssl(struct nf_ct_ext_ndpi *ct_ndpi) {
+static void ndpi_host_info(struct nf_ct_ext_ndpi *ct_ndpi) {
 
+    const struct ndpi_flow_struct *flow;
     if(ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_UNKNOWN &&
 	ct_ndpi->proto.master_protocol == NDPI_PROTOCOL_UNKNOWN ) return;
-    if(!ct_ndpi->flow) return;
+    flow = ct_ndpi->flow;
+    if(!flow) return;
 
     if(!ct_ndpi->host) {
-	const char *name = ct_ndpi->flow->host_server_name;
-	if(*name)
+	const char *name = flow->host_server_name;
+	if(*name) {
 		ct_ndpi->host = kstrndup(name, 
-				sizeof(ct_ndpi->flow->host_server_name)-1, GFP_ATOMIC);
+				sizeof(flow->host_server_name)-1, GFP_ATOMIC);
+
+		if(ndpi_log_debug > 2)
+		    pr_info("%s: hostname %s\n", __func__,name);
+	}
     }
 
-    if(!ct_ndpi->ssl && (
-		ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_TLS ||
-		ct_ndpi->proto.master_protocol == NDPI_PROTOCOL_TLS)) {
-    	const char *name_s = ct_ndpi->flow->protos.tls_quic.server_names;
-	const size_t s_len = ct_ndpi->flow->protos.tls_quic.server_names_len;
-	if(name_s && s_len > 0) {
-		ct_ndpi->ssl = kstrndup(name_s, s_len, GFP_ATOMIC);
+    if(!ndpi_enable_flow ) return;
+    if(ct_ndpi->flow_opt) return;
+    if(!flow->l4.tcp.tls.certificate_processed) return;
+    if( is_ndpi_proto(ct_ndpi,NDPI_PROTOCOL_TLS) || 
+	 is_ndpi_proto(ct_ndpi,NDPI_PROTOCOL_QUIC)) {
+	char buf[512];
+	size_t l = ndpi_dump_opt(buf,sizeof(buf),flow);
+
+	if(l != 0) {
+		ct_ndpi->flow_opt = kstrndup(buf, l+1, GFP_ATOMIC);
+		if(ndpi_log_debug > 2)
+		    pr_info("%s: tls info %s\n", __func__,buf);
 	}
     }
 }
@@ -1154,7 +1175,7 @@ bool res = false;
 
 if(!info->hostname[0]) return true;
 
-ndpi_host_ssl(ct_ndpi);
+ndpi_host_info(ct_ndpi);
 
 do {
   if(info->host) {
@@ -1164,22 +1185,12 @@ do {
 		if(res) break;
 	}
   }
-
-  if(info->ssl && ( ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_TLS ||
-		    ct_ndpi->proto.master_protocol == NDPI_PROTOCOL_TLS )) {
-	if(ct_ndpi->ssl) {
-		res = info->re ? ndpi_regexec(info->reg_data,ct_ndpi->ssl) != 0 :
-			strstr(ct_ndpi->ssl,info->hostname) != NULL;
-		if(res) break;
-	}
-  }
 } while(0);
 
 if(ndpi_log_debug > 2)
-    pr_info("%s: match%s %s %s '%s' %s,%s %d\n", __func__,
-	info->re ? "-re":"", info->host ? "host":"", info->ssl ? "ssl":"",
-	info->hostname,ct_ndpi->host ? ct_ndpi->host:"-",
-	ct_ndpi->ssl ? ct_ndpi->ssl:"-",res);
+    pr_info("%s: match%s %s '%s' %s %d\n", __func__,
+	info->re ? "-re":"", info->host ? "host":"",
+	info->hostname,ct_ndpi->host ? ct_ndpi->host:"-",res);
 
 return res;
 }
@@ -1456,7 +1467,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			proto = ct_ndpi->proto;
 			c_proto->proto = pack_proto(proto);
 			if(test_flow_yes(ct_ndpi))
-				ndpi_host_ssl(ct_ndpi);
+				ndpi_host_info(ct_ndpi);
 			atomic_inc(&n->protocols_cnt[proto.app_protocol]);
 			if(proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
 			   proto.master_protocol != proto.app_protocol)

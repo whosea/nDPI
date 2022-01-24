@@ -68,8 +68,14 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define NDPI_OPT_PROTOCOL (EXT_OPT_BASE+5)
 #define NDPI_OPT_HMASTER  (EXT_OPT_BASE+6)
 #define NDPI_OPT_HOST     (EXT_OPT_BASE+7)
-#define NDPI_OPT_SSL      (EXT_OPT_BASE+8)
-#define NDPI_OPT_ANYNAME  (EXT_OPT_BASE+9)
+
+#define FLAGS_ALL 0x1
+#define FLAGS_ERR 0x2
+#define FLAGS_HMASTER 0x4
+#define FLAGS_MASTER 0x8
+#define FLAGS_PROTOCOL 0x10
+#define FLAGS_HOST 0x20
+
 
 static void ndpi_mt_init(struct xt_entry_match *match)
 {
@@ -111,9 +117,7 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 		printf("--match-proto");
 
 	if(info->hostname[0]) {
-		char *p = info->host && info->ssl ? "host-or-cert" :
-			(info->ssl ? "cert" : "host");
-		printf(" --%s %s",p,info->hostname);
+		printf(" --host %s",info->hostname);
 	}
 	if(!c) return;
 	if( c == 1) {
@@ -170,9 +174,7 @@ ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
 	if(!info->m_proto && info->p_proto)
 		printf(" match-proto");
 	if(info->hostname[0]) {
-		char *p = info->host && info->ssl ? "host or cert" :
-			(info->ssl ? "cert" : "host");
-		printf(" %s %s",p,info->hostname);
+		printf(" host %s",info->hostname);
 	}
 	if(!c) return;
 
@@ -211,26 +213,26 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 
 	if(c == NDPI_OPT_ERROR) {
 		info->error = 1;
-        	*flags |= 2;
+        	*flags |= FLAGS_ERR;
 		return true;
 	}
 	if(c == NDPI_OPT_HMASTER ) {
 		info->have_master = 1;
-        	*flags |= 4;
+        	*flags |= FLAGS_HMASTER;
 		return true;
 	}
 	if(c == NDPI_OPT_MASTER) {
 		info->m_proto = 1;
-        	*flags |= 8;
+        	*flags |= FLAGS_MASTER;
 		return true;
 	}
 	if(c == NDPI_OPT_PROTOCOL) {
 		info->p_proto = 1;
-        	*flags |= 0x10;
+        	*flags |= FLAGS_PROTOCOL;
 		return true;
 	}
 
-	if(c == NDPI_OPT_HOST || c == NDPI_OPT_SSL || c == NDPI_OPT_ANYNAME) {
+	if(c == NDPI_OPT_HOST) {
 		char *s;
 		int re_len = strlen(optarg);
 
@@ -244,26 +246,16 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 			return false;
 		}
 		if(info->hostname[0]) {
-			printf("Error: Double --cert or --host\n");
+			printf("Error: Double --host\n");
 			return false;
 		}
 		strncpy(info->hostname,optarg,sizeof(info->hostname)-1);
 
 		for(s = &info->hostname[0]; *s; s++) *s = tolower(*s);
 
-		if(c == NDPI_OPT_HOST) {
-			info->host = 1;
-			*flags |= 0x20;
-		}
-		if(c == NDPI_OPT_SSL) {
-			info->ssl = 1;
-			*flags |= 0x40;
-		}
-		if(c == NDPI_OPT_ANYNAME) {
-			info->ssl = 1;
-			info->host = 1;
-			*flags |= 0x60;
-		}
+		info->host = 1;
+		*flags |= FLAGS_HOST;
+
 		if(info->hostname[0] == '/') {
 			char re_buf[sizeof(info->hostname)];
 			regexp *pattern;
@@ -342,7 +334,7 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 	    	    if(prot_short_str[i] && strncmp(prot_short_str[i],"badproto_",9) && !prot_disabled[i])
 			NDPI_ADD_PROTOCOL_TO_BITMASK(info->flags,i);
 		}
-        	*flags |= 1;
+        	*flags |= FLAGS_ALL;
 		return true;
 	}
 	if(c > NDPI_OPT_ALL) {
@@ -351,7 +343,7 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 	}
 	if(c >= 0 && c < NDPI_NUM_BITS) {
         	NDPI_ADD_PROTOCOL_TO_BITMASK(info->flags, c);
-		*flags |= 1;
+		*flags |= FLAGS_ALL;
 		return true;
 	}
 	return false;
@@ -367,21 +359,21 @@ ndpi_mt_check (unsigned int flags)
 	if (!flags)
 		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: missing options.");
 	
-	if (flags & 2) {
-	   if (flags != 2)
+	if (flags & FLAGS_ERR) {
+	   if (flags != FLAGS_ERR)
 		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--error' with other options");
 	    else
 		return;
 	}
-	if (flags & 4) {
-	   if(flags & 0x19)
+	if (flags & FLAGS_HMASTER) {
+	   if(flags & (FLAGS_ALL | FLAGS_MASTER | FLAGS_PROTOCOL))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master' with options match-master,match-proto,proto");
 	      else
 		 return;
 	}
 
-	if (flags & 0x18) {
-	    if(!(flags & 0x1))
+	if (flags & (FLAGS_PROTOCOL|FLAGS_MASTER)) {
+	    if(!(flags & FLAGS_ALL))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
 	}
 }
@@ -446,9 +438,7 @@ ndpi_mt_help(void)
 		"  --have-master      Match if master protocol detected\n"
 		"  --match-master     Match master protocol only\n"
 		"  --match-proto      Match protocol only\n"
-		"  --host  str        Match server host name\n"
-		"  --cert  str        Match SSL server certificate name\n"
-		"  --host-or-cert str Match host name or SSL server certificate name\n"
+		"  --host str         Match server host name\n"
 		"                     Use /str/ for regexp match.\n"
 		"Special protocol names:\n"
 		"  --all              Match any known protocol\n"
@@ -775,17 +765,6 @@ void _init(void)
 	ndpi_mt_opts[i].val = i;
 	i=NDPI_OPT_HOST;
 	ndpi_mt_opts[i].name = "host";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_SSL;
-	ndpi_mt_opts[i].name = "cert";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i++;
-	i=NDPI_OPT_ANYNAME;
-	ndpi_mt_opts[i].name = "host-or-cert";
 	ndpi_mt_opts[i].flag = NULL;
 	ndpi_mt_opts[i].has_arg = 1;
 	ndpi_mt_opts[i].val = i;

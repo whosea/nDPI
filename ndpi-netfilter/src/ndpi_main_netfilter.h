@@ -34,7 +34,8 @@ struct write_proc_cmd {
 
 struct nf_ct_ext_ndpi;
 
-#define NF_STR_LBUF (sizeof(struct flow_data) + 2*256)
+#define NF_STR_OPTLEN (2*255)
+#define NF_STR_LBUF (sizeof(struct flow_data) + NF_STR_OPTLEN)
 
 struct ndpi_net {
         struct		timer_list gc;
@@ -182,7 +183,7 @@ struct nf_ct_ext_ndpi {
 	struct ndpi_flow_struct	*flow;		// 4/8
 	struct ndpi_id_struct   *src,*dst;	// 8/16
 	char			*host;		// 4/8 bytes
-	char			*ssl;		// 4/8 bytes
+	char			*flow_opt;	// 4/8 bytes
 	ndpi_protocol_nf	proto;		// 4 bytes
 	spinlock_t		lock;		// 2/4 bytes
 						// ?/56 bytes with debug spinlock
