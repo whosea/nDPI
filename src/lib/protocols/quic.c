@@ -31,6 +31,9 @@
 #ifndef __KERNEL__
  #ifdef HAVE_LIBGCRYPT
  #include <gcrypt.h>
+ #else
+ #define HAVE_LIBGCRYPT 1
+ #include <gcrypt_light.h>
  #endif
 #else
  #define HAVE_LIBGCRYPT 1

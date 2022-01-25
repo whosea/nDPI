@@ -24,6 +24,37 @@
 #undef MBEDTLS_SELF_TEST
 /****************************/
 
+#if !defined(BYTE_ORDER)
+#error BYTE_ORDER not defined
+#endif
+
+#if !defined(__LITTLE_ENDIAN) && !defined(__BIG_ENDIAN)
+#error __LITTLE_ENDIAN and __BIG_ENDIAN not defined
+#endif
+
+#if BYTE_ORDER != __LITTLE_ENDIAN && BYTE_ORDER != __BIG_ENDIAN
+#error unknown endian
+#endif
+
+#if BYTE_ORDER == __LITTLE_ENDIAN
+
+#define GET_UINT32_LE(n,b,i)  (n) = *(uint32_t *) (&(b)[(i)]);
+#define PUT_UINT32_LE(n,b,i)  *(uint32_t *) (&(b)[(i)]) = (n);
+
+#define GET_UINT32_BE(n,b,i)  (n) = htonl(*(uint32_t *) (&(b)[(i)]));
+#define PUT_UINT32_BE(n,b,i)  *(uint32_t *) (&(b)[(i)]) = htonl(n);
+
+#else /* __LITTLE_ENDIAN */
+
+#define GET_UINT32_LE(n,b,i)  (n) = htonl(*(uint32_t *) (&(b)[(i)]));
+#define PUT_UINT32_LE(n,b,i)  *(uint32_t *) (&(b)[(i)]) = htonl(n);
+
+#define GET_UINT32_BE(n,b,i)  (n) = *(uint32_t *) (&(b)[(i)]);
+#define PUT_UINT32_BE(n,b,i)  *(uint32_t *) (&(b)[(i)]) = (n);
+
+#endif /* __LITTLE_ENDIAN */
+
+
 #include "gcrypt_light.h"
 
 #include "gcrypt/aes.c"

@@ -23,9 +23,6 @@
  *  This file is part of mbed TLS (https://tls.mbed.org)
  */
 
-//#include "crypto/crypto_config.h"
-//#include <stdlib.h>
-
 #if defined(MBEDTLS_CIPHER_C)
 
 #include "gcrypt/cipher_internal.h"
@@ -37,9 +34,6 @@
 #if defined(MBEDTLS_GCM_C)
 #include "gcrypt/gcm.h"
 #endif
-
-//static mbedtls_gcm_context gcm_ctx;
-//static mbedtls_aes_context aes_ctx;
 
 #if defined(MBEDTLS_GCM_C)
 /* shared by all GCM ciphers */

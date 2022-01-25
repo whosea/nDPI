@@ -23,12 +23,7 @@
  *  This file is part of mbed TLS (https://tls.mbed.org)
  */
 
-//#include "gcrypt/crypto_config.h"
-
 #if defined(MBEDTLS_CIPHER_C)
-
-//#include <stdio.h>
-//#include <string.h>
 
 #include "gcrypt/cipher.h"
 #include "gcrypt/cipher_internal.h"
@@ -140,17 +135,6 @@ int mbedtls_cipher_setup( mbedtls_cipher_context_t *ctx, const mbedtls_cipher_in
     }
 
     ctx->cipher_info = cipher_info;
-
-#if defined(MBEDTLS_CIPHER_MODE_WITH_PADDING)
-    /*
-     * Ignore possible errors caused by a cipher mode that doesn't use padding
-     */
-#if defined(MBEDTLS_CIPHER_PADDING_PKCS7)
-    (void) mbedtls_cipher_set_padding_mode( ctx, MBEDTLS_PADDING_PKCS7 );
-#else
-    (void) mbedtls_cipher_set_padding_mode( ctx, MBEDTLS_PADDING_NONE );
-#endif
-#endif /* MBEDTLS_CIPHER_MODE_WITH_PADDING */
 
     return( 0 );
 }
@@ -420,178 +404,6 @@ int mbedtls_cipher_update( mbedtls_cipher_context_t *ctx, const unsigned char *i
     return( MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE );
 }
 
-#if defined(MBEDTLS_CIPHER_MODE_WITH_PADDING)
-#if defined(MBEDTLS_CIPHER_PADDING_PKCS7)
-/*
- * PKCS7 (and PKCS5) padding: fill with ll bytes, with ll = padding_len
- */
-static void add_pkcs_padding( unsigned char *output, size_t output_len,
-        size_t data_len )
-{
-    size_t padding_len = output_len - data_len;
-    unsigned char i;
-
-    for( i = 0; i < padding_len; i++ )
-        output[data_len + i] = (unsigned char) padding_len;
-}
-
-static int get_pkcs_padding( unsigned char *input, size_t input_len,
-        size_t *data_len )
-{
-    size_t i, pad_idx;
-    unsigned char padding_len, bad = 0;
-
-    if( NULL == input || NULL == data_len )
-        return( MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA );
-
-    padding_len = input[input_len - 1];
-    *data_len = input_len - padding_len;
-
-    /* Avoid logical || since it results in a branch */
-    bad |= padding_len > input_len;
-    bad |= padding_len == 0;
-
-    /* The number of bytes checked must be independent of padding_len,
-     * so pick input_len, which is usually 8 or 16 (one block) */
-    pad_idx = input_len - padding_len;
-    for( i = 0; i < input_len; i++ )
-        bad |= ( input[i] ^ padding_len ) * ( i >= pad_idx );
-
-    return( MBEDTLS_ERR_CIPHER_INVALID_PADDING * ( bad != 0 ) );
-}
-#endif /* MBEDTLS_CIPHER_PADDING_PKCS7 */
-
-#if defined(MBEDTLS_CIPHER_PADDING_ONE_AND_ZEROS)
-/*
- * One and zeros padding: fill with 80 00 ... 00
- */
-static void add_one_and_zeros_padding( unsigned char *output,
-                                       size_t output_len, size_t data_len )
-{
-    size_t padding_len = output_len - data_len;
-    unsigned char i = 0;
-
-    output[data_len] = 0x80;
-    for( i = 1; i < padding_len; i++ )
-        output[data_len + i] = 0x00;
-}
-
-static int get_one_and_zeros_padding( unsigned char *input, size_t input_len,
-                                      size_t *data_len )
-{
-    size_t i;
-    unsigned char done = 0, prev_done, bad;
-
-    if( NULL == input || NULL == data_len )
-        return( MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA );
-
-    bad = 0xFF;
-    *data_len = 0;
-    for( i = input_len; i > 0; i-- )
-    {
-        prev_done = done;
-        done |= ( input[i-1] != 0 );
-        *data_len |= ( i - 1 ) * ( done != prev_done );
-        bad &= ( input[i-1] ^ 0x80 ) | ( done == prev_done );
-    }
-
-    return( MBEDTLS_ERR_CIPHER_INVALID_PADDING * ( bad != 0 ) );
-
-}
-#endif /* MBEDTLS_CIPHER_PADDING_ONE_AND_ZEROS */
-
-#if defined(MBEDTLS_CIPHER_PADDING_ZEROS_AND_LEN)
-/*
- * Zeros and len padding: fill with 00 ... 00 ll, where ll is padding length
- */
-static void add_zeros_and_len_padding( unsigned char *output,
-                                       size_t output_len, size_t data_len )
-{
-    size_t padding_len = output_len - data_len;
-    unsigned char i = 0;
-
-    for( i = 1; i < padding_len; i++ )
-        output[data_len + i - 1] = 0x00;
-    output[output_len - 1] = (unsigned char) padding_len;
-}
-
-static int get_zeros_and_len_padding( unsigned char *input, size_t input_len,
-                                      size_t *data_len )
-{
-    size_t i, pad_idx;
-    unsigned char padding_len, bad = 0;
-
-    if( NULL == input || NULL == data_len )
-        return( MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA );
-
-    padding_len = input[input_len - 1];
-    *data_len = input_len - padding_len;
-
-    /* Avoid logical || since it results in a branch */
-    bad |= padding_len > input_len;
-    bad |= padding_len == 0;
-
-    /* The number of bytes checked must be independent of padding_len */
-    pad_idx = input_len - padding_len;
-    for( i = 0; i < input_len - 1; i++ )
-        bad |= input[i] * ( i >= pad_idx );
-
-    return( MBEDTLS_ERR_CIPHER_INVALID_PADDING * ( bad != 0 ) );
-}
-#endif /* MBEDTLS_CIPHER_PADDING_ZEROS_AND_LEN */
-
-#if defined(MBEDTLS_CIPHER_PADDING_ZEROS)
-/*
- * Zero padding: fill with 00 ... 00
- */
-static void add_zeros_padding( unsigned char *output,
-                               size_t output_len, size_t data_len )
-{
-    size_t i;
-
-    for( i = data_len; i < output_len; i++ )
-        output[i] = 0x00;
-}
-
-static int get_zeros_padding( unsigned char *input, size_t input_len,
-                              size_t *data_len )
-{
-    size_t i;
-    unsigned char done = 0, prev_done;
-
-    if( NULL == input || NULL == data_len )
-        return( MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA );
-
-    *data_len = 0;
-    for( i = input_len; i > 0; i-- )
-    {
-        prev_done = done;
-        done |= ( input[i-1] != 0 );
-        *data_len |= i * ( done != prev_done );
-    }
-
-    return( 0 );
-}
-#endif /* MBEDTLS_CIPHER_PADDING_ZEROS */
-
-/*
- * No padding: don't pad :)
- *
- * There is no add_padding function (check for NULL in mbedtls_cipher_finish)
- * but a trivial get_padding function
- */
-static int get_no_padding( unsigned char *input, size_t input_len,
-                              size_t *data_len )
-{
-    if( NULL == input || NULL == data_len )
-        return( MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA );
-
-    *data_len = input_len;
-
-    return( 0 );
-}
-#endif /* MBEDTLS_CIPHER_MODE_WITH_PADDING */
-
 int mbedtls_cipher_finish( mbedtls_cipher_context_t *ctx,
                    unsigned char *output, size_t *olen )
 {
@@ -670,54 +482,6 @@ int mbedtls_cipher_finish( mbedtls_cipher_context_t *ctx,
 
     return( MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE );
 }
-
-#if defined(MBEDTLS_CIPHER_MODE_WITH_PADDING)
-int mbedtls_cipher_set_padding_mode( mbedtls_cipher_context_t *ctx, mbedtls_cipher_padding_t mode )
-{
-    if( NULL == ctx ||
-        MBEDTLS_MODE_CBC != ctx->cipher_info->mode )
-    {
-        return( MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA );
-    }
-
-    switch( mode )
-    {
-#if defined(MBEDTLS_CIPHER_PADDING_PKCS7)
-    case MBEDTLS_PADDING_PKCS7:
-        ctx->add_padding = add_pkcs_padding;
-        ctx->get_padding = get_pkcs_padding;
-        break;
-#endif
-#if defined(MBEDTLS_CIPHER_PADDING_ONE_AND_ZEROS)
-    case MBEDTLS_PADDING_ONE_AND_ZEROS:
-        ctx->add_padding = add_one_and_zeros_padding;
-        ctx->get_padding = get_one_and_zeros_padding;
-        break;
-#endif
-#if defined(MBEDTLS_CIPHER_PADDING_ZEROS_AND_LEN)
-    case MBEDTLS_PADDING_ZEROS_AND_LEN:
-        ctx->add_padding = add_zeros_and_len_padding;
-        ctx->get_padding = get_zeros_and_len_padding;
-        break;
-#endif
-#if defined(MBEDTLS_CIPHER_PADDING_ZEROS)
-    case MBEDTLS_PADDING_ZEROS:
-        ctx->add_padding = add_zeros_padding;
-        ctx->get_padding = get_zeros_padding;
-        break;
-#endif
-    case MBEDTLS_PADDING_NONE:
-        ctx->add_padding = NULL;
-        ctx->get_padding = get_no_padding;
-        break;
-
-    default:
-        return( MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE );
-    }
-
-    return( 0 );
-}
-#endif /* MBEDTLS_CIPHER_MODE_WITH_PADDING */
 
 #if defined(MBEDTLS_GCM_C)
 int mbedtls_cipher_write_tag( mbedtls_cipher_context_t *ctx,
