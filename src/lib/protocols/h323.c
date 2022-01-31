@@ -46,7 +46,7 @@ void ndpi_search_h323(struct ndpi_detection_module_struct *ndpi_struct, struct n
     NDPI_LOG_DBG2(ndpi_struct, "calculated dport over tcp\n");
 
     /* H323  */
-    if(packet->payload_packet_len > 4
+    if(packet->payload_packet_len > 5
        && (packet->payload[0] == 0x03)
        && (packet->payload[1] == 0x00)) {
       struct tpkt *t = (struct tpkt*)packet->payload;
@@ -94,7 +94,7 @@ void ndpi_search_h323(struct ndpi_detection_module_struct *ndpi_struct, struct n
       }
     /* H323  */
     if(sport == 1719 || dport == 1719) {
-      if((packet->payload_packet_len >= 5)
+      if((packet->payload_packet_len > 5)
 	 && (packet->payload[0] == 0x16)
 	 && (packet->payload[1] == 0x80)
 	 && (packet->payload[4] == 0x06)
@@ -122,7 +122,7 @@ void init_h323_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_int
   ndpi_set_bitmask_protocol_detection("H323", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_H323,
 				      ndpi_search_h323,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITH_PAYLOAD,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_OR_UDP_WITH_PAYLOAD,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

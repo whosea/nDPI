@@ -499,10 +499,13 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 	      if((flow->protos.tls_quic.notAfter-flow->protos.tls_quic.notBefore) > TLS_THRESHOLD)
 		ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_CERT_VALIDITY_TOO_LONG); /* Certificate validity longer than 13 months */
 
-	    if((time_sec < flow->protos.tls_quic.notBefore)
-	       || (time_sec > flow->protos.tls_quic.notAfter))
+	    if((time_sec < flow->protos.tls_quic.notBefore) || (time_sec > flow->protos.tls_quic.notAfter))
 	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_CERTIFICATE_EXPIRED); /* Certificate expired */
+	    else if((time_sec > flow->protos.tls_quic.notBefore)
+		    && (time_sec > (flow->protos.tls_quic.notAfter - (ndpi_struct->tls_certificate_expire_in_x_days * 86400))))
+	      ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE); /* Certificate almost expired */
 #endif // __KERNEL__
+
 	  }
 	}
       }
@@ -597,7 +600,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 		      if(label != NULL) {
 		        char * first_dot = strchr(flow->host_server_name, '.');
 
-			if(first_dot == NULL || first_dot >= label) {
+			if((first_dot == NULL) || (first_dot <= label)) {
                           matched_name = 1;
 			}
                       }
@@ -1011,7 +1014,7 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
     } else if(len > 5 /* Minimum block size */) {
       /* Process element as a whole */
       if(content_type == 0x17 /* Application Data */) {
-	u_int32_t block_len   = ntohs((flow->l4.tcp.tls.message.buffer[3] << 16) + (flow->l4.tcp.tls.message.buffer[4] << 8));
+	u_int32_t block_len   = (flow->l4.tcp.tls.message.buffer[3] << 8) + (flow->l4.tcp.tls.message.buffer[4]);
 
 	/* Let's do a quick check to make sure this really looks like TLS */
 	if(block_len < 16384 /* Max TLS block size */)
@@ -1632,7 +1635,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 	  u_int16_t cipher_id = ntohs(*id);
 
 	  if(cipher_offset+i+1 < packet->payload_packet_len &&
-	     packet->payload[cipher_offset+i] != packet->payload[cipher_offset+i+1] /* Skip Grease */) {
+	     ((packet->payload[cipher_offset+i] != packet->payload[cipher_offset+i+1]) ||
+		((packet->payload[cipher_offset+i] & 0xF) != 0xA)) /* Skip Grease */) {
 	    /*
 	      Skip GREASE [https://tools.ietf.org/id/draft-ietf-tls-grease-01.html]
 	      https://engineering.salesforce.com/tls-fingerprinting-with-ja3-and-ja3s-247362855967
@@ -1778,7 +1782,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 	        break;
 	      }
 
-	      if((extension_id == 0) || (packet->payload[extn_off] != packet->payload[extn_off+1])) {
+	      if((extension_id == 0) || (packet->payload[extn_off] != packet->payload[extn_off+1]) ||
+		((packet->payload[extn_off] & 0xF) != 0xA)) {
 		/* Skip GREASE */
 
 		if(ja3->client.num_tls_extension < MAX_NUM_JA3)
@@ -1859,7 +1864,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 #ifdef DEBUG_TLS
 		    printf("Client TLS [EllipticCurve: %u/0x%04X]\n", s_group, s_group);
 #endif
-		    if((s_group == 0) || (packet->payload[s_offset+i] != packet->payload[s_offset+i+1])) {
+		    if((s_group == 0) || (packet->payload[s_offset+i] != packet->payload[s_offset+i+1]) 
+			|| ((packet->payload[s_offset+i] & 0xF) != 0xA)) {
 		      /* Skip GREASE */
 		      if(ja3->client.num_elliptic_curve < MAX_NUM_JA3)
 			ja3->client.elliptic_curve[ja3->client.num_elliptic_curve++] = s_group;
@@ -1906,7 +1912,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 		  printf("Client TLS Invalid len %u vs %u\n", s_offset+extension_len, total_len);
 #endif
 		}
-	      } else if(extension_id == 13 /* signature algorithms */) {
+	      } else if(extension_id == 13 /* signature algorithms */ &&
+	                offset+extension_offset+1 < total_len) {
 		int s_offset = offset+extension_offset, safari_signature_algorithms = 0, chrome_signature_algorithms = 0,
 		  duplicate_found = 0, last_signature = 0;
 		u_int16_t tot_signature_algorithms_len = ntohs(*((u_int16_t*)&packet->payload[s_offset]));
@@ -2082,7 +2089,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 		for(i=0; ja3->client.alpn[i] != '\0'; i++)
 		  if(ja3->client.alpn[i] == ',') ja3->client.alpn[i] = '-';
 
-	      } else if(extension_id == 43 /* supported versions */) {
+	      } else if(extension_id == 43 /* supported versions */ &&
+	                offset+extension_offset < total_len) {
 		u_int16_t s_offset = offset+extension_offset;
 		u_int8_t version_len = packet->payload[s_offset];
 		char version_str[256];
@@ -2135,7 +2143,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 		  if(flow->protos.tls_quic.tls_supported_versions == NULL)
 		    flow->protos.tls_quic.tls_supported_versions = ndpi_strdup(version_str);
 		}
-	      } else if(extension_id == 65486 /* encrypted server name */) {
+	      } else if(extension_id == 65486 /* encrypted server name */ &&
+	                offset+extension_offset+1 < total_len) {
 		/*
 		   - https://tools.ietf.org/html/draft-ietf-tls-esni-06
 		   - https://blog.cloudflare.com/encrypted-sni/
@@ -2179,11 +2188,11 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 			    int rc = sprintf(&flow->protos.tls_quic.encrypted_sni.esni[off], "%02X", packet->payload[i] & 0XFF);
 
 			    if(rc <= 0) {
-			      flow->protos.tls_quic.encrypted_sni.esni[off] = '\0';
 			      break;
 			    } else
 			      off += rc;
 			  }
+			  flow->protos.tls_quic.encrypted_sni.esni[off] = '\0';
 			}
 		      }
 		    }

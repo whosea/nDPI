@@ -912,13 +912,13 @@ static void parseOptions(int argc, char **argv) {
       if(nDPI_LogLevel > NDPI_LOG_DEBUG_EXTRA) {
 	nDPI_LogLevel = NDPI_LOG_DEBUG_EXTRA;
 	ndpi_free(_debug_protocols);
-	_debug_protocols = strdup("all");
+	_debug_protocols = ndpi_strdup("all");
       }
       break;
 
     case 'u':
       ndpi_free(_debug_protocols);
-      _debug_protocols = strdup(optarg);
+      _debug_protocols = ndpi_strdup(optarg);
       break;
 
     case 'h':
@@ -957,7 +957,7 @@ static void parseOptions(int argc, char **argv) {
       break;
 
     case 'w':
-      results_path = strdup(optarg);
+      results_path = ndpi_strdup(optarg);
       if((results_file = fopen(results_path, "w")) == NULL) {
 	printf("Unable to write in file %s: quitting\n", results_path);
 	return;
@@ -993,7 +993,7 @@ static void parseOptions(int argc, char **argv) {
 #endif
 
     case '7':
-      extcap_capture_fifo = strdup(optarg);
+      extcap_capture_fifo = ndpi_strdup(optarg);
       break;
 
     case '9':
@@ -2961,7 +2961,7 @@ static void printResults(u_int64_t processing_time_usec, u_int64_t setup_time_us
   if(!quiet_mode) {
     printf("\nnDPI Memory statistics:\n");
     printf("\tnDPI Memory (once):      %-13s\n", formatBytes(ndpi_get_ndpi_detection_module_size(), buf, sizeof(buf)));
-    printf("\tFlow Memory (per flow):  %-13s\n", formatBytes( ndpi_detection_get_sizeof_ndpi_flow_struct() + 2*ndpi_detection_get_sizeof_ndpi_id_struct(), buf, sizeof(buf)));
+    printf("\tFlow Memory (per flow):  %-13s\n", formatBytes( ndpi_detection_get_sizeof_ndpi_flow_struct(), buf, sizeof(buf)));
     printf("\tActual Memory:           %-13s\n", formatBytes(current_ndpi_memory, buf, sizeof(buf)));
     printf("\tPeak Memory:             %-13s\n", formatBytes(max_ndpi_memory, buf, sizeof(buf)));
     printf("\tSetup Time:              %lu msec\n", (unsigned long)(setup_time_usec/1000));
@@ -3814,8 +3814,8 @@ void automataUnitTest() {
   void *automa = ndpi_init_automa();
 
   assert(automa);
-  assert(ndpi_add_string_to_automa(automa, "hello") == 0);
-  assert(ndpi_add_string_to_automa(automa, "world") == 0);
+  assert(ndpi_add_string_to_automa(automa, ndpi_strdup("hello")) == 0);
+  assert(ndpi_add_string_to_automa(automa, ndpi_strdup("world")) == 0);
   ndpi_finalize_automa(automa);
   assert(ndpi_match_string(automa, "This is the wonderful world of nDPI") == 1);
   ndpi_free_automa(automa);
@@ -4255,7 +4255,7 @@ void desUnitTest() {
 
     if(trace) {
       printf("%2u)\t%12.3f\t%.3f\t%12.3f\t%12.3f\t %s [%.3f]\n", i, v[i], prediction, lower, upper,
-	     ((rc == 0) || ((v[i] >= lower) && (v[i] <= upper))) ? "OK" : "ANOMALY",
+	     (rc == 0) ? "LEARNING" : (((v[i] >= lower) && (v[i] <= upper)) ? "OK" : "ANOMALY"),
 	     confidence_band);
 
       if(fd)

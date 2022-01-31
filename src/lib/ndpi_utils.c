@@ -1119,6 +1119,10 @@ void ndpi_serialize_risk(ndpi_serializer *serializer,
 {
   u_int32_t i;
 
+  if (risk == NDPI_NO_RISK) {
+    return;
+  }
+
   ndpi_serialize_start_of_block(serializer, "flow_risk");
   for(i = 0; i < NDPI_MAX_RISK; i++) {
     ndpi_risk_enum r = (ndpi_risk_enum)i;
@@ -1732,28 +1736,28 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
 
   switch(risk) {
   case NDPI_URL_POSSIBLE_XSS:
-    return("XSS attack");
+    return("XSS Attack");
 
   case NDPI_URL_POSSIBLE_SQL_INJECTION:
-    return("SQL injection");
+    return("SQL Injection");
 
   case NDPI_URL_POSSIBLE_RCE_INJECTION:
-    return("RCE injection");
+    return("RCE Injection");
 
   case NDPI_BINARY_APPLICATION_TRANSFER:
-    return("Binary application transfer");
+    return("Binary Application Transfer");
 
   case NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT:
-    return("Known protocol on non standard port");
+    return("Known Protocol on Non Standard Port");
 
   case NDPI_TLS_SELFSIGNED_CERTIFICATE:
     return("Self-signed Certificate");
 
   case NDPI_TLS_OBSOLETE_VERSION:
-    return("Obsolete TLS version (older than 1.2)");
+    return("Obsolete TLS Version (1.1 or older)");
 
   case NDPI_TLS_WEAK_CIPHER:
-    return("Weak TLS cipher");
+    return("Weak TLS Cipher");
 
   case NDPI_TLS_CERTIFICATE_EXPIRED:
     return("TLS Expired Certificate");
@@ -1774,13 +1778,13 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("HTTP Suspicious Header");
 
   case NDPI_TLS_NOT_CARRYING_HTTPS:
-    return("TLS (probably) not carrying HTTPS");
+    return("TLS (probably) Not Carrying HTTPS");
 
   case NDPI_SUSPICIOUS_DGA_DOMAIN:
-    return("Suspicious DGA domain name");
+    return("Suspicious DGA Domain name");
 
   case NDPI_MALFORMED_PACKET:
-    return("Malformed packet");
+    return("Malformed Packet");
 
   case NDPI_SSH_OBSOLETE_CLIENT_VERSION_OR_CIPHER:
     return("SSH Obsolete Client Version/Cipher");
@@ -1798,19 +1802,19 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("Unsafe Protocol");
 
   case NDPI_DNS_SUSPICIOUS_TRAFFIC:
-    return("Suspicious DNS traffic"); /* Exfiltration ? */
+    return("Suspicious DNS Traffic"); /* Exfiltration ? */
 
   case NDPI_TLS_MISSING_SNI:
-    return("SNI TLS extension was missing");
+    return("Missing SNI TLS Extension");
 
   case NDPI_HTTP_SUSPICIOUS_CONTENT:
-    return("HTTP suspicious content");
+    return("HTTP Suspicious Content");
 
   case NDPI_RISKY_ASN:
     return("Risky ASN");
 
   case NDPI_RISKY_DOMAIN:
-    return("Risky domain name");
+    return("Risky Domain Name");
 
   case NDPI_MALICIOUS_JA3:
     return("Possibly Malicious JA3 Fingerprint");
@@ -1825,31 +1829,35 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("Uncommon TLS ALPN");
 
   case NDPI_TLS_CERT_VALIDITY_TOO_LONG:
-    return("TLS certificate validity longer than 13 months");
+    return("TLS Certificate Validity Too Long");
 
   case NDPI_TLS_SUSPICIOUS_EXTENSION:
-    return("TLS suspicious extension");
+    return("TLS Suspicious Extension");
 
   case NDPI_TLS_FATAL_ALERT:
-    return("TLS fatal alert");
+    return("TLS Fatal Alert");
 
   case NDPI_SUSPICIOUS_ENTROPY:
-    return("Suspicious entropy");
+    return("Suspicious Entropy");
       
   case NDPI_CLEAR_TEXT_CREDENTIALS:
-    return("Clear-text credentials");
+    return("Clear-Text Credentials");
     
   case NDPI_DNS_LARGE_PACKET:
-    return("DNS packet larger than 512 bytes");
+    return("DNS Packet Larger Than 512 bytes");
     
   case NDPI_DNS_FRAGMENTED:
-    return("Fragmented DNS message");
+    return("Fragmented DNS Message");
 
   case NDPI_INVALID_CHARACTERS:
-    return("Text contains non-printable characters");
+    return("Text Contains Non-Printable Characters");
 
   case NDPI_POSSIBLE_EXPLOIT:
-    return("Possible exploit detected");
+    return("Possible Exploit Detected");
+    break;
+    
+  case NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE:
+    return("TLS Certificate About To Expire");
     break;
     
   default:
@@ -2274,6 +2282,9 @@ void load_common_alpns(struct ndpi_detection_module_struct *ndpi_str) {
     "h3-fb-05", "h1q-fb",
     "doq-i00",
 
+    /* ApplePush */
+    "apns-security-v3", "apns-pack-v1",
+
     NULL /* end */
   };
   u_int i;
@@ -2320,7 +2331,6 @@ u_int8_t ndpi_is_valid_protoId(u_int16_t protoId) {
 
 u_int8_t ndpi_is_encrypted_proto(struct ndpi_detection_module_struct *ndpi_str,
 				 ndpi_protocol proto) {
-
   if(proto.master_protocol == NDPI_PROTOCOL_UNKNOWN && ndpi_is_valid_protoId(proto.app_protocol)) {
     return(!ndpi_str->proto_defaults[proto.app_protocol].isClearTextProto);
   } else if(ndpi_is_valid_protoId(proto.master_protocol) && ndpi_is_valid_protoId(proto.app_protocol)) {
@@ -2334,3 +2344,9 @@ u_int8_t ndpi_is_encrypted_proto(struct ndpi_detection_module_struct *ndpi_str,
     return(0);
 }
 
+/* ******************************************* */
+
+void ndpi_set_tls_cert_expire_days(struct ndpi_detection_module_struct *ndpi_str,
+				   u_int8_t num_days) {
+  ndpi_str->tls_certificate_expire_in_x_days = num_days;
+}

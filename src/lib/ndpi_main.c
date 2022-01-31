@@ -138,6 +138,7 @@ static ndpi_risk_info ndpi_known_risks[] = {
   { NDPI_DNS_FRAGMENTED,                        NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   { NDPI_INVALID_CHARACTERS,                    NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_POSSIBLE_EXPLOIT,                      NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
+  { NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE,       NDPI_RISK_MEDIUM, CLIENT_LOW_RISK_PERCENTAGE  },
 
   /* Leave this as last member */
   { NDPI_MAX_RISK,                              NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }
@@ -168,15 +169,31 @@ static inline uint8_t flow_is_proto(struct ndpi_flow_struct *flow, u_int16_t p) 
 
 /* ****************************************** */
 
-void* ndpi_malloc(size_t size) { return(_ndpi_malloc ? _ndpi_malloc(size) :
-#ifndef __KERNEL__
-		malloc(size)
-#else
-		NULL
-#endif
-		); 
+static u_int32_t ndpi_tot_allocated_memory;
+
+/* ****************************************** */
+
+u_int32_t ndpi_get_tot_allocated_memory() {
+  return(__sync_fetch_and_add(&ndpi_tot_allocated_memory, 0));
 }
-void* ndpi_flow_malloc(size_t size) { 
+
+/* ****************************************** */
+
+void *ndpi_malloc(size_t size) {
+  void *ret = _ndpi_malloc ? _ndpi_malloc(size) :
+#ifndef __KERNEL__
+		malloc(size);
+#else
+		NULL;
+#endif
+  if(ret)
+    __sync_fetch_and_add(&ndpi_tot_allocated_memory, size);
+  return(ret);
+}
+
+/* ****************************************** */
+
+void *ndpi_flow_malloc(size_t size) {
   return(_ndpi_flow_malloc ? _ndpi_flow_malloc(size) : ndpi_malloc(size));
 }
 
@@ -186,8 +203,10 @@ void *ndpi_calloc(unsigned long count, size_t size) {
   size_t len = count * size;
   void *p = ndpi_malloc(len);
 
-  if(p)
+  if(p) {
     memset(p, 0, len);
+    __sync_fetch_and_add(&ndpi_tot_allocated_memory, size);
+  }
 
   return(p);
 }
@@ -221,7 +240,7 @@ void *ndpi_realloc(void *ptr, size_t old_size, size_t new_size) {
     return(ret);
   else {
     if(ptr != NULL) {
-      memcpy(ret, ptr, old_size);
+      memcpy(ret, ptr, (old_size < new_size ? old_size : new_size));
       ndpi_free(ptr);
     }
     return(ret);
@@ -260,12 +279,6 @@ struct ndpi_ptree
 
 u_int32_t ndpi_detection_get_sizeof_ndpi_flow_struct(void) {
   return(sizeof(struct ndpi_flow_struct));
-}
-
-/* *********************************************************************************** */
-
-u_int32_t ndpi_detection_get_sizeof_ndpi_id_struct(void) {
-  return(sizeof(struct ndpi_id_struct));
 }
 
 /* *********************************************************************************** */
@@ -824,6 +837,8 @@ unsigned int i,j,c;
   }
 }
 
+/* ******************************************************************** */
+
 static void init_string_based_protocols(struct ndpi_detection_module_struct *ndpi_str) {
   int i;
 
@@ -1245,8 +1260,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "OCSP", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_PS_VUE,
-			  "PS_VUE", NDPI_PROTOCOL_CATEGORY_VIDEO,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE_64,
+			  "FREE_64", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_UNSAFE, NDPI_PROTOCOL_IRC,
@@ -2486,7 +2501,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   ndpi_str->tcp_max_retransmission_window_size = NDPI_DEFAULT_MAX_TCP_RETRANSMISSION_WINDOW_SIZE;
   ndpi_str->directconnect_connection_ip_tick_timeout =
     NDPI_DIRECTCONNECT_CONNECTION_IP_TICK_TIMEOUT * ndpi_str->ticks_per_second;
-
+  ndpi_str->tls_certificate_expire_in_x_days = 30; /* NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE flow risk */
   ndpi_str->irc_timeout = NDPI_IRC_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->gnutella_timeout = NDPI_GNUTELLA_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->jabber_stun_timeout = NDPI_JABBER_STUN_TIMEOUT * ndpi_str->ticks_per_second;
@@ -2586,8 +2601,46 @@ void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str) {
   return ac_automa_list;
 }
 
+/*
+  This function adds some exceptions for popular domain names
+  in order to avoid "false" positives and avoid polluting
+  results
+*/
+static void ndpi_add_domain_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str) {
+  const char *domains[] = {
+    ".local",
+    ".msftconnecttest.com",
+    "amupdatedl.microsoft.com",
+    "update.microsoft.com.akadns.net",
+    ".windowsupdate.com",
+    ".ras.microsoft.com",
+    "e5.sk",
+    "sophosxl.net",
+    NULL /* End */
+  };
+  const ndpi_risk risks_to_mask[] = {
+    NDPI_SUSPICIOUS_DGA_DOMAIN,
+    NDPI_BINARY_APPLICATION_TRANSFER,
+    NDPI_HTTP_NUMERIC_IP_HOST,
+    NDPI_MALICIOUS_JA3,
+    NDPI_NO_RISK /* End */
+  };
+  u_int i;
+  ndpi_risk mask = ((ndpi_risk)-1);
+
+  for(i=0; risks_to_mask[i] != NDPI_NO_RISK; i++)
+    mask &= ~(1ULL << risks_to_mask[i]);
+
+  for(i=0; domains[i] != NULL; i++)
+    ndpi_add_host_risk_mask(ndpi_str, (char*)domains[i], mask);
+}
+
+/* *********************************************** */
+
 void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str) {
   u_int i;
+
+  ndpi_add_domain_risk_exceptions(ndpi_str);
 
   if(ndpi_str->ac_automa_finalized) return;
 
@@ -2862,6 +2915,9 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_str) {
 
     if(ndpi_str->bittorrent_cache)
       ndpi_lru_free_cache(ndpi_str->bittorrent_cache);
+
+    if(ndpi_str->zoom_cache)
+      ndpi_lru_free_cache(ndpi_str->zoom_cache);
 
     if(ndpi_str->stun_cache)
       ndpi_lru_free_cache(ndpi_str->stun_cache);
@@ -5051,7 +5107,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
       if(ndpi_str->msteams_cache)
 	ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
-			      flow->saddr,
+			      htonl(flow->saddr),
 			      flow->last_packet_time & 0xFFFF /* 16 bit */);
     }
     break;
@@ -5063,7 +5119,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
        && ndpi_str->msteams_cache) {
       u_int16_t when;
 
-      if(ndpi_lru_find_cache(ndpi_str->msteams_cache, flow->saddr,
+      if(ndpi_lru_find_cache(ndpi_str->msteams_cache, ntohl(flow->saddr),
 			     &when, 0 /* Don't remove it as it can be used for other connections */)) {
 	u_int16_t tdiff = (flow->last_packet_time & 0xFFFF) - when;
 
@@ -5073,7 +5129,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 
 	  /* Refresh cache */
 	  ndpi_lru_add_to_cache(ndpi_str->msteams_cache,
-				flow->saddr,
+				htonl(flow->saddr),
 				flow->last_packet_time & 0xFFFF /* 16 bit */);
 	}
       }
@@ -5109,6 +5165,7 @@ static void ndpi_reconcile_protocols(struct ndpi_detection_module_struct *ndpi_s
 u_int32_t ndpi_bittorrent_hash_funct(u_int32_t ip, u_int16_t port) {
   return(ip + 3 * port);
 }
+
 
 /* ********************************************************************************* */
 
@@ -5161,14 +5218,50 @@ int ndpi_search_into_bittorrent_cache(struct ndpi_detection_module_struct *ndpi_
 
 /* ********************************************************************************* */
 
+/* #define ZOOM_CACHE_DEBUG */
+
+static u_int8_t ndpi_search_into_zoom_cache(struct ndpi_detection_module_struct *ndpi_struct,
+					    u_int32_t daddr /* Network byte order */) {
+  
+#ifdef ZOOM_CACHE_DEBUG
+  printf("[%s:%u] ndpi_search_into_zoom_cache(%08X, %u)\n",
+	 __FILE__, __LINE__, daddr, dport);
+#endif
+
+  if(ndpi_struct->zoom_cache) {
+    u_int16_t cached_proto;
+    u_int8_t found = ndpi_lru_find_cache(ndpi_struct->zoom_cache, daddr, &cached_proto,
+					 0 /* Don't remove it as it can be used for other connections */);
+    
+#ifdef ZOOM_CACHE_DEBUG
+    printf("[Zoom] *** [TCP] SEARCHING host %u [found: %u]\n", daddr, found);
+#endif
+    
+    return(found);
+  }
+
+  return(0);
+}
+
+/* ********************************************************************************* */
+
+static void ndpi_add_connection_as_zoom(struct ndpi_detection_module_struct *ndpi_struct,
+					u_int32_t daddr /* Network byte order */) {
+  if(ndpi_struct->zoom_cache == NULL)
+    ndpi_struct->zoom_cache = ndpi_lru_cache_init(512);
+  
+  if(ndpi_struct->zoom_cache)
+    ndpi_lru_add_to_cache(ndpi_struct->zoom_cache, daddr, NDPI_PROTOCOL_ZOOM);
+}
+
+/* ********************************************************************************* */
+
 ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
 				    u_int8_t enable_guess, u_int8_t *protocol_was_guessed) {
   ndpi_protocol ret = NDPI_PROTOCOL_NULL;
   u_int16_t guessed_protocol_id = NDPI_PROTOCOL_UNKNOWN, guessed_host_protocol_id = NDPI_PROTOCOL_UNKNOWN;
-
-  /*
-   *** We can't access ndpi_str->packet from this function!! ***
-   */
+  
+  /* *** We can't access ndpi_str->packet from this function!! *** */
 
   *protocol_was_guessed = 0;
 
@@ -5316,6 +5409,14 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
 					 flow->daddr, flow->dport)) {
       /* This looks like BitTorrent */
       ret.app_protocol = NDPI_PROTOCOL_BITTORRENT;
+      flow->confidence = NDPI_CONFIDENCE_DPI_CACHE;
+    } else if((flow->l4_proto == IPPROTO_UDP) /* Zoom/UDP used for video */
+	      && (((ntohs(flow->sport) == 8801 /* Zoom port */) && ndpi_search_into_zoom_cache(ndpi_str, flow->saddr))
+		  || ((ntohs(flow->dport) == 8801 /* Zoom port */) && ndpi_search_into_zoom_cache(ndpi_str, flow->daddr))
+		  )) {
+      /* This looks like Zoom */
+      ret.app_protocol = NDPI_PROTOCOL_ZOOM;
+      flow->confidence = NDPI_CONFIDENCE_DPI_CACHE;
     }
   }
 
@@ -5332,7 +5433,7 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
 
 void ndpi_process_extra_packet(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
 			       const unsigned char *packet_data, const unsigned short packetlen,
-			       const u_int64_t current_time_ms, struct ndpi_id_struct *src, struct ndpi_id_struct *dst) {
+			       const u_int64_t current_time_ms) {
   if(flow == NULL)
     return;
 
@@ -5344,9 +5445,6 @@ void ndpi_process_extra_packet(struct ndpi_detection_module_struct *ndpi_str, st
   /* set up the packet headers for the extra packet function to use if it wants */
   if(ndpi_init_packet(ndpi_str, flow, current_time_ms, packet_data, packetlen) != 0)
     return;
-
-  /* detect traffic for tcp or udp only */
-  flow->src = src, flow->dst = dst;
 
   ndpi_connection_tracking(ndpi_str, flow);
 
@@ -5700,8 +5798,7 @@ static int ndpi_do_guess(struct ndpi_detection_module_struct *ndpi_str, struct n
 
 ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct *ndpi_str,
 					    struct ndpi_flow_struct *flow, const unsigned char *packet_data,
-					    const unsigned short packetlen, const u_int64_t current_time_ms,
-					    struct ndpi_id_struct *src, struct ndpi_id_struct *dst) {
+					    const unsigned short packetlen, const u_int64_t current_time_ms) {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   NDPI_SELECTION_BITMASK_PROTOCOL_SIZE ndpi_selection_packet;
   u_int32_t num_calls = 0;
@@ -5737,7 +5834,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     ret.app_protocol = flow->detected_protocol_stack[0];
 
   if(flow->check_extra_packets) {
-    ndpi_process_extra_packet(ndpi_str, flow, packet_data, packetlen, current_time_ms, src, dst);
+    ndpi_process_extra_packet(ndpi_str, flow, packet_data, packetlen, current_time_ms);
     /* Update in case of new match */
     ret.master_protocol = flow->detected_protocol_stack[1];
     ret.app_protocol = flow->detected_protocol_stack[0];
@@ -5753,9 +5850,6 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 
   if(ndpi_init_packet(ndpi_str, flow, current_time_ms, packet_data, packetlen) != 0)
     return ret;
-
-  /* detect traffic for tcp or udp only */
-  flow->src = src, flow->dst = dst;
 
   ndpi_connection_tracking(ndpi_str, flow);
 
@@ -5826,12 +5920,15 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     ret = ndpi_detection_giveup(ndpi_str, flow, 0, &protocol_was_guessed);
   }
 
-  if((ret.master_protocol == NDPI_PROTOCOL_UNKNOWN) && (ret.app_protocol != NDPI_PROTOCOL_UNKNOWN) &&
-     (flow->guessed_host_protocol_id != NDPI_PROTOCOL_UNKNOWN)) {
-    ret.master_protocol = ret.app_protocol;
-    ret.app_protocol = flow->guessed_host_protocol_id;
-  }
-
+#if 0
+  /* See https://github.com/ntop/nDPI/pull/1425 */
+    if((ret.master_protocol == NDPI_PROTOCOL_UNKNOWN) && (ret.app_protocol != NDPI_PROTOCOL_UNKNOWN) &&
+       (flow->guessed_host_protocol_id != NDPI_PROTOCOL_UNKNOWN)) {
+      ret.master_protocol = ret.app_protocol;
+      ret.app_protocol = flow->guessed_host_protocol_id;
+    }
+#endif
+    
   if((!flow->risk_checked)
      && ((ret.master_protocol != NDPI_PROTOCOL_UNKNOWN) || (ret.app_protocol != NDPI_PROTOCOL_UNKNOWN))
      ) {
@@ -5910,6 +6007,12 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
   if(num_calls == 0)
     flow->fail_with_unknown = 1;
 
+  /* Zoom cache */
+  if((ret.app_protocol == NDPI_PROTOCOL_ZOOM)
+     && (flow->l4_proto == IPPROTO_TCP)
+     && (packet->iph != NULL))
+    ndpi_add_connection_as_zoom(ndpi_str, packet->iph->daddr);
+				
   return(ret);
 }
 
@@ -6491,23 +6594,7 @@ u_int8_t ndpi_detection_get_l4(const u_int8_t *l3, u_int16_t l3_len, const u_int
 void ndpi_set_detected_protocol(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
 				u_int16_t upper_detected_protocol, u_int16_t lower_detected_protocol,
 				ndpi_confidence_t confidence) {
-  struct ndpi_id_struct *src = flow->src, *dst = flow->dst;
-
   ndpi_int_change_protocol(ndpi_str, flow, upper_detected_protocol, lower_detected_protocol, confidence);
-
-  if(src != NULL) {
-    NDPI_ADD_PROTOCOL_TO_BITMASK(src->detected_protocol_bitmask, upper_detected_protocol);
-
-    if(lower_detected_protocol != NDPI_PROTOCOL_UNKNOWN)
-      NDPI_ADD_PROTOCOL_TO_BITMASK(src->detected_protocol_bitmask, lower_detected_protocol);
-  }
-
-  if(dst != NULL) {
-    NDPI_ADD_PROTOCOL_TO_BITMASK(dst->detected_protocol_bitmask, upper_detected_protocol);
-
-    if(lower_detected_protocol != NDPI_PROTOCOL_UNKNOWN)
-      NDPI_ADD_PROTOCOL_TO_BITMASK(dst->detected_protocol_bitmask, lower_detected_protocol);
-  }
 }
 
 /* ********************************************************************************* */
@@ -6934,8 +7021,6 @@ const char *ndpi_confidence_get_name(ndpi_confidence_t confidence)
     return "Match by port";
   case NDPI_CONFIDENCE_MATCH_BY_IP:
     return "Match by IP";
-  case NDPI_CONFIDENCE_DPI_SRC_DST_ID:
-    return "DPI (src/dst ids)";
   case NDPI_CONFIDENCE_DPI_CACHE:
     return "DPI (cache)";
   case NDPI_CONFIDENCE_DPI:

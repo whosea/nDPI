@@ -52,7 +52,6 @@ struct ndpi_net {
 				*pe_proto,
 				*pe_hostdef,
 				*pe_ipdef;
-	struct rb_root	osdpi_id_root;
 
 	hosts_str_t	*hosts;
 	hosts_str_t	*hosts_tmp;
@@ -71,7 +70,6 @@ struct ndpi_net {
 	struct mutex	rem_lock;	/* lock ndpi_delete_acct / ndpi_flow_read */
 	struct mutex	host_lock;	/* protect host_ac, hosts, hosts_tmp */
 
-	spinlock_t	id_lock;
 	spinlock_t	ipq_lock;	/* for proto & patricia tree */
 	spinlock_t      w_buff_lock;
 
@@ -181,7 +179,6 @@ static inline int test_bit_simple(int num,uint16_t *sword) {
 struct nf_ct_ext_ndpi {
 	struct nf_ct_ext_ndpi	*next;		// 4/8
 	struct ndpi_flow_struct	*flow;		// 4/8
-	struct ndpi_id_struct   *src,*dst;	// 8/16
 	char			*host;		// 4/8 bytes
 	char			*flow_opt;	// 4/8 bytes
 	ndpi_protocol_nf	proto;		// 4 bytes

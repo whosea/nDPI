@@ -961,6 +961,9 @@ static void ndpi_add_connection_as_bittorrent(
     ndpi_bt_add_peer_cache(ndpi_struct,packet,p1,p2);
   }
 
+  if(check_hash)
+     ndpi_search_bittorrent_hash(ndpi_struct, flow, bt_offset);
+
   ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
   
   if(flow->protos.bittorrent.hash[0] == '\0') {
@@ -978,26 +981,35 @@ static void ndpi_add_connection_as_bittorrent(
 		   packet->tcp ? "tcp":"udp", ip1,htons(p1),ip2,htons(p2));
 
   }
-  if(check_hash)
-    ndpi_search_bittorrent_hash(ndpi_struct, flow, bt_offset);
 
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
 #ifndef __KERNEL__
-
   if(packet->udp) {
+    u_int32_t key1, key2;
     if(ndpi_struct->bittorrent_cache == NULL)
       ndpi_struct->bittorrent_cache = ndpi_lru_cache_init(1024);
 
     if(ndpi_struct->bittorrent_cache && packet->iph) {
-      u_int32_t key1, key2;
+      int i;
       if(packet->udp)
 	key1 = ndpi_bittorrent_hash_funct(packet->iph->saddr, packet->udp->source), key2 = ndpi_bittorrent_hash_funct(packet->iph->daddr, packet->udp->dest);
-      else if(packet->tcp)
+      else
 	key1 = ndpi_bittorrent_hash_funct(packet->iph->saddr, packet->tcp->source), key2 = ndpi_bittorrent_hash_funct(packet->iph->daddr, packet->tcp->dest);
 
-      if(packet->udp || packet->tcp) {
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key1, NDPI_PROTOCOL_BITTORRENT);
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key2, NDPI_PROTOCOL_BITTORRENT);
+
+      ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache,
+                            packet->iph->saddr + packet->iph->daddr,
+			    NDPI_PROTOCOL_BITTORRENT);
+
+      /* Also add +2 ports of the sender in order to catch additional sockets open by the same client */
+      for(i=1; i<=2; i++) {
+        if(packet->udp)
+          key1 = ndpi_bittorrent_hash_funct(packet->iph->saddr, htons(ntohs(packet->udp->source)+i));
+        else
+          key1 = ndpi_bittorrent_hash_funct(packet->iph->saddr, htons(ntohs(packet->tcp->source)+i));
+
         ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key1, NDPI_PROTOCOL_BITTORRENT);
-        ndpi_lru_add_to_cache(ndpi_struct->bittorrent_cache, key2, NDPI_PROTOCOL_BITTORRENT);
       }
 
 #ifdef CACHE_DEBUG
@@ -1005,7 +1017,7 @@ static void ndpi_add_connection_as_bittorrent(
 #endif
     }
   }
-#endif
+#endif // __KERNEL__
 }
 
 #define DIRC(a,b) if(packet->packet_direction) b++ ; else a++
@@ -1389,7 +1401,7 @@ static void ndpi_skip_bittorrent(struct ndpi_detection_module_struct *ndpi_struc
   else
     sport = packet->tcp->source, dport = packet->tcp->dest;
   
-  if(ndpi_search_into_bittorrent_cache(ndpi_struct, flow, packet->iph->saddr, sport, packet->iph->daddr, dport))
+  if(packet->iph && ndpi_search_into_bittorrent_cache(ndpi_struct, flow, packet->iph->saddr, sport, packet->iph->daddr, dport))
     ndpi_add_connection_as_bittorrent(ndpi_struct, flow, -1, 0,
 				      NDPI_PROTOCOL_SAFE_DETECTION, NDPI_PROTOCOL_PLAIN_DETECTION);
   else
@@ -1583,7 +1595,7 @@ static void ndpi_search_bittorrent(struct ndpi_detection_module_struct *ndpi_str
 				  "/announce",9) == 0 || 
 	     (bt_proto = ndpi_strnstr((const char *)packet->payload, "BitTorrent protocol",
 						     packet->payload_packet_len)) != NULL) {
-		  //ndpi_search_bittorrent_hash(ndpi_struct, flow, -1);
+		  ndpi_search_bittorrent_hash(ndpi_struct, flow, -1);
 		  detect_type = "String";
 		  goto bittorrent_found;
 	  }
@@ -1665,7 +1677,7 @@ void init_bittorrent_dissector(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_set_bitmask_protocol_detection("BitTorrent", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_BITTORRENT,
 				      ndpi_search_bittorrent,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
   *id += 1;

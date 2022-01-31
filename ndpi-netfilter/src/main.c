@@ -176,15 +176,6 @@ MODULE_DESCRIPTION("nDPI wrapper");
 MODULE_ALIAS("ipt_ndpi");
 MODULE_ALIAS("ipt_NDPI");
 
-/* id tracking */
-struct osdpi_id_node {
-        struct rb_node node;
-        struct kref refcnt;
-        union  nf_inet_addr ip;
-        struct ndpi_id_struct ndpi_id;
-};
-
-
 #include "ndpi_strcol.h"
 #include "ndpi_flow_info.h"
 #include "ndpi_main_netfilter.h"
@@ -282,7 +273,6 @@ static unsigned long  max_packet_unk_other=20;
 unsigned long  flow_read_debug=0;
 
 static unsigned long  ndpi_size_flow_struct=0;
-static unsigned long  ndpi_size_id_struct=0;
 static unsigned long  ndpi_size_hash_ip4p_node=0;
 
 static unsigned long  ndpi_jumbo=0;
@@ -362,7 +352,6 @@ module_param_named(max_unk_other,max_packet_unk_other,ulong, 0600);
 module_param_named(flow_read_debug,flow_read_debug,ulong, 0600);
 
 module_param_named(ndpi_size_flow_struct,ndpi_size_flow_struct,ulong, 0400);
-module_param_named(ndpi_size_id_struct,ndpi_size_id_struct,ulong, 0400);
 module_param_named(ndpi_size_hash_ip4p_node,ndpi_size_hash_ip4p_node,ulong, 0400);
 
 module_param_named(err_oversize, ndpi_jumbo, ulong, 0400);
@@ -557,59 +546,6 @@ static void fill_prefix_any(ndpi_prefix_t *p, union nf_inet_addr *ip,int family)
 #endif
 }
 
-static struct ndpi_id_struct *
-ndpi_id_search_or_insert(struct ndpi_net *n, 
-		union nf_inet_addr *ip)
-{
-        int res;
-        struct osdpi_id_node *this,*id;
-	struct rb_root *root;
-  	struct rb_node **new, *parent = NULL;
-
-	spin_lock_bh (&n->id_lock);
-	root = &n->osdpi_id_root;
-	new  = &(root->rb_node);
-  	while (*new) {
-                this = rb_entry(*new, struct osdpi_id_node, node);
-		res = memcmp(ip, &this->ip,sizeof(union nf_inet_addr));
-
-		parent = *new;
-  		if (res < 0)
-  			new = &((*new)->rb_left);
-  		else if (res > 0)
-  			new = &((*new)->rb_right);
-  		else {
-                	kref_get (&this->refcnt);
-			spin_unlock_bh (&n->id_lock);
-  			return &this->ndpi_id;
-		}
-  	}
-	id = kmem_cache_zalloc (osdpi_id_cache, GFP_ATOMIC);
-	if (id == NULL) {
-		spin_unlock_bh (&n->id_lock);
-		pr_err("xt_ndpi: couldn't allocate new id.\n");
-		return NULL;
-	}
-	(volatile unsigned long int)ndpi_p_id_num++;
-	memcpy(&id->ip, ip, sizeof(union nf_inet_addr));
-	kref_init (&id->refcnt);
-
-  	rb_link_node(&id->node, parent, new);
-  	rb_insert_color(&id->node, root);
-	spin_unlock_bh (&n->id_lock);
-	return &id->ndpi_id;
-}
-
-static void
-ndpi_free_id (struct ndpi_net *n, struct osdpi_id_node * id)
-{
-	if (refcount_dec_and_test(&id->refcnt.refcount)) {
-	        rb_erase(&id->node, &n->osdpi_id_root);
-	        kmem_cache_free (osdpi_id_cache, id);
-		(volatile unsigned long int)ndpi_p_id_num--;
-	}
-}
-
 #ifdef NF_CT_CUSTOM
 static inline void *nf_ct_ext_add_ndpi(struct nf_conn * ct)
 {
@@ -744,18 +680,6 @@ static inline void __ndpi_free_ct_flow(struct nf_ct_ext_ndpi *ct_ndpi) {
 		module_put(THIS_MODULE);
 	}
 }
-static inline void __ndpi_free_ct_ndpi_id(struct ndpi_net *n, struct nf_ct_ext_ndpi *ct_ndpi) {
-	spin_lock_bh (&n->id_lock);
-	if(ct_ndpi->src) {
-		ndpi_free_id (n, container_of(ct_ndpi->src,struct osdpi_id_node,ndpi_id ));
-		ct_ndpi->src = NULL;
-	}
-	if(ct_ndpi->dst) {
-		ndpi_free_id (n, container_of(ct_ndpi->dst,struct osdpi_id_node,ndpi_id ));
-		ct_ndpi->dst = NULL;
-	}
-	spin_unlock_bh (&n->id_lock);
-}
 
 static inline void __ndpi_free_ct_proto(struct nf_ct_ext_ndpi *ct_ndpi) {
         if(ct_ndpi->host) {
@@ -781,7 +705,6 @@ ct_ndpi_free_flow (struct ndpi_net *n,
 
 	spin_lock_bh(&ct_ndpi->lock);
 	__ndpi_free_ct_flow(ct_ndpi);
-	__ndpi_free_ct_ndpi_id(n,ct_ndpi);
 	if(test_flow_yes(ct_ndpi)) {
 	    if(force || !flow_have_info(ct_ndpi)) {
 	    	__ndpi_free_ct_proto(ct_ndpi);
@@ -946,7 +869,6 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
                     const struct sk_buff *skb,int dir)
 {
 	ndpi_protocol proto = NDPI_PROTOCOL_NULL;
-        struct ndpi_id_struct *src, *dst;
         struct ndpi_flow_struct * flow;
 	uint32_t low_ip, up_ip, tmp_ip;
 	uint16_t low_port, up_port, tmp_port, protocol;
@@ -979,33 +901,6 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 		}
 	}
 
-	src = ct_ndpi->src;
-	if (!src) {
-		src = ndpi_id_search_or_insert (n,
-			&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3);
-		if (!src) {
-			COUNTER(ndpi_p_err_alloc_id);
-			return NDPI_PROCESS_ERROR;
-		}
-		ct_ndpi->src = src;
-	}
-	dst = ct_ndpi->dst;
-	if (!dst) {
-		dst = ndpi_id_search_or_insert (n,
-			&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3);
-		if (!dst) {
-			COUNTER(ndpi_p_err_alloc_id);
-			return NDPI_PROCESS_ERROR;
-		}
-		ct_ndpi->dst = dst;
-	}
-
-	/* here the actual detection is performed */
-	if(dir) {
-		src = ct_ndpi->dst;
-		dst = ct_ndpi->src;
-	}
-
 	flow->packet_direction = dir;
 	if(ndpi_log_debug > 1)
 		packet_trace(skb,ct,"process    ");
@@ -1015,7 +910,7 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 				ip6h ?	(uint8_t *) ip6h :
 #endif
 					(uint8_t *) iph, 
-					 skb->len, time, src, dst);
+					 skb->len, time);
 
 	if(proto.master_protocol == NDPI_PROTOCOL_UNKNOWN && 
 	          proto.app_protocol == NDPI_PROTOCOL_UNKNOWN ) {
@@ -2018,7 +1913,6 @@ int ndpi_delete_acct(struct ndpi_net *n,int all) {
 			if(n->flow_l == ct_ndpi) n->flow_l = next;
 
 			if(all == 3) {
-				__ndpi_free_ct_ndpi_id(n,ct_ndpi);
 				__ndpi_free_ct_flow(ct_ndpi);
 			}
 			__ndpi_free_ct_proto(ct_ndpi);
@@ -2419,8 +2313,6 @@ static struct nf_hook_ops nf_nat_ipv4_ops[] = {
 
 static void __net_exit ndpi_net_exit(struct net *net)
 {
-	struct rb_node * next;
-	struct osdpi_id_node *id;
 	struct ndpi_net *n;
 
 	n = ndpi_pernet(net);
@@ -2467,14 +2359,6 @@ static void __net_exit ndpi_net_exit(struct net *net)
 
 	/* free all objects before destroying caches */
 	
-	next = rb_first(&n->osdpi_id_root);
-	while (next) {
-		id = rb_entry(next, struct osdpi_id_node, node);
-		next = rb_next(&id->node);
-		rb_erase(&id->node, &n->osdpi_id_root);
-		kmem_cache_free (osdpi_id_cache, id);
-	}
-	
 	str_hosts_done(n->hosts);
 	kfree(n->str_buf);
 	
@@ -2516,7 +2400,6 @@ static int __net_init ndpi_net_init(struct net *net)
 	rwlock_init(&n->ndpi_busy);
 	atomic_set(&n->ndpi_ready,0);
 
-	spin_lock_init(&n->id_lock);
 	spin_lock_init(&n->ipq_lock);
 	spin_lock_init(&n->w_buff_lock);
 	mutex_init(&n->host_lock);
@@ -2534,7 +2417,6 @@ static int __net_init ndpi_net_init(struct net *net)
 	n->host_error = 0;
 
 	parse_ndpi_proto(n,"init");
-       	n->osdpi_id_root = RB_ROOT;
 
 	n->str_buf = kmalloc(NF_STR_LBUF,GFP_KERNEL);
 	if (n->str_buf == NULL) {
@@ -2831,7 +2713,6 @@ static int __init ndpi_mt_init(void)
 {
         int ret;
 
-	ndpi_size_id_struct = sizeof(struct osdpi_id_node);
 	ndpi_size_flow_struct = ndpi_detection_get_sizeof_ndpi_flow_struct();
 	set_ndpi_malloc(malloc_wrapper);
 	set_ndpi_free(free_wrapper);
@@ -2894,13 +2775,6 @@ static int __init ndpi_mt_init(void)
 		goto free_ctinfo;
         }
         
-        osdpi_id_cache = kmem_cache_create("ndpi_ids",
-                                           ndpi_size_id_struct,
-                                           0, 0, NULL);
-        if (!osdpi_id_cache) {
-		pr_err("xt_ndpi: error creating id cache.\n");
-		goto free_flow;
-	}
 
 	ndpi_size_hash_ip4p_node=                sizeof(struct hash_ip4p_node)
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
@@ -2912,7 +2786,7 @@ static int __init ndpi_mt_init(void)
 				ndpi_size_hash_ip4p_node, 0, 0, NULL);
         if (!bt_port_cache) {
 		pr_err("xt_ndpi: error creating port cache.\n");
-		goto free_id;
+		goto free_flow;
 	}
 	if(bt_hash_size && bt_hash_size > 512) bt_hash_size = 512;
 	if(bt6_hash_size && bt6_hash_size > 32) bt6_hash_size = 32;
@@ -2937,8 +2811,7 @@ static int __init ndpi_mt_init(void)
 		" debug_message=no"
 #endif
 		"\n BT: hash_size %luk, hash_expiation %ld sec, log_size %ldkb\n"
-		" sizeof hash_ip4p_node=%lu id_struct=%lu\n"
-		" flow_struct=%lu packet_struct=%zu\n"
+		" sizeof hash_ip4p_node=%lu flow_struct=%lu packet_struct=%zu\n"
 		"   flow_tcp_struct=%zu flow_udp_struct=%zu int_one_line_struct=%zu\n"
 		" ndpi_ip_addr_t=%zu ndpi_protocol=%zu nf_ct_ext_ndpi=%zu\n"
 		" flow_info=%zu spinlock_t=%zu "
@@ -2949,7 +2822,7 @@ static int __init ndpi_mt_init(void)
 #endif
 		NDPI_GIT_RELEASE,
 		bt_hash_size, bt_hash_size ? bt_hash_tmo : 0, bt_log_size, 
-		ndpi_size_hash_ip4p_node, ndpi_size_id_struct,
+		ndpi_size_hash_ip4p_node,
 		ndpi_size_flow_struct,
 		sizeof(struct ndpi_packet_struct),
 		sizeof(struct ndpi_flow_tcp_struct),
@@ -2966,8 +2839,6 @@ static int __init ndpi_mt_init(void)
 
 	return 0;
 
-free_id:
-       	kmem_cache_destroy (osdpi_id_cache);
 free_flow:
        	kmem_cache_destroy (osdpi_flow_cache);
 free_ctinfo:

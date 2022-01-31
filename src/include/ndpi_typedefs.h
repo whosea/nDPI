@@ -73,7 +73,6 @@ typedef enum {
   - nDPI/wireshark/ndpi.lua
   - ndpi_risk2str (in ndpi_utils.c)
   - doc/flow_risks.rst
-  - https://github.com/ntop/ntopng/blob/dev/scripts/lua/modules/flow_risk_utils.lua
   - ndpi_risk_enum (in python/ndpi.py)
   - ndpi_known_risks (ndpi_main.c)
 
@@ -128,7 +127,8 @@ typedef enum {
   NDPI_DNS_FRAGMENTED,
   NDPI_INVALID_CHARACTERS,
   NDPI_POSSIBLE_EXPLOIT, /* Log4J and other exploits */
-  
+  NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE,
+
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 63 due to (**) */
 } ndpi_risk_enum;
@@ -602,52 +602,6 @@ struct ndpi_lru_cache {
   struct ndpi_lru_cache_entry *entries;
 };
 
-struct ndpi_id_struct {
-  /**
-     detected_protocol_bitmask:
-     access this bitmask to find out whether an id has used skype or not
-     if a flag is set here, it will not be reset
-     to compare this, use:
-  **/
-  NDPI_PROTOCOL_BITMASK detected_protocol_bitmask;
-
-  /* NDPI_PROTOCOL_IRC_MAXPORT % 2 must be 0 */
-  /* NDPI_PROTOCOL_IRC */
-#define NDPI_PROTOCOL_IRC_MAXPORT 8
-  u_int16_t irc_port[NDPI_PROTOCOL_IRC_MAXPORT];
-  u_int32_t last_time_port_used[NDPI_PROTOCOL_IRC_MAXPORT];
-  u_int32_t irc_ts;
-
-  /* NDPI_PROTOCOL_GNUTELLA */
-  u_int32_t gnutella_ts;
-
-  /* NDPI_PROTOCOL_JABBER */
-  u_int32_t jabber_stun_or_ft_ts;
-
-  /* NDPI_PROTOCOL_DIRECTCONNECT */
-  u_int32_t directconnect_last_safe_access_time;
-
-  /* NDPI_PROTOCOL_DIRECTCONNECT */
-  u_int16_t detected_directconnect_port;
-  u_int16_t detected_directconnect_udp_port;
-  u_int16_t detected_directconnect_ssl_port;
-
-  /* NDPI_PROTOCOL_JABBER */
-#define JABBER_MAX_STUN_PORTS 6
-  u_int16_t jabber_voice_stun_port[JABBER_MAX_STUN_PORTS];
-  u_int16_t jabber_file_transfer_port[2];
-
-  /* NDPI_PROTOCOL_GNUTELLA */
-  u_int16_t detected_gnutella_udp_port1;
-  u_int16_t detected_gnutella_udp_port2;
-
-  /* NDPI_PROTOCOL_IRC */
-  u_int8_t irc_number_of_port;
-
-  /* NDPI_PROTOCOL_JABBER */
-  u_int8_t jabber_voice_stun_used_ports;
-};
-
 /* ************************************************** */
 
 struct ndpi_flow_tcp_struct {
@@ -950,7 +904,6 @@ typedef enum {
   NDPI_CONFIDENCE_UNKNOWN = 0,		/* Unknown classification */
   NDPI_CONFIDENCE_MATCH_BY_PORT,	/* Classification obtained looking only at the L4 ports */
   NDPI_CONFIDENCE_MATCH_BY_IP,		/* Classification obtained looking only at the L3 addresses */
-  NDPI_CONFIDENCE_DPI_SRC_DST_ID,	/* Classification results based on ndpi_id_struct structures */
   NDPI_CONFIDENCE_DPI_CACHE,		/* Classification results based on same LRU cache (i.e. correlation among sessions) */
   NDPI_CONFIDENCE_DPI,			/* Deep packet inspection */
 
@@ -1135,7 +1088,8 @@ struct ndpi_detection_module_struct {
   u_int32_t ticks_per_second;
   u_int16_t num_tls_blocks_to_follow;
   u_int8_t skip_tls_blocks_until_change_cipher:1, enable_ja3_plus:1, _notused:6;
-
+  u_int8_t tls_certificate_expire_in_x_days;
+  
   char custom_category_labels[NUM_CUSTOM_CATEGORIES][CUSTOM_CATEGORY_LABEL_LEN];
   /* callback function buffer */
   struct ndpi_call_function_struct callback_buffer[NDPI_MAX_SUPPORTED_PROTOCOLS + 1];
@@ -1230,6 +1184,9 @@ struct ndpi_detection_module_struct {
   /* NDPI_PROTOCOL_BITTORRENT */
   struct ndpi_lru_cache *bittorrent_cache;
 
+  /* NDPI_PROTOCOL_ZOOM */
+  struct ndpi_lru_cache *zoom_cache;
+
   /* NDPI_PROTOCOL_STUN and subprotocols */
   struct ndpi_lru_cache *stun_cache;
 
@@ -1299,7 +1256,7 @@ struct ndpi_flow_struct {
   u_int8_t l4_proto, protocol_id_already_guessed:1, host_already_guessed:1, fail_with_unknown:1,
     init_finished:1, setup_packet_direction:1, packet_direction:1, check_extra_packets:1, is_ipv6:1,
     ip_port_finished:1;
-  u_int8_t confidence;
+  ndpi_confidence_t confidence; /* ndpi_confidence_t */
 
   /*
     if ndpi_struct->direction_detect_disable == 1
@@ -1525,9 +1482,6 @@ struct ndpi_flow_struct {
   /* NDPI_PROTOCOL_TINC */
   u_int8_t tinc_state;
   struct tinc_cache_entry tinc_cache_entry;
-
-  struct ndpi_id_struct *src;
-  struct ndpi_id_struct *dst;
 };
 
 #define NDPI_PROTOCOL_DEFAULT_LEVEL	0

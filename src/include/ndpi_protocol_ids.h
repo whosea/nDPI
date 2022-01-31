@@ -92,7 +92,7 @@ typedef enum {
   NDPI_PROTOCOL_QQLIVE                = 61,
   NDPI_PROTOCOL_THUNDER               = 62,
   NDPI_PROTOCOL_OCSP                  = 63,
-  NDPI_PROTOCOL_PS_VUE                = 64,
+  NDPI_PROTOCOL_FREE_64               = 64, /* FREE */
   NDPI_PROTOCOL_IRC                   = 65,
   NDPI_PROTOCOL_AYIYA                 = 66,
   NDPI_PROTOCOL_JABBER                = 67,
@@ -307,6 +307,9 @@ typedef enum {
   NDPI_PROTOCOL_MICROSOFT_AZURE       = 276,
   NDPI_PROTOCOL_ICLOUD_PRIVATE_RELAY  = 277,
   NDPI_PROTOCOL_ETHERNET_IP           = 278,
+  NDPI_PROTOCOL_BADOO                 = 279,
+  NDPI_PROTOCOL_ACCUWEATHER           = 280,
+  NDPI_PROTOCOL_GOOGLE_CLASSROOM      = 281,
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_protocol_ids.h"
