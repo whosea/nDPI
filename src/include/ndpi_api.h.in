@@ -1185,7 +1185,7 @@ extern "C" {
   int ndpi_serialize_uint32_string(ndpi_serializer *serializer, u_int32_t key, const char *value);
 
   /**
-   * Serialize a 32-bit unsigned int key and a boolean value
+   * Serialize a 32-bit unsigned int key and a boolean value (JSON/CSV only, not supported by TLV)
    * @param serializer The serializer handle
    * @param key The field name or ID
    * @param value The field value
@@ -1298,6 +1298,17 @@ extern "C" {
    * @return 0 on success, a negative number otherwise
    */
   int ndpi_serialize_string_string(ndpi_serializer *serializer, const char *key, const char *value);
+
+  /**
+   * Serialize a string key and a string value
+   * @param serializer The serializer handle
+   * @param key The field name or ID
+   * @param value The field value
+   * @param value_len The field value length
+   * @return 0 on success, a negative number otherwise
+   */
+  int ndpi_serialize_string_string_len(ndpi_serializer *serializer, const char *key,
+				       const char *value, u_int16_t value_len);
 
   /**
    * Serialize a string key and an unterminated string value
@@ -1581,7 +1592,7 @@ extern "C" {
 
   u_int8_t ndpi_is_protocol_detected(struct ndpi_detection_module_struct *ndpi_str,
 				     ndpi_protocol proto);
-  void ndpi_serialize_risk(ndpi_serializer *serializer, ndpi_risk_enum risk);
+  void ndpi_serialize_risk(ndpi_serializer *serializer, ndpi_risk risk);
   void ndpi_serialize_proto(struct ndpi_detection_module_struct *ndpi_struct,
                             ndpi_serializer *serializer, ndpi_risk_enum risk,
                             ndpi_protocol l7_protocol);

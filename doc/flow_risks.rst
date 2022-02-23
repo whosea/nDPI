@@ -195,13 +195,13 @@ This risk is set when the `ALPN <https://en.wikipedia.org/wiki/Application-Layer
 
 NDPI_TLS_CERT_VALIDITY_TOO_LONG
 ===============================
-From 01/09/2020 TLS certificates lifespan is limited to 13 months. This risk is triggered for certificates not respecting this directive.
+From 01/09/2020 TLS certificates lifespan is limited to `13 months <https://www.appviewx.com/blogs/tls-certificate-lifespans-now-capped-at-13-months/>`_. This risk is triggered for certificates not respecting this directive.
 
 .. _Risk 033:
 
 NDPI_TLS_SUSPICIOUS_EXTENSION
 =============================
-This risk is triggered when the domain name (SNI extension) is not printable and thus it is a problem.
+This risk is triggered when the domain name (SNI extension) is not printable and thus it is a problem. In TLS extensions can be dynamically specified by the client in the hello packet.
 
 .. _Risk 034:
 
@@ -246,10 +246,24 @@ Additionally, some TLS protocol fields are checked for printable characters as w
 
 NDPI_POSSIBLE_EXPLOIT
 =====================
-The risk is set whenever a possible exploit (e.g. Log4J/Log4Shell) is detected.
+The risk is set whenever a possible exploit (e.g. `Log4J/Log4Shell <https://en.wikipedia.org/wiki/Log4Shell>`_) is detected.
 
 .. _Risk 041:
 
 NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE
 ===================================
 The risk is set whenever a TLS certificate is close to the expiration date.
+
+.. _Risk 042:
+
+NDPI_PUNYCODE_IDN
+===================================
+The risk is set whenever a domain name is specified in IDN format as they are sometimes used in `IDN homograph attacks <https://en.wikipedia.org/wiki/IDN_homograph_attack>`_.
+
+.. _Risk 043:
+
+NDPI_ERROR_CODE_DETECTED
+===================================
+The risk is set whenever an error code is detected in the underlying protocol (e.g. HTTP and DNS).
+
+

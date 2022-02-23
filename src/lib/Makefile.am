@@ -84,6 +84,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/h323.c \
 		     protocols/halflife2_and_mods.c \
 		     protocols/hpvirtgrp.c \
+		     protocols/hsrp.c \
 		     protocols/http.c \
 		     protocols/iax.c \
 		     protocols/icecast.c \
@@ -175,6 +176,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/vhua.c \
 		     protocols/vmware.c \
 		     protocols/vnc.c \
+		     protocols/vxlan.c \
 		     protocols/warcraft3.c \
 		     protocols/websocket.c \
 		     protocols/whoisdas.c \

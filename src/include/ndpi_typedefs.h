@@ -80,8 +80,6 @@ typedef enum {
   1. Add a new flow alert key to the enum FlowAlertTypeEnum in include/ntop_typedefs.h
   2. Add the very same flow alert key to the table flow_alert_keys in scripts/lua/modules/alert_keys/flow_alert_keys.lua
   3. Add the risk to the array risk_enum_to_alert_type in src/FlowRiskAlerts.cpp
-     - To initialize .alert_type use the flow alert key added in 1. and an AlertCategory
-     - To initialize .alert_lua_name use a unique string
 
   Example: https://github.com/ntop/ntopng/commit/aecc1e3e6505a0522439dbb2b295a3703d3d0f9a
  */
@@ -128,7 +126,9 @@ typedef enum {
   NDPI_INVALID_CHARACTERS,
   NDPI_POSSIBLE_EXPLOIT, /* Log4J and other exploits */
   NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE,
-
+  NDPI_PUNYCODE_IDN, /* https://en.wikipedia.org/wiki/Punycode */
+  NDPI_ERROR_CODE_DETECTED,
+  
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 63 due to (**) */
 } ndpi_risk_enum;
@@ -589,7 +589,9 @@ typedef enum {
 	      NDPI_HTTP_METHOD_PUT,
 	      NDPI_HTTP_METHOD_DELETE,
 	      NDPI_HTTP_METHOD_TRACE,
-	      NDPI_HTTP_METHOD_CONNECT
+	      NDPI_HTTP_METHOD_CONNECT,
+	      NDPI_HTTP_METHOD_RPC_IN_DATA,
+	      NDPI_HTTP_METHOD_RPC_OUT_DATA,
 } ndpi_http_method;
 
 struct ndpi_lru_cache_entry {
@@ -970,6 +972,7 @@ typedef enum {
   NDPI_PROTOCOL_CATEGORY_SHOPPING,
   NDPI_PROTOCOL_CATEGORY_PRODUCTIVITY,
   NDPI_PROTOCOL_CATEGORY_FILE_SHARING,
+
   /*
     The category below is used by sites who are used
     to test connectivity
@@ -980,6 +983,7 @@ typedef enum {
     The category below is used for vocal assistance services.
   */
   NDPI_PROTOCOL_CATEGORY_VIRTUAL_ASSISTANT,
+  NDPI_PROTOCOL_CATEGORY_CYBERSECURITY,
   
   /* Some custom categories */
   CUSTOM_CATEGORY_MINING           = 99,
@@ -1514,10 +1518,17 @@ typedef u_int32_t ndpi_init_prefs;
 
 typedef enum
   {
-    ndpi_no_prefs            = 0,
-    ndpi_dont_load_tor_hosts = 1,
-    ndpi_dont_init_libgcrypt = 2,
-    ndpi_enable_ja3_plus     = 4
+    ndpi_no_prefs                  = 0,
+    ndpi_dont_load_tor_list        = (1 << 0),
+    ndpi_dont_init_libgcrypt       = (1 << 1),
+    ndpi_enable_ja3_plus           = (1 << 2),
+    ndpi_dont_load_azure_list      = (1 << 3),
+    ndpi_dont_load_whatsapp_list   = (1 << 4),
+    ndpi_dont_load_amazon_aws_list = (1 << 5),
+    ndpi_dont_load_ethereum_list   = (1 << 6),
+    ndpi_dont_load_zoom_list       = (1 << 7),
+    ndpi_dont_load_cloudflare_list = (1 << 8),
+    ndpi_dont_load_microsoft_list  = (1 << 9),
   } ndpi_prefs;
 
 typedef struct {

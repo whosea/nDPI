@@ -780,8 +780,6 @@ header:
       return;
     }
 
-    workflow->cur_active_flows++;
-    workflow->total_active_flows++;
     memcpy(flow_to_process, &flow, sizeof(*flow_to_process));
     flow_to_process->flow_id = __sync_fetch_and_add(&flow_id, 1);
 
@@ -800,6 +798,9 @@ header:
       /* Possible Leak, but should not happen as we'd abort earlier. */
       return;
     }
+
+    workflow->cur_active_flows++;
+    workflow->total_active_flows++;
   } else {
     flow_to_process = *(struct nDPI_flow_info **)tree_result;
   }

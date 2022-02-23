@@ -64,7 +64,20 @@
 #include "ndpi_network_list.c.inc"
 
 #include "ndpi_content_match.c.inc"
+#include "ndpi_dga_match.c.inc"
 #include "ndpi_azure_match.c.inc"
+#include "ndpi_tor_match.c.inc"
+#include "ndpi_whatsapp_match.c.inc"
+#include "ndpi_amazon_aws_match.c.inc"
+#include "ndpi_ethereum_match.c.inc"
+#include "ndpi_zoom_match.c.inc"
+#include "ndpi_cloudflare_match.c.inc"
+#include "ndpi_ms_office365_match.c.inc"
+#include "ndpi_ms_onedrive_match.c.inc"
+#include "ndpi_ms_outlook_match.c.inc"
+#include "ndpi_ms_skype_teams_match.c.inc"
+
+/* Third party libraries */
 #include "third_party/include/ndpi_patricia.h"
 #include "third_party/include/ndpi_md5.h"
 
@@ -139,7 +152,9 @@ static ndpi_risk_info ndpi_known_risks[] = {
   { NDPI_INVALID_CHARACTERS,                    NDPI_RISK_HIGH,   CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_POSSIBLE_EXPLOIT,                      NDPI_RISK_SEVERE, CLIENT_HIGH_RISK_PERCENTAGE },
   { NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE,       NDPI_RISK_MEDIUM, CLIENT_LOW_RISK_PERCENTAGE  },
-
+  { NDPI_PUNYCODE_IDN,                          NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
+  { NDPI_ERROR_CODE_DETECTED,                   NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
+  
   /* Leave this as last member */
   { NDPI_MAX_RISK,                              NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }
 };
@@ -1260,10 +1275,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "OCSP", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE_64,
-			  "FREE_64", NDPI_PROTOCOL_CATEGORY_VIDEO,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_VXLAN,
+			  "VXLAN", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+			  ndpi_build_default_ports(ports_b, 4789, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_UNSAFE, NDPI_PROTOCOL_IRC,
 			  "IRC", NDPI_PROTOCOL_CATEGORY_CHAT,
 			  ndpi_build_default_ports(ports_a, 194, 0, 0, 0, 0) /* TCP */,
@@ -1490,8 +1505,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "WorldOfKungFu", NDPI_PROTOCOL_CATEGORY_GAME,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DCERPC,
-			  "DCE_RPC", NDPI_PROTOCOL_CATEGORY_RPC,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_RPC,
+			  "RPC", NDPI_PROTOCOL_CATEGORY_RPC,
 			  ndpi_build_default_ports(ports_a, 135, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_NETFLOW,
@@ -1556,6 +1571,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "GTP_PRIME", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_HSRP,
+			  "HSRP", NDPI_PROTOCOL_CATEGORY_NETWORK,
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_b, 1985, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_WSD,
 			  "WSD", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
@@ -2204,16 +2223,12 @@ int ndpi_load_ipv4_ptree(struct ndpi_detection_module_struct *ndpi_str,
 /* ******************************************* */
 
 static void ndpi_init_ptree_ipv4(struct ndpi_detection_module_struct *ndpi_str,
-				 void *ptree, ndpi_network host_list[],
-                                 u_int8_t skip_tor_hosts) {
+				 void *ptree, ndpi_network host_list[]) {
   int i;
 
   for(i = 0; host_list[i].network != 0x0; i++) {
     struct in_addr pin;
     ndpi_patricia_node_t *node;
-
-    if(skip_tor_hosts && (host_list[i].value == NDPI_PROTOCOL_TOR))
-      continue;
 
     pin.s_addr = htonl(host_list[i].network);
     if((node = add_to_ptree(ptree, AF_INET, &pin, host_list[i].cidr /* bits */)) != NULL) {
@@ -2352,7 +2367,7 @@ static const char *categories[] = {
   "ConnCheck",
   "IoT-Scada",
   "VirtAssistant",
-  "",
+  "Cybersecurity",
   "",
   "",
   "",
@@ -2485,9 +2500,29 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 #endif
 
   if((ndpi_str->protocols_ptree = ndpi_patricia_new(32 /* IPv4 */)) != NULL) {
-    ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, host_protocol_list, prefs & ndpi_dont_load_tor_hosts);
-    ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_microsoft_azure_protocol_list,
-			 prefs & ndpi_dont_load_tor_hosts); /* Microsoft Azure */
+    ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, host_protocol_list);
+#if 0
+    if(!(prefs & ndpi_dont_load_tor_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_tor_protocol_list);
+    if(!(prefs & ndpi_dont_load_azure_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_microsoft_azure_protocol_list);
+    if(!(prefs & ndpi_dont_load_whatsapp_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_whatsapp_protocol_list);
+    if(!(prefs & ndpi_dont_load_amazon_aws_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_amazon_aws_protocol_list);
+    if(!(prefs & ndpi_dont_load_ethereum_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_mining_protocol_list);
+    if(!(prefs & ndpi_dont_load_zoom_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_zoom_protocol_list);
+    if(!(prefs & ndpi_dont_load_cloudflare_list))
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_cloudflare_protocol_list);
+    if(!(prefs & ndpi_dont_load_microsoft_list)) {
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_microsoft_365_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_ms_one_drive_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_ms_outlook_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_skype_teams_protocol_list);
+    }
+#endif
   }
 
   ndpi_str->ip_risk_mask_ptree = ndpi_patricia_new(32 /* IPv4 */);
@@ -2609,13 +2644,6 @@ void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str) {
 static void ndpi_add_domain_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str) {
   const char *domains[] = {
     ".local",
-    ".msftconnecttest.com",
-    "amupdatedl.microsoft.com",
-    "update.microsoft.com.akadns.net",
-    ".windowsupdate.com",
-    ".ras.microsoft.com",
-    "e5.sk",
-    "sophosxl.net",
     NULL /* End */
   };
   const ndpi_risk risks_to_mask[] = {
@@ -2633,6 +2661,19 @@ static void ndpi_add_domain_risk_exceptions(struct ndpi_detection_module_struct 
 
   for(i=0; domains[i] != NULL; i++)
     ndpi_add_host_risk_mask(ndpi_str, (char*)domains[i], mask);
+  
+  for(i=0; host_match[i].string_to_match != NULL; i++) {
+    switch(host_match[i].protocol_category) {
+    case NDPI_PROTOCOL_CATEGORY_CONNECTIVITY_CHECK:
+    case NDPI_PROTOCOL_CATEGORY_CYBERSECURITY:
+      ndpi_add_host_risk_mask(ndpi_str, (char*)host_match[i].string_to_match, mask); 
+      break;
+
+    default:
+      /* Nothing to do */
+      break;
+    }
+  }
 }
 
 /* *********************************************** */
@@ -3940,6 +3981,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
   /* VNC */
   init_vnc_dissector(ndpi_str, &a, detection_bitmask);
 
+  /* VXLAN */
+  init_vxlan_dissector(ndpi_str, &a, detection_bitmask);
+
   /* TEAMVIEWER */
   init_teamviewer_dissector(ndpi_str, &a, detection_bitmask);
 
@@ -4092,6 +4136,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* GTP */
   init_gtp_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* HSRP */
+  init_hsrp_dissector(ndpi_str, &a, detection_bitmask);
 
   /* DCERPC */
   init_dcerpc_dissector(ndpi_str, &a, detection_bitmask);
@@ -6281,6 +6328,8 @@ void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, 
 
 	while((packet->authorization_line.len > 0) && (packet->authorization_line.ptr[0] == ' '))
 	  packet->authorization_line.len--, packet->authorization_line.ptr++;
+	if(packet->authorization_line.len == 0)
+	  packet->authorization_line.ptr = NULL;
 
 	packet->http_num_headers++;
       } else
@@ -6392,6 +6441,8 @@ void ndpi_parse_packet_line_info(struct ndpi_detection_module_struct *ndpi_str, 
 
 	while((packet->content_line.len > 0) && (packet->content_line.ptr[0] == ' '))
 	  packet->content_line.len--, packet->content_line.ptr++;
+	if(packet->content_line.len == 0)
+	  packet->content_line.ptr = NULL;;
 
 	packet->http_num_headers++;
       } else
@@ -7302,9 +7353,9 @@ char *ndpi_strnstr(const char *s, const char *find, size_t slen) {
 const char * ndpi_strncasestr(const char *str1, const char *str2, size_t len) {
   size_t str1_len = strnlen(str1, len);
   size_t str2_len = strlen(str2);
-  size_t i;
+  int i; /* signed! */
 
-  for(i = 0; i < (str1_len - str2_len + 1); i++){
+  for(i = 0; i < (int)(str1_len - str2_len + 1); i++){
     if(str1[0] == '\0')
       return NULL;
     else if(strncasecmp(str1, str2, str2_len) == 0)
@@ -7446,12 +7497,14 @@ u_int16_t ndpi_match_host_subprotocol(struct ndpi_detection_module_struct *ndpi_
 
   memset(ret_match, 0, sizeof(*ret_match));
 
-  rc = ndpi_automa_match_string_subprotocol(ndpi_str, flow, string_to_match, string_to_match_len,
+  rc = ndpi_automa_match_string_subprotocol(ndpi_str, flow,
+					    string_to_match, string_to_match_len,
 					    master_protocol_id, ret_match);
   id = ret_match->protocol_category;
 
 #ifndef __KERNEL__
-  if(ndpi_get_custom_category_match(ndpi_str, string_to_match, string_to_match_len, &id) != -1) {
+  if(ndpi_get_custom_category_match(ndpi_str, string_to_match,
+			            string_to_match_len, &id) != -1) {
     /* if(id != -1) */ {
       flow->category = ret_match->protocol_category = id;
       rc = master_protocol_id;
@@ -7468,6 +7521,10 @@ u_int16_t ndpi_match_host_subprotocol(struct ndpi_detection_module_struct *ndpi_
   }
 #endif
 
+  /* Add punycode check */
+  if(ndpi_strnstr(string_to_match, "xn--", string_to_match_len))
+    ndpi_set_risk(ndpi_str, flow, NDPI_PUNYCODE_IDN);
+		  
   return(rc);
 }
 
@@ -7737,6 +7794,7 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
     break;
 
   case NDPI_PROTOCOL_KERBEROS:
+  case NDPI_PROTOCOL_SNMP:
     if(flow->extra_packets_func)
       return(1);
     break;
