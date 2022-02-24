@@ -1,10 +1,15 @@
-
+#ifndef __KERNEL__
 #include <stdint.h>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
 #include <string.h>
 #include <stdlib.h>
+#else
+#include <asm/byteorder.h>
+#include <linux/kernel.h>
+#include <linux/types.h>
+#endif
 
 #include "ndpi_api.h"
 
@@ -14,7 +19,9 @@
         ( defined(__amd64__) || defined(__x86_64__) )   &&  \
     ! defined(MBEDTLS_HAVE_X86_64)
 #define MBEDTLS_HAVE_X86_64
+#ifndef __KERNEL__
 #define MBEDTLS_AESNI_C
+#endif
 #endif
 
 /****************************/

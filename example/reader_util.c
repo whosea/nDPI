@@ -397,7 +397,7 @@ extern char *_debug_protocols;
 static int _debug_protocols_ok = 0;
 
 struct ndpi_workflow* ndpi_workflow_init(const struct ndpi_workflow_prefs * prefs,
-					 pcap_t * pcap_handle) {
+					 pcap_t * pcap_handle, int do_init_flows_root) {
   struct ndpi_detection_module_struct * module;
   struct ndpi_workflow * workflow;
 
@@ -433,7 +433,8 @@ struct ndpi_workflow* ndpi_workflow_init(const struct ndpi_workflow_prefs * pref
   if(_debug_protocols_ok)
     ndpi_set_debug_bitmask(module, debug_bitmask);
 
-  workflow->ndpi_flows_root = ndpi_calloc(workflow->prefs.num_roots, sizeof(void *));
+  if(do_init_flows_root)
+    workflow->ndpi_flows_root = ndpi_calloc(workflow->prefs.num_roots, sizeof(void *));
 
   return workflow;
 }
@@ -989,6 +990,8 @@ static struct ndpi_flow_info *get_ndpi_flow_info6(struct ndpi_workflow * workflo
   u_int8_t l4proto = iph6->ip6_hdr.ip6_un1_nxt;
   u_int16_t ip_len = ntohs(iph6->ip6_hdr.ip6_un1_plen);
   const u_int8_t *l4ptr = (((const u_int8_t *) iph6) + sizeof(struct ndpi_ipv6hdr));
+  if(ipsize < sizeof(struct ndpi_ipv6hdr) + ip_len)
+    return(NULL);
   if(ndpi_handle_ipv6_extension_headers(ipsize - sizeof(struct ndpi_ipv6hdr), &l4ptr, &ip_len, &l4proto) != 0) {
     return(NULL);
   }
@@ -1841,14 +1844,14 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 #ifdef DLT_IPV4
   case DLT_IPV4:
     type = ETH_P_IP;
-    ip_offset = 0;
+    ip_offset = eth_offset;
     break;
 #endif
 
 #ifdef DLT_IPV6
   case DLT_IPV6:
     type = ETH_P_IPV6;
-    ip_offset = 0;
+    ip_offset = eth_offset;
     break;
 #endif
 
@@ -1907,7 +1910,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 	 (FCF_TO_DS(fc) == 0x0 && FCF_FROM_DS(fc)))
 	wifi_len = 26; /* + 4 byte fcs */
     } else   /* no data frames */
-      break;
+      return(nproto);
 
     /* Check ether_type from LLC */
     if(header->caplen < (eth_offset + wifi_len + radio_len + sizeof(struct ndpi_llc_header_snap)))
@@ -1921,7 +1924,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     break;
 
   case DLT_RAW:
-    ip_offset = eth_offset = 0;
+    ip_offset = eth_offset;
     break;
 #ifdef linux
   case DLT_NFLOG:

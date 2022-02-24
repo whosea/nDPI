@@ -22,7 +22,7 @@
 
 #ifndef MBEDTLS_LIBRARY_COMMON_H
 #define MBEDTLS_LIBRARY_COMMON_H
-
+#ifndef __KERNEL__
 #ifdef _MSC_VER
 
   #include <stdlib.h>
@@ -61,7 +61,11 @@
 #else
   #include <byteswap.h>
 #endif
-
+#else /* kernel */
+//  #include <asm/byteorder.h>
+//  #include <linux/swab.h>
+  #define bswap_64(x) (__u64)__builtin_bswap64((__u64)(x))
+#endif
 
 /** Helper to define a function as static except when building invasive tests.
  *
