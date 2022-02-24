@@ -17,7 +17,7 @@ foreach my $proto (qw(AMAZON_AWS MICROSOFT_AZURE CLOUDFLARE MINING MICROSOFT_365
 	my $f = 'ndpi_network_list_'.lc($proto).'.yaml';
 	if(-f $f) {
 		print STDERR "$f exists!\n";
-		next;
+#		next;
 	}
 	die "create file $f" if !open(F,'>'.$f);
 	foreach (sort keys %P) {
