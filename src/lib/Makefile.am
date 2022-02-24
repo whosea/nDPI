@@ -206,7 +206,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     third_party/src/libcache.c \
 		     third_party/src/btlib.c \
 		     third_party/src/ndpi_patricia.c \
-		     third_party/src/gcrypt.c
+		     third_party/src/gcrypt_light.c
 
 lib_LIBRARIES = libndpi.a
 

@@ -1,9 +1,27 @@
 /**
  * \file aes.h
  *
- * \brief AES block cipher
+ * \brief   This file contains AES definitions and functions.
  *
- *  Copyright (C) 2006-2015, ARM Limited, All Rights Reserved
+ *          The Advanced Encryption Standard (AES) specifies a FIPS-approved
+ *          cryptographic algorithm that can be used to protect electronic
+ *          data.
+ *
+ *          The AES algorithm is a symmetric block cipher that can
+ *          encrypt and decrypt information. For more information, see
+ *          <em>FIPS Publication 197: Advanced Encryption Standard</em> and
+ *          <em>ISO/IEC 18033-2:2006: Information technology -- Security
+ *          techniques -- Encryption algorithms -- Part 2: Asymmetric
+ *          ciphers</em>.
+ *
+ *          The AES-XTS block mode is standardized by NIST SP 800-38E
+ *          <https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38e.pdf>
+ *          and described in detail by IEEE P1619
+ *          <https://ieeexplore.ieee.org/servlet/opac?punumber=4375278>.
+ */
+
+/*
+ *  Copyright The Mbed TLS Contributors
  *  SPDX-License-Identifier: Apache-2.0
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -17,94 +35,142 @@
  *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
- *
- *  This file is part of mbed TLS (https://tls.mbed.org)
  */
-
 
 #ifndef MBEDTLS_AES_H
 #define MBEDTLS_AES_H
 
-#if defined(MBEDTLS_AES_C)
+
 
 /* padlock.c and aesni.c rely on these values! */
-#define MBEDTLS_AES_ENCRYPT     1
-#define MBEDTLS_AES_DECRYPT     0
+#define MBEDTLS_AES_ENCRYPT     1 /**< AES encryption. */
+#define MBEDTLS_AES_DECRYPT     0 /**< AES decryption. */
 
-#define MBEDTLS_ERR_AES_INVALID_KEY_LENGTH                -0x0020  /**< Invalid key length. */
-#define MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH              -0x0022  /**< Invalid data input length. */
+/* Error codes in range 0x0020-0x0022 */
+/** Invalid key length. */
+#define MBEDTLS_ERR_AES_INVALID_KEY_LENGTH                -0x0020
+/** Invalid data input length. */
+#define MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH              -0x0022
 
-// Regular implementation
-//
+/* Error codes in range 0x0021-0x0025 */
+/** Invalid input data. */
+#define MBEDTLS_ERR_AES_BAD_INPUT_DATA                    -0x0021
+
+#if ( defined(__ARMCC_VERSION) || defined(_MSC_VER) ) && \
+    !defined(inline) && !defined(__cplusplus)
+#define inline __inline
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * \brief          AES context structure
- *
- * \note           buf is able to hold 32 extra bytes, which can be used:
- *                 - for alignment purposes if VIA padlock is used, and/or
- *                 - to simplify key expansion in the 256-bit case by
- *                 generating an extra round key
- */
-struct mbedtls_aes_ctx
-{
-    int nr;                     /*!<  number of rounds  */
-    uint32_t *rk;               /*!<  AES round keys    */
-    uint32_t buf[68];           /*!<  unaligned data    */
-};
-typedef struct mbedtls_aes_ctx mbedtls_aes_context;
+// Regular implementation
+//
 
 /**
- * \brief          Initialize AES context
+ * \brief The AES context-type definition.
+ */
+typedef struct mbedtls_aes_context
+{
+    int nr;                     /*!< The number of rounds. */
+    uint32_t *rk;               /*!< AES round keys. */
+    uint32_t buf[68];           /*!< Unaligned data buffer. This buffer can
+                                     hold 32 extra Bytes, which can be used for
+                                     one of the following purposes:
+                                     <ul><li>Alignment if VIA padlock is
+                                             used.</li>
+                                     <li>Simplifying key expansion in the 256-bit
+                                         case by generating an extra round key.
+                                         </li></ul> */
+}
+mbedtls_aes_context;
+
+
+
+/**
+ * \brief          This function initializes the specified AES context.
  *
- * \param ctx      AES context to be initialized
+ *                 It must be the first API called before using
+ *                 the context.
+ *
+ * \param ctx      The AES context to initialize. This must not be \c NULL.
  */
 void mbedtls_aes_init( mbedtls_aes_context *ctx );
 
 /**
- * \brief          Clear AES context
+ * \brief          This function releases and clears the specified AES context.
  *
- * \param ctx      AES context to be cleared
+ * \param ctx      The AES context to clear.
+ *                 If this is \c NULL, this function does nothing.
+ *                 Otherwise, the context must have been at least initialized.
  */
 void mbedtls_aes_free( mbedtls_aes_context *ctx );
 
+
 /**
- * \brief          AES key schedule (encryption)
+ * \brief          This function sets the encryption key.
  *
- * \param ctx      AES context to be initialized
- * \param key      encryption key
- * \param keybits  must be 128, 192 or 256
+ * \param ctx      The AES context to which the key should be bound.
+ *                 It must be initialized.
+ * \param key      The encryption key.
+ *                 This must be a readable buffer of size \p keybits bits.
+ * \param keybits  The size of data passed in bits. Valid options are:
+ *                 <ul><li>128 bits</li>
+ *                 <li>192 bits</li>
+ *                 <li>256 bits</li></ul>
  *
- * \return         0 if successful, or MBEDTLS_ERR_AES_INVALID_KEY_LENGTH
+ * \return         \c 0 on success.
+ * \return         #MBEDTLS_ERR_AES_INVALID_KEY_LENGTH on failure.
  */
+MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_setkey_enc( mbedtls_aes_context *ctx, const unsigned char *key,
                     unsigned int keybits );
 
 /**
- * \brief          AES key schedule (decryption)
+ * \brief          This function sets the decryption key.
  *
- * \param ctx      AES context to be initialized
- * \param key      decryption key
- * \param keybits  must be 128, 192 or 256
+ * \param ctx      The AES context to which the key should be bound.
+ *                 It must be initialized.
+ * \param key      The decryption key.
+ *                 This must be a readable buffer of size \p keybits bits.
+ * \param keybits  The size of data passed. Valid options are:
+ *                 <ul><li>128 bits</li>
+ *                 <li>192 bits</li>
+ *                 <li>256 bits</li></ul>
  *
- * \return         0 if successful, or MBEDTLS_ERR_AES_INVALID_KEY_LENGTH
+ * \return         \c 0 on success.
+ * \return         #MBEDTLS_ERR_AES_INVALID_KEY_LENGTH on failure.
  */
+MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_setkey_dec( mbedtls_aes_context *ctx, const unsigned char *key,
                     unsigned int keybits );
 
+
 /**
- * \brief          AES-ECB block encryption/decryption
+ * \brief          This function performs an AES single-block encryption or
+ *                 decryption operation.
  *
- * \param ctx      AES context
- * \param mode     MBEDTLS_AES_ENCRYPT or MBEDTLS_AES_DECRYPT
- * \param input    16-byte input block
- * \param output   16-byte output block
+ *                 It performs the operation defined in the \p mode parameter
+ *                 (encrypt or decrypt), on the input data buffer defined in
+ *                 the \p input parameter.
  *
- * \return         0 if successful
+ *                 mbedtls_aes_init(), and either mbedtls_aes_setkey_enc() or
+ *                 mbedtls_aes_setkey_dec() must be called before the first
+ *                 call to this API with the same context.
+ *
+ * \param ctx      The AES context to use for encryption or decryption.
+ *                 It must be initialized and bound to a key.
+ * \param mode     The AES operation: #MBEDTLS_AES_ENCRYPT or
+ *                 #MBEDTLS_AES_DECRYPT.
+ * \param input    The buffer holding the input data.
+ *                 It must be readable and at least \c 16 Bytes long.
+ * \param output   The buffer where the output data will be written.
+ *                 It must be writeable and at least \c 16 Bytes long.
+
+ * \return         \c 0 on success.
  */
+MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_ecb( mbedtls_aes_context *ctx,
                     int mode,
                     const unsigned char input[16],
@@ -112,27 +178,47 @@ int mbedtls_aes_crypt_ecb( mbedtls_aes_context *ctx,
 
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /**
- * \brief          AES-CBC buffer encryption/decryption
- *                 Length should be a multiple of the block
- *                 size (16 bytes)
+ * \brief  This function performs an AES-CBC encryption or decryption operation
+ *         on full blocks.
  *
- * \note           Upon exit, the content of the IV is updated so that you can
- *                 call the function same function again on the following
- *                 block(s) of data and get the same result as if it was
- *                 encrypted in one call. This allows a "streaming" usage.
- *                 If on the other hand you need to retain the contents of the
- *                 IV, you should either save it manually or use the cipher
- *                 module instead.
+ *         It performs the operation defined in the \p mode
+ *         parameter (encrypt/decrypt), on the input data buffer defined in
+ *         the \p input parameter.
  *
- * \param ctx      AES context
- * \param mode     MBEDTLS_AES_ENCRYPT or MBEDTLS_AES_DECRYPT
- * \param length   length of the input data
- * \param iv       initialization vector (updated after use)
- * \param input    buffer holding the input data
- * \param output   buffer holding the output data
+ *         It can be called as many times as needed, until all the input
+ *         data is processed. mbedtls_aes_init(), and either
+ *         mbedtls_aes_setkey_enc() or mbedtls_aes_setkey_dec() must be called
+ *         before the first call to this API with the same context.
  *
- * \return         0 if successful, or MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH
+ * \note   This function operates on full blocks, that is, the input size
+ *         must be a multiple of the AES block size of \c 16 Bytes.
+ *
+ * \note   Upon exit, the content of the IV is updated so that you can
+ *         call the same function again on the next
+ *         block(s) of data and get the same result as if it was
+ *         encrypted in one call. This allows a "streaming" usage.
+ *         If you need to retain the contents of the IV, you should
+ *         either save it manually or use the cipher module instead.
+ *
+ *
+ * \param ctx      The AES context to use for encryption or decryption.
+ *                 It must be initialized and bound to a key.
+ * \param mode     The AES operation: #MBEDTLS_AES_ENCRYPT or
+ *                 #MBEDTLS_AES_DECRYPT.
+ * \param length   The length of the input data in Bytes. This must be a
+ *                 multiple of the block size (\c 16 Bytes).
+ * \param iv       Initialization vector (updated after use).
+ *                 It must be a readable and writeable buffer of \c 16 Bytes.
+ * \param input    The buffer holding the input data.
+ *                 It must be readable and of size \p length Bytes.
+ * \param output   The buffer holding the output data.
+ *                 It must be writeable and of size \p length Bytes.
+ *
+ * \return         \c 0 on success.
+ * \return         #MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH
+ *                 on failure.
  */
+MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_cbc( mbedtls_aes_context *ctx,
                     int mode,
                     size_t length,
@@ -141,149 +227,45 @@ int mbedtls_aes_crypt_cbc( mbedtls_aes_context *ctx,
                     unsigned char *output );
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
-#if defined(MBEDTLS_CIPHER_MODE_CFB)
-/**
- * \brief          AES-CFB128 buffer encryption/decryption.
- *
- * Note: Due to the nature of CFB you should use the same key schedule for
- * both encryption and decryption. So a context initialized with
- * mbedtls_aes_setkey_enc() for both MBEDTLS_AES_ENCRYPT and MBEDTLS_AES_DECRYPT.
- *
- * \note           Upon exit, the content of the IV is updated so that you can
- *                 call the function same function again on the following
- *                 block(s) of data and get the same result as if it was
- *                 encrypted in one call. This allows a "streaming" usage.
- *                 If on the other hand you need to retain the contents of the
- *                 IV, you should either save it manually or use the cipher
- *                 module instead.
- *
- * \param ctx      AES context
- * \param mode     MBEDTLS_AES_ENCRYPT or MBEDTLS_AES_DECRYPT
- * \param length   length of the input data
- * \param iv_off   offset in IV (updated after use)
- * \param iv       initialization vector (updated after use)
- * \param input    buffer holding the input data
- * \param output   buffer holding the output data
- *
- * \return         0 if successful
- */
-int mbedtls_aes_crypt_cfb128( mbedtls_aes_context *ctx,
-                       int mode,
-                       size_t length,
-                       size_t *iv_off,
-                       unsigned char iv[16],
-                       const unsigned char *input,
-                       unsigned char *output );
+
+
+
 
 /**
- * \brief          AES-CFB8 buffer encryption/decryption.
+ * \brief           Internal AES block encryption function. This is only
+ *                  exposed to allow overriding it using
+ *                  \c MBEDTLS_AES_ENCRYPT_ALT.
  *
- * Note: Due to the nature of CFB you should use the same key schedule for
- * both encryption and decryption. So a context initialized with
- * mbedtls_aes_setkey_enc() for both MBEDTLS_AES_ENCRYPT and MBEDTLS_AES_DECRYPT.
+ * \param ctx       The AES context to use for encryption.
+ * \param input     The plaintext block.
+ * \param output    The output (ciphertext) block.
  *
- * \note           Upon exit, the content of the IV is updated so that you can
- *                 call the function same function again on the following
- *                 block(s) of data and get the same result as if it was
- *                 encrypted in one call. This allows a "streaming" usage.
- *                 If on the other hand you need to retain the contents of the
- *                 IV, you should either save it manually or use the cipher
- *                 module instead.
- *
- * \param ctx      AES context
- * \param mode     MBEDTLS_AES_ENCRYPT or MBEDTLS_AES_DECRYPT
- * \param length   length of the input data
- * \param iv       initialization vector (updated after use)
- * \param input    buffer holding the input data
- * \param output   buffer holding the output data
- *
- * \return         0 if successful
+ * \return          \c 0 on success.
  */
-int mbedtls_aes_crypt_cfb8( mbedtls_aes_context *ctx,
-                    int mode,
-                    size_t length,
-                    unsigned char iv[16],
-                    const unsigned char *input,
-                    unsigned char *output );
-#endif /*MBEDTLS_CIPHER_MODE_CFB */
-
-#if defined(MBEDTLS_CIPHER_MODE_CTR)
-/**
- * \brief               AES-CTR buffer encryption/decryption
- *
- * Warning: You have to keep the maximum use of your counter in mind!
- *
- * Note: Due to the nature of CTR you should use the same key schedule for
- * both encryption and decryption. So a context initialized with
- * mbedtls_aes_setkey_enc() for both MBEDTLS_AES_ENCRYPT and MBEDTLS_AES_DECRYPT.
- *
- * \param ctx           AES context
- * \param length        The length of the data
- * \param nc_off        The offset in the current stream_block (for resuming
- *                      within current cipher stream). The offset pointer to
- *                      should be 0 at the start of a stream.
- * \param nonce_counter The 128-bit nonce and counter.
- * \param stream_block  The saved stream-block for resuming. Is overwritten
- *                      by the function.
- * \param input         The input data stream
- * \param output        The output data stream
- *
- * \return         0 if successful
- */
-int mbedtls_aes_crypt_ctr( mbedtls_aes_context *ctx,
-                       size_t length,
-                       size_t *nc_off,
-                       unsigned char nonce_counter[16],
-                       unsigned char stream_block[16],
-                       const unsigned char *input,
-                       unsigned char *output );
-#endif /* MBEDTLS_CIPHER_MODE_CTR */
+MBEDTLS_CHECK_RETURN_TYPICAL
+int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
+                                  const unsigned char input[16],
+                                  unsigned char output[16] );
 
 /**
- * \brief           Internal AES block encryption function
- *                  (Only exposed to allow overriding it,
- *                  see MBEDTLS_AES_ENCRYPT_ALT)
+ * \brief           Internal AES block decryption function. This is only
+ *                  exposed to allow overriding it using see
+ *                  \c MBEDTLS_AES_DECRYPT_ALT.
  *
- * \param ctx       AES context
- * \param input     Plaintext block
- * \param output    Output (ciphertext) block
+ * \param ctx       The AES context to use for decryption.
+ * \param input     The ciphertext block.
+ * \param output    The output (plaintext) block.
+ *
+ * \return          \c 0 on success.
  */
-void mbedtls_aes_encrypt( mbedtls_aes_context *ctx,
-                          const unsigned char input[16],
-                          unsigned char output[16] );
+MBEDTLS_CHECK_RETURN_TYPICAL
+int mbedtls_internal_aes_decrypt( mbedtls_aes_context *ctx,
+                                  const unsigned char input[16],
+                                  unsigned char output[16] );
 
-/**
- * \brief           Internal AES block decryption function
- *                  (Only exposed to allow overriding it,
- *                  see MBEDTLS_AES_DECRYPT_ALT)
- *
- * \param ctx       AES context
- * \param input     Ciphertext block
- * \param output    Output (plaintext) block
- */
-void mbedtls_aes_decrypt( mbedtls_aes_context *ctx,
-                          const unsigned char input[16],
-                          unsigned char output[16] );
 
 #ifdef __cplusplus
 }
 #endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * \brief          Checkup routine
- *
- * \return         0 if successful, or 1 if the test failed
- */
-int mbedtls_aes_self_test( int verbose );
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* MBEDTLS_AES_C */
 
 #endif /* aes.h */

@@ -2,6 +2,8 @@
 #ifndef GCRY_LIGHT_H
 #define GCRY_LIGHT_H
 
+#define LIBGCRYPT_INTERNAL
+
 #define HMAC_SHA256_DIGEST_SIZE 32  /* Same as SHA-256's output size. */
 #define SHA256_DIGEST_SIZE 32
 #define GCRY_MD_BUFF_SIZE 256
@@ -27,6 +29,7 @@
 #define GCRY_AES_IV_SIZE 12
 
 typedef int gcry_error_t;
+typedef gcry_error_t gpg_error_t;
 
 struct gcry_md_hd {
 	uint8_t  key[64],out[HMAC_SHA256_DIGEST_SIZE];
@@ -44,8 +47,8 @@ struct gcry_cipher_hd {
     uint8_t tag[GCRY_AES_TAG_SIZE];
     uint8_t iv[GCRY_AES_IV_SIZE];
     union {
-        struct mbedtls_aes_ctx *ecb;
-        struct mbedtls_gcm_ctx *gcm;
+        struct mbedtls_aes_context *ecb;
+        struct mbedtls_gcm_context *gcm;
     }  ctx;
 };
 
@@ -53,6 +56,7 @@ typedef struct gcry_cipher_hd * gcry_cipher_hd_t;
 
 int          gcry_control (int, int);
 const char   *gcry_check_version(void *);
+char         *gpg_strerror_r(gcry_error_t, char *, size_t);
 
 gcry_error_t gcry_md_open  (gcry_md_hd_t *h, int algo, int flags);
 void         gcry_md_close (gcry_md_hd_t h);
