@@ -1115,7 +1115,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct sk_buff *skb_use = NULL;
 	struct nf_ct_ext_ndpi *ct_ndpi = NULL;
 	struct ndpi_cb *c_proto;
-	uint8_t l4_proto=0,ct_dir=0;
+	uint8_t l4_proto=0,ct_dir=0,detect_complete=1;
 	bool result=false, host_match = true, is_ipv6=false;
 	struct ndpi_net *n;
 
@@ -1229,6 +1229,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	if(ndpi_log_debug > 3)
 		packet_trace(skb,ct,"Start      ");
 
+	detect_complete = 0;
+
 	barrier();
 	spin_lock_bh (&ct_ndpi->lock);
 
@@ -1253,6 +1255,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 #endif
 	if( c_proto->magic == NDPI_ID ) {
 	    if(ct_proto_last(c_proto) == ct) {
+		detect_complete = test_detect_done(ct_ndpi);
 		proto.app_protocol = ct_ndpi->proto.app_protocol;
 		proto.master_protocol = ct_ndpi->proto.master_protocol;
 		if(info->hostname[0])
@@ -1275,6 +1278,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	if(!ct_ndpi->flinfo.ofidx) 
 		ct_ndpi->flinfo.ofidx = get_in_if(xt_out(par));
 	
+	detect_complete = test_detect_done(ct_ndpi);
 	/* don't pass icmp for TCP/UDP to ndpi_process_packet()  */
 	if(l4_proto == IPPROTO_ICMP && ct_ndpi->l4_proto != IPPROTO_ICMP) {
 		proto.master_protocol = NDPI_PROTOCOL_IP_ICMP;
@@ -1323,6 +1327,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			if (linearized_skb == NULL) {
 				spin_unlock_bh (&ct_ndpi->lock);
 				COUNTER(ndpi_falloc);
+				detect_complete = 1;
 				proto.app_protocol = NDPI_PROCESS_ERROR;
 				break;
 			}
@@ -1340,6 +1345,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 		c_proto->magic = NDPI_ID;
 		c_proto->proto = r_proto;
+		detect_complete = ct_ndpi->flow->fail_with_unknown;
 
 		ct_proto_set_flow(c_proto,ct, !test_flow_yes(ct_ndpi) ? 0:
 			(test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START));
@@ -1354,6 +1360,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			proto.master_protocol = NDPI_PROTOCOL_UNKNOWN;
 			if(ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_UNKNOWN)
 				ct_ndpi->proto.app_protocol = r_proto;
+			detect_complete = 1;
 		        break;
 		    }
 
@@ -1380,7 +1387,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			int max_packet_unk = 
 			     (ct_ndpi->l4_proto == IPPROTO_TCP) ? max_packet_unk_tcp:
 			     (ct_ndpi->l4_proto == IPPROTO_UDP) ? max_packet_unk_udp : max_packet_unk_other;
-			if(ct_ndpi->flow->packet_counter > max_packet_unk) {
+			if( ct_ndpi->flow->packet_counter > max_packet_unk || detect_complete) {
 				set_detect_done(ct_ndpi);
 				if(ct_ndpi->flow)
 					__ndpi_free_ct_flow(ct_ndpi);
@@ -1403,6 +1410,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	return (proto.app_protocol == NDPI_PROCESS_ERROR) ^ (info->invert != 0);
 
     do {
+        if(info->inprogress) {
+                result = !detect_complete;
+                break;
+        }
 	if (info->have_master) {
 		result = proto.master_protocol != NDPI_PROTOCOL_UNKNOWN;
 		break;
@@ -1440,7 +1451,7 @@ ndpi_mt_check(const struct xt_mtchk_param *par)
 {
 struct xt_ndpi_mtinfo *info = par->matchinfo;
 
-	if (!info->error &&  !info->have_master && !info->hostname[0] &&
+	if (!info->error && !info->inprogress && !info->have_master && !info->hostname[0] &&
 	     NDPI_BITMASK_IS_ZERO(info->flags)) {
 		pr_info("No selected protocols.\n");
 		return -EINVAL;

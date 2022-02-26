@@ -3832,7 +3832,7 @@ void ndpi_set_bitmask_protocol_detection(char *label, struct ndpi_detection_modu
 		  label, idx, ndpi_protocol_id);
 #endif
 
-    if(ndpi_str->proto_defaults[ndpi_protocol_id].protoIdx != 0 && ndpi_protocol_id != 42) {
+    if(ndpi_str->proto_defaults[ndpi_protocol_id].protoIdx != 0 ) {
       NDPI_LOG_DBG2(ndpi_str, "[NDPI] Internal error: protocol %s/%u has been already registered\n", label,
 		    ndpi_protocol_id);
 #ifdef DEBUG

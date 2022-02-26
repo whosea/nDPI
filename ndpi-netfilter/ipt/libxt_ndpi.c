@@ -68,6 +68,7 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define NDPI_OPT_PROTOCOL (EXT_OPT_BASE+5)
 #define NDPI_OPT_HMASTER  (EXT_OPT_BASE+6)
 #define NDPI_OPT_HOST     (EXT_OPT_BASE+7)
+#define NDPI_OPT_INPROGRESS (EXT_OPT_BASE+8)
 
 #define FLAGS_ALL 0x1
 #define FLAGS_ERR 0x2
@@ -75,6 +76,7 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define FLAGS_MASTER 0x8
 #define FLAGS_PROTOCOL 0x10
 #define FLAGS_HOST 0x20
+#define FLAGS_INPROGRESS 0x40
 
 
 static void ndpi_mt_init(struct xt_entry_match *match)
@@ -92,6 +94,10 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 
 	if(info->error) {
 		printf(" %s--error",cinv);
+		return;
+	}
+	if(info->inprogress) {
+		printf(" %s--inprogress",cinv);
 		return;
 	}
 	if(info->have_master) {
@@ -158,6 +164,10 @@ ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
 		printf(" %sndpi error",cinv);
 		return;
 	}
+	if(info->inprogress) {
+		printf(" %sndpi inprogress",cinv);
+		return;
+	}
 	if(info->have_master) {
 		printf(" %sndpi have-master",cinv);
 		return;
@@ -220,6 +230,11 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 		info->have_master = 1;
         	*flags |= FLAGS_HMASTER;
 		return true;
+	}
+	if(c == NDPI_OPT_INPROGRESS ) {
+		info->inprogress = 1;
+                *flags |= FLAGS_INPROGRESS;
+                return true;
 	}
 	if(c == NDPI_OPT_MASTER) {
 		info->m_proto = 1;
@@ -371,6 +386,12 @@ ndpi_mt_check (unsigned int flags)
 	      else
 		 return;
 	}
+	if (flags & FLAGS_INPROGRESS) {
+	   if(flags & (FLAGS_ALL | FLAGS_MASTER | FLAGS_PROTOCOL))
+		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--inprogress' with options match-master,match-proto,proto");
+	      else
+		 return;
+	}
 
 	if (flags & (FLAGS_PROTOCOL|FLAGS_MASTER)) {
 	    if(!(flags & FLAGS_ALL))
@@ -435,6 +456,7 @@ ndpi_mt_help(void)
 
 	printf( "ndpi match options:\n"
 		"  --error            Match error detecting process\n"
+		"  --inprogress       Match if protocol detection is not finished yet\n"
 		"  --have-master      Match if master protocol detected\n"
 		"  --match-master     Match master protocol only\n"
 		"  --match-proto      Match protocol only\n"
@@ -768,6 +790,12 @@ void _init(void)
 	ndpi_mt_opts[i].flag = NULL;
 	ndpi_mt_opts[i].has_arg = 1;
 	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_INPROGRESS;
+	ndpi_mt_opts[i].name = "inprogress";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 0;
+	ndpi_mt_opts[i].val = i;
+
 	i++;
 	ndpi_mt_opts[i].name = NULL;
 	ndpi_mt_opts[i].flag = NULL;
