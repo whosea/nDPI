@@ -223,13 +223,13 @@ ssize_t nproto_proc_read(struct file *file, char __user *buf,
 				"#id     mark ~mask     name   # count #version %s\n",
 				NDPI_GIT_RELEASE);
 		if(!n->mark[i].mark && !n->mark[i].mask)
-		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%02x  %17s %-16s # %d\n",
+		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%02x  %17s %-16s # %lld \n",
 				i,"disabled",c_buf,
-				atomic_read(&n->protocols_cnt[i]));
+				atomic64_read(&n->protocols_cnt[i]));
 		else
-		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%02x  %8x/%08x %-16s # %d debug=%d\n",
+		    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%02x  %8x/%08x %-16s # %lld debug=%d \n",
 				i,n->mark[i].mark,n->mark[i].mask,c_buf,
-				atomic_read(&n->protocols_cnt[i]),
+				atomic64_read(&n->protocols_cnt[i]),
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
 					n->debug_level[i]
 #else

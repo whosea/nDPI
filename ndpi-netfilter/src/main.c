@@ -801,7 +801,7 @@ ndpi_enable_protocols (struct ndpi_net *n)
         int i,c=0;
 
         spin_lock_bh (&n->ipq_lock);
-	if(atomic_inc_return(&n->protocols_cnt[0]) == 1) {
+	if(atomic64_inc_return(&n->protocols_cnt[0]) == 1) {
 		for (i = 1,c=0; i < NDPI_NUM_BITS; i++) {
 			if(!ndpi_get_proto_by_id(n->ndpi_struct,i))
 				continue;
@@ -1370,10 +1370,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			c_proto->proto = pack_proto(proto);
 			if(test_flow_yes(ct_ndpi))
 				ndpi_host_info(ct_ndpi);
-			atomic_inc(&n->protocols_cnt[proto.app_protocol]);
+			atomic64_inc(&n->protocols_cnt[proto.app_protocol]);
 			if(proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
 			   proto.master_protocol != proto.app_protocol)
-				atomic_inc(&n->protocols_cnt[proto.master_protocol]);
+				atomic64_inc(&n->protocols_cnt[proto.master_protocol]);
 			break;
 		    }
 		    // ndpi_process_packet return unknown
@@ -2450,7 +2450,7 @@ static int __net_init ndpi_net_init(struct net *net)
 
 	n->ndpi_struct->user_data = n;
 	for (i = 0; i < NDPI_NUM_BITS; i++) {
-                atomic_set (&n->protocols_cnt[i], 0);
+                atomic64_set (&n->protocols_cnt[i], 0);
         	n->debug_level[i] = 0;
 		if(i < NDPI_LAST_IMPLEMENTED_PROTOCOL) continue;
 		n->mark[i].mark = n->mark[i].mask = 0;

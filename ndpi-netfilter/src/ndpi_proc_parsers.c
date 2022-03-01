@@ -816,7 +816,7 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 		}
 //		pr_info("NDPI: proto %s id %d mark %x mask %s\n",
 //				hid,id,mark,m);
-		if(atomic_read(&n->protocols_cnt[0]) &&
+		if(atomic64_read(&n->protocols_cnt[0]) &&
 			!mark && !mask) {
 			pr_err("NDPI: iptables in use! Can't disable protocol\n");
 			return 1;

@@ -445,7 +445,7 @@ int main(int argc,char **argv) {
 	} else {
 		fd = open(src_file ,O_RDONLY);
 		if(fd < 0) {
-			perror("open lows");
+			perror("open flows");
 			exit(1);
 		}
 		if(fstat(fd,&src_st) < 0) {
