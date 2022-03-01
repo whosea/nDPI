@@ -13,7 +13,7 @@
 
 #include "ndpi_api.h"
 
-#if !defined(HAVE_LIBGCRYPT)
+#if !defined(HAVE_LIBGCRYPT) || defined(__KERNEL__)
 
 #if defined(__GNUC__) &&  \
         ( defined(__amd64__) || defined(__x86_64__) )   &&  \
@@ -275,7 +275,7 @@ gcry_error_t gcry_cipher_setiv (gcry_cipher_hd_t h, const void *iv, size_t ivlen
     if(h->s_iv) return MBEDTLS_ERR_CIPHER_BAD_KEY;
     switch(h->mode) {
         case GCRY_CIPHER_MODE_GCM:
-            if(ivlen != 12) return MBEDTLS_ERR_CIPHER_BAD_KEY;
+            if(ivlen < 12 && ivlen > GCRY_AES_IV_SIZE) return MBEDTLS_ERR_CIPHER_BAD_KEY;
             h->s_iv = 1;
             h->ivlen = ivlen;
             memcpy( h->iv, iv, ivlen );

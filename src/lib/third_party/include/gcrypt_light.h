@@ -26,7 +26,7 @@
 #define GCRY_AES_KEY_SIZE 32
 #define GCRY_AES_AUTH_SIZE 128
 #define GCRY_AES_TAG_SIZE 32
-#define GCRY_AES_IV_SIZE 12
+#define GCRY_AES_IV_SIZE 32
 
 typedef int gcry_error_t;
 typedef gcry_error_t gpg_error_t;
