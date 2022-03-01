@@ -16,6 +16,7 @@
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #endif
 
+typedef long intptr_t;
 typedef size_t socklen_t;
 const char *
 inet_ntop (int af, const void *src, char *dst, socklen_t size);
