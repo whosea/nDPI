@@ -186,7 +186,7 @@ for(id=0; id <= ndpi_last_proto; id++) {
 	append_buf(lbuf,(n-lbuf)+len);
 }
 if(proto_buf && proto_buf_pos)
-	write(fd,proto_buf,proto_buf_pos);
+	(void)write(fd,proto_buf,proto_buf_pos);
 if(proto_buf) {
 	free(proto_buf);
 	proto_buf = 0;
@@ -276,7 +276,7 @@ uint16_t id;
 			rl = 8;
 			if(offs+rl > dump->len) return -1;
 			l = snprintf(buff,sizeof(buff)-1,"TIME %u\n",c->time_start);
-			write(fd,buff,l);
+			(void)write(fd,buff,l);
 			offs += rl;
 			break;
 		case 3:
@@ -284,7 +284,7 @@ uint16_t id;
 			if(offs+rl > dump->len) return -1;
 			l = snprintf(buff,sizeof(buff)-1,"LOST_TRAFFIC %u %u %" PRIu64 " %" PRIu64 "\n",
 				c->p[0],c->p[1],c->b[0],c->b[1]);
-			write(fd,buff,l);
+			(void)write(fd,buff,l);
 			offs += rl;
 			break;
 		case 2:
@@ -376,7 +376,7 @@ uint16_t id;
 			}
 			buff[l++] = '\n';
 			buff[l] = '\0';
-			write(fd,buff,l);
+			(void)write(fd,buff,l);
 			offs += rl + c->opt_len + c->host_len;
 			break;
 		}

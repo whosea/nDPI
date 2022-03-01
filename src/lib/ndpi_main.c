@@ -938,13 +938,13 @@ static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_st
   for(i = 0; i < ndpi_str->ndpi_num_supported_protocols; i++) {
     if(ndpi_str->proto_defaults[i].protoName == NULL) {
       NDPI_LOG_ERR(ndpi_str,
-		   "[NDPI] INTERNAL ERROR missing protoName initialization for [protoId=%d]: recovering\n", i);
+		   "[NDPI] INTERNAL ERROR missing protoName initialization for [protoId=%zd]: recovering\n", i);
       return 1;
     } else {
       if((i != NDPI_PROTOCOL_UNKNOWN) &&
 	 (ndpi_str->proto_defaults[i].protoCategory == NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)) {
 	    NDPI_LOG_ERR(ndpi_str,
-		     "[NDPI] INTERNAL ERROR missing category [protoId=%d/%s] initialization: recovering\n", i,
+		     "[NDPI] INTERNAL ERROR missing category [protoId=%zd/%s] initialization: recovering\n", i,
 		     ndpi_str->proto_defaults[i].protoName ? ndpi_str->proto_defaults[i].protoName : "???");
 	return 1;
       }
@@ -952,7 +952,7 @@ static int ndpi_validate_protocol_initialization(struct ndpi_detection_module_st
     if(!strcmp(ndpi_str->proto_defaults[i].protoName,"Free")) continue;
     for( j = 0; j < i; j++)
       if(!strcmp(ndpi_str->proto_defaults[i].protoName,ndpi_str->proto_defaults[j].protoName)) {
-  	    NDPI_LOG_ERR(ndpi_str, "[NDPI] INTERNAL ERROR: Name of the protocols are the same for #%d and #%d '%s' \n",i,j,
+  	    NDPI_LOG_ERR(ndpi_str, "[NDPI] INTERNAL ERROR: Name of the protocols are the same for #%zd and #%zd '%s' \n",i,j,
   			    ndpi_str->proto_defaults[i].protoName);
   	return 1;
       }
