@@ -53,11 +53,16 @@
   #define HAVE_LIBGCRYPT 1
   #undef MATCH_DEBUG
 #else
-  #ifdef HAVE_LIBGCRYPT
-  #include <gcrypt.h>
+  #ifdef USE_HOST_LIBGCRYPT
+    #include <gcrypt.h>
   #else
-  #include <gcrypt_light.h>
-  #define HAVE_LIBGCRYPT 1
+    #include <gcrypt_light.h>
+    #define HAVE_LIBGCRYPT 1
+  #endif
+
+  #include <time.h>
+  #ifndef WIN32
+    #include <unistd.h>
   #endif
 #endif
 
@@ -65,6 +70,7 @@
 
 #include "ndpi_content_match.c.inc"
 #include "ndpi_dga_match.c.inc"
+#if 0
 #include "ndpi_azure_match.c.inc"
 #include "ndpi_tor_match.c.inc"
 #include "ndpi_whatsapp_match.c.inc"
@@ -78,6 +84,16 @@
 #include "ndpi_ms_skype_teams_match.c.inc"
 #include "ndpi_google_match.c.inc"
 #include "ndpi_google_cloud_match.c.inc"
+#include "ndpi_asn_telegram.c.inc"
+#include "ndpi_asn_apple.c.inc"
+#include "ndpi_asn_twitter.c.inc"
+#include "ndpi_asn_netflix.c.inc"
+#include "ndpi_asn_webex.c.inc"
+#include "ndpi_asn_teamviewer.c.inc"
+#include "ndpi_asn_facebook.c.inc"
+#endif
+
+#include "ndpi_icloud_private_relay_match.c.inc"
 
 /* Third party libraries */
 #include "third_party/include/ndpi_patricia.h"
@@ -157,6 +173,7 @@ static ndpi_risk_info ndpi_known_risks[] = {
   { NDPI_PUNYCODE_IDN,                          NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
   { NDPI_ERROR_CODE_DETECTED,                   NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
   { NDPI_HTTP_CRAWLER_BOT,                      NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
+  { NDPI_ANONYMOUS_SUBSCRIBER,                  NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
   
   /* Leave this as last member */
   { NDPI_MAX_RISK,                              NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }
@@ -920,6 +937,13 @@ int ndpi_set_detection_preferences(struct ndpi_detection_module_struct *ndpi_str
     */
     ndpi_str->num_tls_blocks_to_follow = NDPI_MAX_NUM_TLS_APPL_BLOCKS;
     ndpi_str->skip_tls_blocks_until_change_cipher = 1;
+    break;
+
+  case ndpi_pref_max_packets_to_process:
+    if (value > 0xFFFF) {
+      return(-1);
+    }
+    ndpi_str->max_packets_to_process = value;
     break;
 
   default:
@@ -2137,6 +2161,23 @@ u_int16_t ndpi_network_port_ptree_match(struct ndpi_detection_module_struct *ndp
 
 /* ******************************************* */
 
+ndpi_risk_enum ndpi_network_risk_ptree_match(struct ndpi_detection_module_struct *ndpi_str,
+					     struct in_addr *pin /* network byte order */) {
+  ndpi_prefix_t prefix;
+  ndpi_patricia_node_t *node;
+
+  /* Make sure all in network byte order otherwise compares wont work */
+  ndpi_fill_prefix_v4(&prefix, pin, 32, ((ndpi_patricia_tree_t *) ndpi_str->ip_risk_ptree)->maxbits);
+  node = ndpi_patricia_search_best(ndpi_str->ip_risk_ptree, &prefix);
+
+  if(node)
+    return((ndpi_risk_enum)node->value.u.uv32.user_value);
+
+  return(NDPI_NO_RISK);
+}
+
+/* ******************************************* */
+
 #if 0
 static u_int8_t tor_ptree_match(struct ndpi_detection_module_struct *ndpi_str, struct in_addr *pin) {
   return((ndpi_network_ptree_match(ndpi_str, pin) == NDPI_PROTOCOL_TOR) ? 1 : 0);
@@ -2239,6 +2280,10 @@ static void ndpi_init_ptree_ipv4(struct ndpi_detection_module_struct *ndpi_str,
 
     pin.s_addr = htonl(host_list[i].network);
     if((node = add_to_ptree(ptree, AF_INET, &pin, host_list[i].cidr /* bits */)) != NULL) {
+      /* Two main cases:
+         1) ip -> protocol: uv32.user_value = protocol; uv32.additional_user_value = 0;
+         2) ip -> risk: uv32.user_value = risk; uv32.additional_user_value = 0;
+      */
       node->value.u.uv32.user_value = host_list[i].value, node->value.u.uv32.additional_user_value = 0;
     }
   }
@@ -2488,7 +2533,6 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   if(prefs & ndpi_enable_ja3_plus)
     ndpi_str->enable_ja3_plus = 1;
 
-#ifdef HAVE_LIBGCRYPT
   if(!(prefs & ndpi_dont_init_libgcrypt)) {
     if(!gcry_control (GCRYCTL_INITIALIZATION_FINISHED_P,0)) {
       const char *gcrypt_ver = gcry_check_version(NULL);
@@ -2504,7 +2548,6 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   } else {
     NDPI_LOG_DBG(ndpi_str, "Libgcrypt initialization skipped\n");
   }
-#endif
 
   if((ndpi_str->protocols_ptree = ndpi_patricia_new(32 /* IPv4 */)) != NULL) {
     ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, host_protocol_list);
@@ -2533,10 +2576,29 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_google_protocol_list);
     if(!(prefs & ndpi_dont_load_google_cloud_list))
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_google_cloud_protocol_list);
+    if(!(prefs & ndpi_dont_load_asn_lists)) {
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_telegram_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_apple_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_twitter_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_netflix_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_webex_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_teamviewer_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_facebook_protocol_list);
+    }
 #endif
   }
 
   ndpi_str->ip_risk_mask_ptree = ndpi_patricia_new(32 /* IPv4 */);
+
+  if(!(prefs & ndpi_dont_init_risk_ptree)) {
+    if((ndpi_str->ip_risk_ptree = ndpi_patricia_new(32 /* IPv4 */)) != NULL) {
+      if(!(prefs & ndpi_dont_load_icloud_private_relay_list)) {
+        ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->ip_risk_ptree, ndpi_anonymous_subscriber_protocol_list);
+      }
+    }
+  }
+
+  ndpi_str->max_packets_to_process = NDPI_DEFAULT_MAX_NUM_PKTS_PER_FLOW_TO_DISSECT;
 
   NDPI_BITMASK_RESET(ndpi_str->detection_bitmask);
 #ifdef NDPI_ENABLE_DEBUG_MESSAGES
@@ -2545,13 +2607,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 
   ndpi_str->ticks_per_second = _ticks_per_second; /* ndpi_str->ticks_per_second */
   ndpi_str->tcp_max_retransmission_window_size = NDPI_DEFAULT_MAX_TCP_RETRANSMISSION_WINDOW_SIZE;
-  ndpi_str->directconnect_connection_ip_tick_timeout =
-    NDPI_DIRECTCONNECT_CONNECTION_IP_TICK_TIMEOUT * ndpi_str->ticks_per_second;
   ndpi_str->tls_certificate_expire_in_x_days = 30; /* NDPI_TLS_CERTIFICATE_ABOUT_TO_EXPIRE flow risk */
-  ndpi_str->irc_timeout = NDPI_IRC_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
-  ndpi_str->gnutella_timeout = NDPI_GNUTELLA_CONNECTION_TIMEOUT * ndpi_str->ticks_per_second;
-  ndpi_str->jabber_stun_timeout = NDPI_JABBER_STUN_TIMEOUT * ndpi_str->ticks_per_second;
-  ndpi_str->jabber_file_transfer_timeout = NDPI_JABBER_FT_TIMEOUT * ndpi_str->ticks_per_second;
 
   ndpi_str->ndpi_num_supported_protocols = NDPI_MAX_SUPPORTED_PROTOCOLS;
   ndpi_str->ndpi_num_custom_protocols = 0;
@@ -2989,6 +3045,9 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_str) {
     if(ndpi_str->ip_risk_mask_ptree)
       ndpi_patricia_destroy((ndpi_patricia_tree_t *) ndpi_str->ip_risk_mask_ptree, free_ptree_data);
 
+    if(ndpi_str->ip_risk_ptree)
+      ndpi_patricia_destroy((ndpi_patricia_tree_t *) ndpi_str->ip_risk_ptree, free_ptree_data);
+
     if(ndpi_str->udpRoot != NULL)
       ndpi_tdestroy(ndpi_str->udpRoot, ndpi_free);
     if(ndpi_str->tcpRoot != NULL)
@@ -3164,6 +3223,11 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
 
 	    if (NDPI_ENTROPY_ENCRYPTED_OR_RANDOM(flow->entropy) != 0) {
 	      ndpi_set_risk(ndpi_str, flow, NDPI_SUSPICIOUS_ENTROPY);
+	    }
+
+	    u_int16_t chksm = ndpi_calculate_icmp4_checksum(packet->payload, packet->payload_packet_len);
+	    if (chksm) {
+	      ndpi_set_risk(ndpi_str, flow, NDPI_MALFORMED_PACKET);
 	    }
 	  }
 #endif
@@ -4368,6 +4432,9 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
 
   /* EthernetIP */
   init_ethernet_ip_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* WSD */
+  init_wsd_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
@@ -5892,10 +5959,10 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     return(ret);
   }
 
-  flow->num_processed_pkts++;
-
-  if(flow->num_processed_pkts > NDPI_MAX_NUM_PKTS_PER_FLOW_TO_DISSECT)
+  if(ndpi_str->max_packets_to_process > 0 && flow->num_processed_pkts >= ndpi_str->max_packets_to_process)
     return(ret); /* Avoid spending too much time with this flow */
+
+  flow->num_processed_pkts++;
 
   /* Init default */
   ret.master_protocol = flow->detected_protocol_stack[1],
@@ -6068,6 +6135,27 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     }
 
     flow->risk_checked = 1;
+  }
+  if(!flow->tree_risk_checked) {
+    if(ndpi_str->ip_risk_ptree) {
+      /* TODO: ipv6 */
+      if(packet->iph &&
+         ndpi_is_public_ipv4(ntohl(packet->iph->saddr)) &&
+         ndpi_is_public_ipv4(ntohl(packet->iph->daddr))) {
+        struct in_addr addr;
+        ndpi_risk_enum net_risk;
+
+        addr.s_addr = packet->iph->saddr;
+        net_risk = ndpi_network_risk_ptree_match(ndpi_str, &addr);
+        if(net_risk == NDPI_NO_RISK) {
+          addr.s_addr = packet->iph->daddr;
+          net_risk = ndpi_network_risk_ptree_match(ndpi_str, &addr);
+        }
+        if(net_risk != NDPI_NO_RISK)
+          ndpi_set_risk(ndpi_str, flow, net_risk);
+      }
+    }
+    flow->tree_risk_checked = 1;
   }
 
   ndpi_reconcile_protocols(ndpi_str, flow, &ret);
@@ -6673,6 +6761,29 @@ void ndpi_set_detected_protocol(struct ndpi_detection_module_struct *ndpi_str, s
 
 u_int16_t ndpi_get_flow_masterprotocol(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow) {
   return(flow->detected_protocol_stack[1]);
+}
+
+/* ********************************************************************************* */
+
+u_int16_t ndpi_get_flow_appprotocol(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow) {
+  return(flow->detected_protocol_stack[0]);
+}
+
+/* ********************************************************************************* */
+
+ndpi_protocol_category_t ndpi_get_flow_category(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow)
+{
+  return(flow->category);
+}
+
+void ndpi_get_flow_ndpi_proto(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
+                struct ndpi_proto * ndpi_proto)
+{
+  ndpi_proto->master_protocol = ndpi_get_flow_masterprotocol(ndpi_str, flow);
+  ndpi_proto->app_protocol = ndpi_get_flow_appprotocol(ndpi_str, flow);
+#ifndef __KERNEL__
+  ndpi_proto->category = ndpi_get_flow_category(ndpi_str, flow);
+#endif
 }
 
 /* ********************************************************************************* */
@@ -7667,10 +7778,7 @@ u_int16_t ndpi_get_api_version() {
 }
 
 const char *ndpi_get_gcrypt_version(void) {
-#ifdef HAVE_LIBGCRYPT
   return gcry_check_version(NULL);
-#endif
-  return NULL;
 }
 
 ndpi_proto_defaults_t *ndpi_get_proto_defaults(struct ndpi_detection_module_struct *ndpi_str) {

@@ -378,7 +378,5 @@ gcry_error_t gcry_cipher_decrypt (gcry_cipher_hd_t h,
                      const void *in, size_t inlen) {
     return _gcry_cipher_crypt(h,out,outsize,in,inlen,0);
 }
-
-#endif /* HAVE_LIBGCRYPT */
-
+#endif
 /* vim: set ts=4 sw=4 et: */

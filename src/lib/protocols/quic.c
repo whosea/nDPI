@@ -29,7 +29,7 @@
 #include "ndpi_api.h"
 
 #ifndef __KERNEL__
- #ifdef HAVE_LIBGCRYPT
+ #ifdef USE_HOST_LIBGCRYPT
  #include <gcrypt.h>
  #else
  #define HAVE_LIBGCRYPT 1
@@ -131,13 +131,13 @@ static uint8_t get_u8_quic_ver(uint32_t version)
 
   return 0;
 }
-#ifdef HAVE_LIBGCRYPT
+
 static int is_quic_ver_less_than(uint32_t version, uint8_t max_version)
 {
   uint8_t u8_ver = get_u8_quic_ver(version);
   return u8_ver && u8_ver <= max_version;
 }
-#endif
+
 static int is_quic_ver_greater_than(uint32_t version, uint8_t min_version)
 {
   return get_u8_quic_ver(version) >= min_version;
@@ -198,7 +198,6 @@ int is_version_with_ietf_long_header(uint32_t version)
     ((version & 0xFFFFFF00) == 0x51303500) /* Q05X */ ||
     ((version & 0xFFFFFF00) == 0x54303500) /* T05X */;
 }
-#ifdef HAVE_LIBGCRYPT
 int is_version_with_v1_labels(uint32_t version)
 {
   if(((version & 0xFFFFFF00) == 0x51303500)  /* Q05X */ ||
@@ -206,7 +205,6 @@ int is_version_with_v1_labels(uint32_t version)
     return 1;
   return is_quic_ver_less_than(version, 33);
 }
-#endif
 
 int quic_len(const uint8_t *buf, uint64_t *value)
 {
@@ -253,21 +251,14 @@ static uint16_t gquic_get_u16(const uint8_t *buf, uint32_t version)
 }
 
 
-#if defined(HAVE_LIBGCRYPT)
-
 #ifdef DEBUG_CRYPT
 char *__gcry_err(gpg_error_t err, char *buf, size_t buflen)
 {
-#if defined(HAVE_LIBGPG_ERROR) || defined(LIBGCRYPT_INTERNAL)
   gpg_strerror_r(err, buf, buflen);
   /* I am not sure if the string will be always null-terminated...
      Better safe than sorry */
   if(buflen > 0)
     buf[buflen - 1] = '\0';
-#else
-  if(buflen > 0)
-    buf[0] = '\0';
-#endif
   return buf;
 }
 #endif /* DEBUG_CRYPT */
@@ -568,7 +559,7 @@ static int quic_hp_cipher_init(quic_hp_cipher *hp_cipher, int hash_algo,
 {
   uint8_t hp_key[256/8]; /* Maximum key size is for AES256 cipher. */
   uint32_t hash_len = gcry_md_get_algo_dlen(hash_algo);
-  char *label = is_version_with_v1_labels(version) ? "quic hp" : "quicv2 hp";
+  char const * const label = is_version_with_v1_labels(version) ? "quic hp" : "quicv2 hp";
 
   if(!quic_hkdf_expand_label(hash_algo, secret, hash_len, label, hp_key, key_length)) {
     return 0;
@@ -582,8 +573,8 @@ static int quic_pp_cipher_init(quic_pp_cipher *pp_cipher, int hash_algo,
 {
   uint8_t write_key[256/8]; /* Maximum key size is for AES256 cipher. */
   uint32_t hash_len = gcry_md_get_algo_dlen(hash_algo);
-  char *key_label = is_version_with_v1_labels(version) ? "quic key" : "quicv2 key";
-  char *iv_label = is_version_with_v1_labels(version) ? "quic iv" : "quicv2 iv";
+  char const * const key_label = is_version_with_v1_labels(version) ? "quic key" : "quicv2 key";
+  char const * const iv_label = is_version_with_v1_labels(version) ? "quic iv" : "quicv2 iv";
 
   if(key_length > sizeof(write_key)) {
     return 0;
@@ -969,7 +960,6 @@ static int quic_derive_initial_secrets(uint32_t version,
 
 
 static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi_struct,
-				       struct ndpi_flow_struct *flow,
 				       const uint8_t *dest_conn_id, uint8_t dest_conn_id_len,
 				       uint8_t source_conn_id_len, uint32_t version,
 				       uint32_t *clear_payload_len)
@@ -1050,8 +1040,6 @@ static uint8_t *decrypt_initial_packet(struct ndpi_detection_module_struct *ndpi
   return NULL;
 }
 
-#endif /* HAVE_LIBGCRYPT */
-
 
 static int __reassemble(struct ndpi_flow_struct *flow, const u_int8_t *frag,
                         uint64_t frag_len, uint64_t frag_offset,
@@ -1067,7 +1055,7 @@ static int __reassemble(struct ndpi_flow_struct *flow, const u_int8_t *frag,
   */
 
   if(!flow->l4.udp.quic_reasm_buf) {
-    flow->l4.udp.quic_reasm_buf = ndpi_malloc(max_quic_reasm_buffer_len);
+    flow->l4.udp.quic_reasm_buf = (uint8_t *)ndpi_malloc(max_quic_reasm_buffer_len);
     if(!flow->l4.udp.quic_reasm_buf)
       return -1; /* Memory error */
     flow->l4.udp.quic_reasm_buf_len = 0;
@@ -1104,7 +1092,7 @@ static int is_ch_reassembler_pending(struct ndpi_flow_struct *flow)
 			 flow->l4.udp.quic_reasm_buf_len);
 }
 static const uint8_t *get_reassembled_crypto_data(struct ndpi_detection_module_struct *ndpi_struct,
-                                                  struct ndpi_flow_struct *flow,
+						  struct ndpi_flow_struct *flow,
 						  const u_int8_t *frag,
 						  uint64_t frag_offset, uint64_t frag_len,
 						  uint64_t *crypto_data_len)
@@ -1279,15 +1267,12 @@ static const uint8_t *get_crypto_data(struct ndpi_detection_module_struct *ndpi_
 }
 
 static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_struct,
-				  struct ndpi_flow_struct *flow,
 				  uint32_t version, uint32_t *clear_payload_len)
 {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int8_t *clear_payload;
   u_int8_t dest_conn_id_len;
-#ifdef HAVE_LIBGCRYPT
   u_int8_t source_conn_id_len;
-#endif
 
   if(is_gquic_ver_less_than(version, 43)) {
     clear_payload = (uint8_t *)&packet->payload[26];
@@ -1314,18 +1299,13 @@ static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_stru
 		   version, dest_conn_id_len);
       return NULL;
     }
-#ifdef HAVE_LIBGCRYPT
-    {
-    const u_int8_t *dest_conn_id = &packet->payload[6];
+
     source_conn_id_len = packet->payload[6 + dest_conn_id_len];
-    clear_payload = decrypt_initial_packet(ndpi_struct, flow,
+    const u_int8_t *dest_conn_id = &packet->payload[6];
+    clear_payload = decrypt_initial_packet(ndpi_struct,
 					   dest_conn_id, dest_conn_id_len,
 					   source_conn_id_len, version,
 					   clear_payload_len);
-    }
-#else
-    clear_payload = NULL;
-#endif
   }
 
   return clear_payload;
@@ -1455,7 +1435,6 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
 
 
 static int may_be_initial_pkt(struct ndpi_detection_module_struct *ndpi_struct,
-			      struct ndpi_flow_struct *flow,
 			      uint32_t *version)
 {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
@@ -1549,7 +1528,7 @@ static int may_be_initial_pkt(struct ndpi_detection_module_struct *ndpi_struct,
 /* ***************************************************************** */
 
 static int eval_extra_processing(struct ndpi_detection_module_struct *ndpi_struct,
-				 struct ndpi_flow_struct *flow, u_int32_t version)
+								 struct ndpi_flow_struct *flow, u_int32_t version)
 {
   /* For the time being we need extra processing in two cases only:
      1) to detect Snapchat calls, i.e. RTP/RTCP multiplxed with QUIC.
@@ -1651,7 +1630,7 @@ static void ndpi_search_quic(struct ndpi_detection_module_struct *ndpi_struct,
    *    anyone complains...
    */
 
-  is_quic = may_be_initial_pkt(ndpi_struct, flow, &version);
+  is_quic = may_be_initial_pkt(ndpi_struct, &version);
   if(!is_quic) {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
@@ -1679,7 +1658,7 @@ static void ndpi_search_quic(struct ndpi_detection_module_struct *ndpi_struct,
   /*
    * 4) Extract the Payload from Initial Packets
    */
-  clear_payload = get_clear_payload(ndpi_struct, flow, version, &clear_payload_len);
+  clear_payload = get_clear_payload(ndpi_struct, version, &clear_payload_len);
   if(!clear_payload) {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;

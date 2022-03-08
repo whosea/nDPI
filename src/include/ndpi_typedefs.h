@@ -129,7 +129,8 @@ typedef enum {
   NDPI_PUNYCODE_IDN, /* https://en.wikipedia.org/wiki/Punycode */
   NDPI_ERROR_CODE_DETECTED,
   NDPI_HTTP_CRAWLER_BOT,
-  
+  NDPI_ANONYMOUS_SUBSCRIBER,
+
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 63 due to (**) */
 } ndpi_risk_enum;
@@ -1020,7 +1021,8 @@ typedef enum {
 
 typedef enum {
    ndpi_pref_direction_detect_disable = 0,
-   ndpi_pref_enable_tls_block_dissection /* nDPI considers only those blocks past the certificate exchange */
+   ndpi_pref_max_packets_to_process,
+   ndpi_pref_enable_tls_block_dissection, /* nDPI considers only those blocks past the certificate exchange */
 } ndpi_detection_preference;
 
 /* ntop extensions */
@@ -1087,10 +1089,10 @@ typedef struct ndpi_list_struct {
 
 struct ndpi_detection_module_struct {
   NDPI_PROTOCOL_BITMASK detection_bitmask;
-  NDPI_PROTOCOL_BITMASK generic_http_packet_bitmask;
 
   u_int32_t current_ts;
   u_int32_t ticks_per_second;
+  u_int16_t max_packets_to_process;
   u_int16_t num_tls_blocks_to_follow;
   u_int8_t skip_tls_blocks_until_change_cipher:1, enable_ja3_plus:1, _notused:6;
   u_int8_t tls_certificate_expire_in_x_days;
@@ -1128,8 +1130,6 @@ struct ndpi_detection_module_struct {
   /* misc parameters */
   u_int32_t tcp_max_retransmission_window_size;
 
-  u_int32_t directconnect_connection_ip_tick_timeout;
-
   /* subprotocol registration handler */
   struct ndpi_subprotocol_conf_struct subprotocol_conf[NDPI_MAX_SUPPORTED_PROTOCOLS + 1];
 
@@ -1149,6 +1149,7 @@ struct ndpi_detection_module_struct {
   ndpi_list *trusted_issuer_dn;
   
   void *ip_risk_mask_ptree;
+  void *ip_risk_ptree;
   
   struct {
     ndpi_automa hostnames, hostnames_shadow;
@@ -1159,13 +1160,6 @@ struct ndpi_detection_module_struct {
   /* IP-based protocol detection */
   void *protocols_ptree;
 
-  /* irc parameters */
-  u_int32_t irc_timeout;
-  /* gnutella parameters */
-  u_int32_t gnutella_timeout;
-  /* rstp */
-  u_int32_t jabber_stun_timeout;
-  u_int32_t jabber_file_transfer_timeout;
   u_int8_t ip_version_limit;
   /* NDPI_PROTOCOL_BITTORRENT */
 
@@ -1314,7 +1308,7 @@ struct ndpi_flow_struct {
   char host_server_name[80];
 
   u_int8_t initial_binary_bytes[8], initial_binary_bytes_len;
-  u_int8_t risk_checked:1, ip_risk_mask_evaluated:1, host_risk_mask_evaluated:1, _notused:5;
+  u_int8_t risk_checked:1, ip_risk_mask_evaluated:1, host_risk_mask_evaluated:1, tree_risk_checked:1, _notused:4;
   ndpi_risk risk_mask; /* Stores the flow risk mask for flow peers */
   ndpi_risk risk; /* Issues found with this flow [bitmask of ndpi_risk] */
 
@@ -1532,6 +1526,9 @@ typedef enum
     ndpi_dont_load_microsoft_list  = (1 << 9),
     ndpi_dont_load_google_list     = (1 << 10),
     ndpi_dont_load_google_cloud_list = (1 << 11),
+    ndpi_dont_load_asn_lists       = (1 << 12),
+    ndpi_dont_load_icloud_private_relay_list  = (1 << 13),
+    ndpi_dont_init_risk_ptree      = (1 << 14),
   } ndpi_prefs;
 
 typedef struct {

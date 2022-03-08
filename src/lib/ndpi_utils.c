@@ -1118,7 +1118,7 @@ void ndpi_serialize_risk(ndpi_serializer *serializer,
                          ndpi_risk risk) {
   u_int32_t i;
 
-  if (risk == NDPI_NO_RISK) {
+  if (risk == 0) {
     return;
   }
 
@@ -1126,24 +1126,68 @@ void ndpi_serialize_risk(ndpi_serializer *serializer,
   for(i = 0; i < NDPI_MAX_RISK; i++) {
     ndpi_risk_enum r = (ndpi_risk_enum)i;
 
-    if(NDPI_ISSET_BIT(risk, r))
-      ndpi_serialize_uint32_string(serializer, i, ndpi_risk2str(r));
+    if(NDPI_ISSET_BIT(risk, r)) {
+      ndpi_risk_info const * const risk_info = ndpi_risk2severity(r);
+      if (risk_info == NULL)
+        continue;
+
+      ndpi_serialize_start_of_block_uint32(serializer, i);
+      ndpi_serialize_string_string(serializer, "risk", ndpi_risk2str(risk_info->risk));
+      ndpi_serialize_string_string(serializer, "severity", ndpi_severity2str(risk_info->severity));
+      ndpi_serialize_risk_score(serializer, r);
+      ndpi_serialize_end_of_block(serializer);
+    }
   }
 
   ndpi_serialize_end_of_block(serializer);
 }
 
- /* ********************************** */
+/* ********************************** */
+
+void ndpi_serialize_risk_score(ndpi_serializer *serializer,
+                               ndpi_risk_enum risk)
+{
+  u_int16_t rs, rs_client = 0, rs_server = 0;
+
+  if (risk == NDPI_NO_RISK) {
+    return;
+  }
+
+  ndpi_serialize_start_of_block(serializer, "risk_score");
+  rs = ndpi_risk2score(risk, &rs_client, &rs_server);
+  ndpi_serialize_string_uint32(serializer, "total", rs);
+  ndpi_serialize_string_uint32(serializer, "client", rs_client);
+  ndpi_serialize_string_uint32(serializer, "server", rs_server);
+  ndpi_serialize_end_of_block(serializer);
+}
+
+/* ********************************** */
+
+void ndpi_serialize_confidence(ndpi_serializer *serializer,
+                               ndpi_confidence_t confidence)
+{
+  if (confidence == NDPI_CONFIDENCE_UNKNOWN) {
+    return;
+  }
+
+  ndpi_serialize_start_of_block(serializer, "confidence");
+  ndpi_serialize_uint32_string(serializer, (u_int32_t)confidence, ndpi_confidence_get_name(confidence));
+  ndpi_serialize_end_of_block(serializer);
+}
+
+/* ********************************** */
 
 void ndpi_serialize_proto(struct ndpi_detection_module_struct *ndpi_struct,
                           ndpi_serializer *serializer,
                           ndpi_risk_enum risk,
+                          ndpi_confidence_t confidence,
                           ndpi_protocol l7_protocol)
 {
   char buf[64];
 
   ndpi_serialize_start_of_block(serializer, "ndpi");
   ndpi_serialize_risk(serializer, risk);
+  ndpi_serialize_confidence(serializer, confidence);
   ndpi_serialize_string_string(serializer, "proto", ndpi_protocol2name(ndpi_struct, l7_protocol, buf, sizeof(buf)));
   ndpi_protocol_breed_t breed =
     ndpi_get_proto_breed(ndpi_struct,
@@ -1167,7 +1211,7 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
 
   if(flow == NULL) return(-1);
 
-  ndpi_serialize_proto(ndpi_struct, serializer, flow->risk, l7_protocol);
+  ndpi_serialize_proto(ndpi_struct, serializer, flow->risk, flow->confidence, l7_protocol);
 
   switch(l7_protocol.master_protocol ? l7_protocol.master_protocol : l7_protocol.app_protocol) {
   case NDPI_PROTOCOL_IP_ICMP:
@@ -1866,11 +1910,15 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
   case NDPI_ERROR_CODE_DETECTED:
     return("Error Code Detected");
     break;
-      
+
   case NDPI_HTTP_CRAWLER_BOT:
     return("Crawler/Bot Detected");
     break;
-      
+
+  case NDPI_ANONYMOUS_SUBSCRIBER:
+    return("Anonymous Subscriber");
+    break;
+
   default:
     snprintf(buf, sizeof(buf), "%d", (int)risk);
     return(buf);
@@ -2266,6 +2314,36 @@ float ndpi_entropy(u_int8_t const * const buf, size_t len) {
   return entropy;
 }
 #endif
+
+/* ******************************************************************** */
+static inline uint16_t get_n16bit(uint8_t const * cbuf) {
+  uint16_t r = ((uint16_t)cbuf[0]) | (((uint16_t)cbuf[1]) << 8);
+  return r;
+}
+
+u_int16_t ndpi_calculate_icmp4_checksum(const u_int8_t * buf, size_t len) {
+  u_int32_t checksum = 0;
+
+  /*
+   * The first two bytes of the icmp header are required.
+   * The next two bytes is the checksum, which we want to ignore.
+   */
+
+  for (; len > 1; len -= 2) {
+    checksum += get_n16bit(buf);
+    buf += 2;
+  }
+
+  if (len == 1) {
+    checksum += *buf;
+  }
+
+  checksum = (checksum >> 16) + (checksum & 0xFFFF);
+  checksum += (checksum >> 16);
+
+  return ~checksum;
+}
+
 /* ******************************************* */
 
 char* ndpi_get_flow_name(struct ndpi_flow_struct *flow) {
