@@ -788,7 +788,6 @@ if(x.p.y_r) *utp_type = 1;
 
 #ifdef BT_ANNOUNCE
 if(ndpi_struct->bt_ann && x.p.a.name) {
-    struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
     u_int16_t s_port =  packet->udp ? packet->udp->source :
 			 packet->tcp ? packet->tcp->source : 0;
 

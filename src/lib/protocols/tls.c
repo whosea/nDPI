@@ -1430,20 +1430,20 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 
 	if(extension_id == 43 /* supported versions */) {
 	  if(extension_len >= 2) {
-	    u_int16_t tls_version = ntohs(*((u_int16_t*)&packet->payload[offset+4]));
+	    u_int16_t tls_version_s = ntohs(*((u_int16_t*)&packet->payload[offset+4]));
 
 #ifdef DEBUG_TLS
-	    printf("TLS [server] [TLS version: 0x%04X]\n", tls_version);
+	    printf("TLS [server] [TLS version: 0x%04X]\n", tls_version_s);
 #endif
 
-	    flow->protos.tls_quic.ssl_version = ja3->server.tls_supported_version = tls_version;
+	    flow->protos.tls_quic.ssl_version = ja3->server.tls_supported_version = tls_version_s;
 	  }
 	} else if(extension_id == 16 /* application_layer_protocol_negotiation (ALPN) */ &&
 	          offset + 6 < packet->payload_packet_len) {
 	  u_int16_t s_offset = offset+4;
 	  u_int16_t tot_alpn_len = ntohs(*((u_int16_t*)&packet->payload[s_offset]));
 	  char alpn_str[256];
-	  u_int8_t alpn_str_len = 0, i;
+	  u_int8_t alpn_str_len = 0;
 
 #ifdef DEBUG_TLS
 	  printf("Server TLS [ALPN: block_len=%u/len=%u]\n", extension_len, tot_alpn_len);
@@ -1553,9 +1553,9 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
       /* ********** */
 
       for(i=0; (i<ja3->server.num_tls_extension) && (JA3_STR_LEN > ja3_str_len); i++) {
-	int rc = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u", (i > 0) ? "-" : "", ja3->server.tls_extension[i]);
+	int len = snprintf(&ja3_str[ja3_str_len], JA3_STR_LEN-ja3_str_len, "%s%u", (i > 0) ? "-" : "", ja3->server.tls_extension[i]);
 
-	if(rc <= 0) break; else ja3_str_len += rc;
+	if(len <= 0) break; else ja3_str_len += len;
       }
 
       if(ndpi_struct->enable_ja3_plus) {
@@ -1584,9 +1584,9 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
       ndpi_MD5Final(md5_hash, &ctx);
 
       for(i=0, j=0; i<16; i++) {
-	int rc = snprintf(&flow->protos.tls_quic.ja3_server[j],
+	int len = snprintf(&flow->protos.tls_quic.ja3_server[j],
 			  sizeof(flow->protos.tls_quic.ja3_server)-j, "%02x", md5_hash[i]);
-	if(rc <= 0) break; else j += rc;
+	if(len <= 0) break; else j += len;
       }
 
 #ifdef DEBUG_TLS
@@ -2044,7 +2044,7 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 		u_int16_t s_offset = offset+extension_offset;
 		u_int16_t tot_alpn_len = ntohs(*((u_int16_t*)&packet->payload[s_offset]));
 		char alpn_str[256];
-		u_int8_t alpn_str_len = 0, i;
+		u_int8_t alpn_str_len = 0, ai;
 
 #ifdef DEBUG_TLS
 		printf("Client TLS [ALPN: block_len=%u/len=%u]\n", extension_len, tot_alpn_len);
@@ -2088,8 +2088,8 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 		snprintf(ja3->client.alpn, sizeof(ja3->client.alpn), "%s", alpn_str);
 
 		/* Replace , with - as in JA3 */
-		for(i=0; ja3->client.alpn[i] != '\0'; i++)
-		  if(ja3->client.alpn[i] == ',') ja3->client.alpn[i] = '-';
+		for(ai=0; ja3->client.alpn[ai] != '\0'; ai++)
+		  if(ja3->client.alpn[ai] == ',') ja3->client.alpn[ai] = '-';
 
 	      } else if(extension_id == 43 /* supported versions */ &&
 	                offset+extension_offset < total_len) {
@@ -2104,26 +2104,26 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 #endif
 
 		if(version_len == (extension_len-1)) {
-		  u_int8_t j;
+		  u_int8_t vi;
 		  u_int16_t supported_versions_offset = 0;
 
 		  s_offset++;
 
 		  // careful not to overflow and loop forever with u_int8_t
-		  for(j=0; j+1<version_len && s_offset + j + 1 < packet->payload_packet_len; j += 2) {
-		    u_int16_t tls_version = ntohs(*((u_int16_t*)&packet->payload[s_offset+j]));
+		  for(vi=0; vi+1<version_len && s_offset + vi + 1 < packet->payload_packet_len; vi += 2) {
+		    u_int16_t tls_version_s = ntohs(*((u_int16_t*)&packet->payload[s_offset+vi]));
 		    u_int8_t unknown_tls_version;
 
 #ifdef DEBUG_TLS
 		    printf("Client TLS [TLS version: %s/0x%04X]\n",
-			   ndpi_ssl_version2str(buf_ver_tmp, sizeof(buf_ver_tmp), tls_version, &unknown_tls_version), tls_version);
+			   ndpi_ssl_version2str(buf_ver_tmp, sizeof(buf_ver_tmp), tls_version_s, &unknown_tls_version), tls_version_s);
 #endif
 
 		    if((version_str_len+8) < sizeof(version_str)) {
 		      int rc = snprintf(&version_str[version_str_len],
 					sizeof(version_str) - version_str_len, "%s%s",
 					(version_str_len > 0) ? "," : "",
-					ndpi_ssl_version2str(buf_ver_tmp, sizeof(buf_ver_tmp), tls_version, &unknown_tls_version));
+					ndpi_ssl_version2str(buf_ver_tmp, sizeof(buf_ver_tmp), tls_version_s, &unknown_tls_version));
 		      if(rc <= 0)
 			break;
 		      else
@@ -2131,7 +2131,7 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 
 		      rc = snprintf(&ja3->client.supported_versions[supported_versions_offset],
 				    sizeof(ja3->client.supported_versions)-supported_versions_offset,
-				    "%s%04X", (j > 0) ? "-" : "", tls_version);
+				    "%s%04X", (vi > 0) ? "-" : "", tls_version_s);
 
 		      if(rc > 0)
 			supported_versions_offset += rc;
@@ -2184,10 +2184,10 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 
 			if(flow->protos.tls_quic.encrypted_sni.esni) {
 			  u_int16_t off;
-			  int i;
+			  int ei;
 
-			  for(i=e_offset, off=0; i<(e_offset+e_sni_len); i++) {
-			    int rc = sprintf(&flow->protos.tls_quic.encrypted_sni.esni[off], "%02X", packet->payload[i] & 0XFF);
+			  for(ei=e_offset, off=0; ei<(e_offset+e_sni_len); ei++) {
+			    int rc = sprintf(&flow->protos.tls_quic.encrypted_sni.esni[off], "%02X", packet->payload[ei] & 0XFF);
 
 			    if(rc <= 0) {
 			      break;

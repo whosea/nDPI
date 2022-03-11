@@ -213,7 +213,6 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
     */
     if(payload[0] == 0x16) {
       /* Let's check if this is DTLS used by some socials */
-      struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
       u_int16_t total_len, version = htons(*((u_int16_t*) &packet->payload[1]));
 
       switch (version) {
@@ -241,7 +240,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
   if(ndpi_struct->stun_cache && packet->iph) { /* TODO: ipv6 */
     u_int16_t proto;
     u_int32_t key = get_stun_lru_key(packet, 0);
-    int rc = ndpi_lru_find_cache(ndpi_struct->stun_cache, key, &proto,
+    rc = ndpi_lru_find_cache(ndpi_struct->stun_cache, key, &proto,
                                  0 /* Don't remove it as it can be used for other connections */);
 
 #ifdef DEBUG_LRU

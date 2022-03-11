@@ -3338,14 +3338,10 @@ int ndpi_add_host_risk_mask(struct ndpi_detection_module_struct *ndpi_str,
   switch(host[0]) {
   case '"':
   case '\'':
-    {
-      int len;
-
       host = &host[1];
       len = strlen(host);
       if(len > 0)
 	host[len-1] = '\0';
-    }
 
     break;
   }
@@ -3518,7 +3514,7 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
       is_ip = 1, value = &attr[3];
     else if(strncmp(attr, "host:", 5) == 0) {
       /* host:"<value>",host:"<value>",.....@<subproto> */
-      u_int i, max_len;
+      u_int max_len;
 
       value = &attr[5];
       if(value[0] == '"')
@@ -6095,30 +6091,30 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 	  Before triggering the alert we need to make some extra checks
 	  - the protocol found is not running on the port we have found (i.e. two or more protools share the same default port)
 	*/
-	u_int8_t found = 0, i;
+	u_int8_t found_port = 0, i;
 
 	for(i=0; (i<MAX_DEFAULT_PORTS) && (default_ports[i] != 0); i++) {
 	  if(default_ports[i] == dport) {
-	    found = 1;
+	    found_port = 1;
 	    break;
 	  }
 	} /* for */
 
-	if(!found)
+	if(!found_port)
 	  ndpi_set_risk(ndpi_str, flow, NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT);
       }
     } else if((!ndpi_is_ntop_protocol(&ret)) && default_ports && (default_ports[0] != 0)) {
-      u_int8_t found = 0, i, num_loops = 0;
+      u_int8_t found_port = 0, i, num_loops = 0;
 
     check_default_ports:
       for(i=0; (i<MAX_DEFAULT_PORTS) && (default_ports[i] != 0); i++) {
 	if((default_ports[i] == sport) || (default_ports[i] == dport)) {
-	  found = 1;
+	  found_port = 1;
 	  break;
 	}
       } /* for */
 
-      if((num_loops == 0) && (!found)) {
+      if((num_loops == 0) && (!found_port)) {
 	if(packet->udp)
 	  default_ports = ndpi_str->proto_defaults[ret.app_protocol].udp_default_ports;
 	else
@@ -6128,7 +6124,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 	goto check_default_ports;
       }
 
-      if(!found) {
+      if(!found_port) {
 	// printf("******** Invalid default port\n");
 	ndpi_set_risk(ndpi_str, flow, NDPI_KNOWN_PROTOCOL_ON_NON_STANDARD_PORT);
       }
