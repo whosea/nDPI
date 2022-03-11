@@ -33,7 +33,7 @@
 struct xt_ndpi_mtinfo {
         NDPI_PROTOCOL_BITMASK flags;
 	unsigned short int    invert:1,error:1,m_proto:1,p_proto:1,have_master:1,
-			      host:1,re:1,empty:1,inprogress:1;
+			      host:1,re:1,empty:1,inprogress:1,ja3s:1,ja3c,tlsfp:1,tlsv:1;
 	char	hostname[256 - sizeof(NDPI_PROTOCOL_BITMASK) - sizeof(unsigned short int)-sizeof(void *)];
 	void	*reg_data; // kernel only
 };

@@ -25,6 +25,7 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 
     char *pname,*host_match,*nc,*nh,*cstr;
     uint16_t protocol_id;
+    int op_del = 0;
 
     nc = NULL;
 
@@ -68,7 +69,12 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 		*nc++ = '\0';
 		while(*nc && (*nc == ' ' || *nc == '\t' || *nc == ';')) nc++;
 	}
-
+	if(*pname == '+') {
+		pname++;
+	} else if(*pname == '-') {
+		op_del = 1;
+		pname++;
+	}
 	protocol_id =  ndpi_get_proto_by_name(n->ndpi_struct, pname);
 
 	if(protocol_id == NDPI_PROTOCOL_UNKNOWN) {
@@ -91,11 +97,15 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 			pr_err("xt_ndpi: exists '%.60s'\n",host_match);
 			continue;
 		}
-		cstr = str_collect_add(&n->hosts_tmp->p[protocol_id],host_match,sml);
-		if(!cstr) {
-			pr_err("xt_ndpi: can't alloc memory for '%.60s'\n",host_match);
-			goto bad_cmd;
-		}
+		if(op_del)
+			str_collect_del(n->hosts_tmp->p[protocol_id],host_match,sml);
+		  else 	{
+			cstr = str_collect_add(&n->hosts_tmp->p[protocol_id],host_match,sml);
+			if(!cstr) {
+				pr_err("xt_ndpi: can't alloc memory for '%.60s'\n",host_match);
+				goto bad_cmd;
+			}
+		  }
 		n->host_upd++;
 	}
 	if(ndpi_log_debug > 2 && nc && *nc)

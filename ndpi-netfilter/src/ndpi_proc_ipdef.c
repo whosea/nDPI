@@ -79,10 +79,9 @@ ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
 		}
 		if(node->data) {
 			struct ndpi_port_def *pd = node->data;
-			ndpi_port_range_t *pt = pd->p;
 			if(pd->count[0]+pd->count[1] > 0) {
 			    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%-16s ",ibuf);
-			    l += ndpi_print_port_range(pt,pd->count[0]+pd->count[1],
+			    l += ndpi_print_port_range(pd->p,pd->count[0]+pd->count[1],
 					&lbuf[l],sizeof(lbuf)-l,n->ndpi_struct);
 			    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"\n");
 			}

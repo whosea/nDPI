@@ -1048,18 +1048,55 @@ static void ndpi_host_info(struct nf_ct_ext_ndpi *ct_ndpi) {
 	}
     }
 
-    if(!ndpi_enable_flow ) return;
     if(ct_ndpi->flow_opt) return;
     if(!flow->l4.tcp.tls.certificate_processed) return;
     if( is_ndpi_proto(ct_ndpi,NDPI_PROTOCOL_TLS) || 
 	 is_ndpi_proto(ct_ndpi,NDPI_PROTOCOL_QUIC)) {
 	char buf[512];
-	size_t l = ndpi_dump_opt(buf,sizeof(buf),flow);
+	size_t l = 0;
+
+	if(flow->protos.tls_quic.ja3_server[0]) {
+	    ct_ndpi->ja3s = l+1;
+	    l += snprintf(&buf[l],sizeof(buf)-1-l,"%s",
+			  flow->protos.tls_quic.ja3_server);
+	    buf[l++] = 0;
+	}
+	if(flow->protos.tls_quic.ja3_client[0]) {
+	    ct_ndpi->ja3c = l+1;
+	    l += snprintf(&buf[l],sizeof(buf)-1-l,"%s",
+			  flow->protos.tls_quic.ja3_client);
+	    buf[l++] = 0;
+	}
+	if(flow->l4.tcp.tls.fingerprint_set) {
+	    uint32_t * sha1 = (uint32_t *)flow->protos.tls_quic.sha1_certificate_fingerprint;
+	    ct_ndpi->tlsfp = l+1;
+	    l += snprintf(&buf[l],sizeof(buf)-1-l,"%08x%08x%08x%08x%08x",
+			  sha1[0],sha1[1],sha1[2],sha1[3],sha1[4]);
+	    buf[l++] = 0;
+	}
+	if(flow->protos.tls_quic.ssl_version) {
+	    char buf_ver[18];
+	    u_int8_t known_tls = 0;
+	    char *r = ndpi_ssl_version2str(buf_ver, sizeof(buf_ver)-1,
+				    flow->protos.tls_quic.ssl_version, &known_tls);
+	    for(;*r;r++) if(*r == ' ') *r = '_';
+	    ct_ndpi->tlsv = l+1;
+	    l += snprintf(&buf[l],sizeof(buf)-1-l,"%s",buf_ver);
+	    buf[l++] = 0;
+	}
 
 	if(l != 0) {
-		ct_ndpi->flow_opt = kstrndup(buf, l+1, GFP_ATOMIC);
-		if(ndpi_log_debug > 2)
-		    pr_info("%s: tls info %s\n", __func__,buf);
+	    ct_ndpi->flow_opt = kmalloc( l+1, GFP_ATOMIC);
+	    if(ct_ndpi->flow_opt) {
+	        memcpy(ct_ndpi->flow_opt,buf,l);
+	        if(ndpi_log_debug > 2)
+	 	    pr_info("%s: ja3s %s, ja3c %s, tlsfp %s, tlsv %s\n",
+			__func__,
+			ct_ndpi->ja3s ? ct_ndpi->flow_opt+ct_ndpi->ja3s-1 : "",
+			ct_ndpi->ja3c ? ct_ndpi->flow_opt+ct_ndpi->ja3c-1 : "",
+			ct_ndpi->tlsfp ? ct_ndpi->flow_opt+ct_ndpi->tlsfp-1 : "",
+			ct_ndpi->tlsv  ? ct_ndpi->flow_opt+ct_ndpi->tlsv-1  : "");
+		}
 	}
     }
 }
@@ -1070,18 +1107,9 @@ bool res = false;
 
 if(!info->hostname[0]) return true;
 
-ndpi_host_info(ct_ndpi);
-
-do {
-  if(info->host) {
-	if(ct_ndpi->host) {
-		res = info->re ? ndpi_regexec(info->reg_data,ct_ndpi->host) != 0 :
-			strstr(ct_ndpi->host,info->hostname) != NULL;
-		if(res) break;
-	}
-  }
-} while(0);
-
+if(info->host && ct_ndpi->host)
+    res = info->re ? ndpi_regexec(info->reg_data,ct_ndpi->host) != 0 :
+				strstr(ct_ndpi->host,info->hostname) != NULL;
 if(ndpi_log_debug > 2)
     pr_info("%s: match%s %s '%s' %s %d\n", __func__,
 	info->re ? "-re":"", info->host ? "host":"",
@@ -1093,6 +1121,51 @@ return res;
 static inline uint16_t get_in_if(const struct net_device *dev) {
 
 	return dev ? dev->ifindex:0;
+}
+
+static bool ndpi_j3_match(struct ndpi_detection_module_struct *ndpi_struct,
+		const struct xt_ndpi_mtinfo *info,
+		const char *prefix,const char *buf) {
+	char key[64];
+	size_t sml;
+	int r;
+	ndpi_protocol_match_result s_ret = {.protocol_id = -1};
+	strncpy(key,prefix,sizeof(key)-1);
+	strncat(key,buf,sizeof(key)-1);
+	sml = strlen(key);
+	r = ndpi_match_string_subprotocol(ndpi_struct,key,sml,&s_ret);
+	if(r == NDPI_PROTOCOL_UNKNOWN) return 0;
+	if(ndpi_log_debug > 2) pr_info("%s: %zd:%s proto %u matched %d\n",__func__,sml,key,s_ret.protocol_id,
+				NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,s_ret.protocol_id)!=0);
+	return NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,s_ret.protocol_id) != 0;
+}
+
+static void ndpi_check_opt(struct ndpi_detection_module_struct *ndpi_struct,
+	const struct xt_ndpi_mtinfo *info,
+	struct nf_ct_ext_ndpi *ct_ndpi,
+	bool *host_matched, bool *ja3s_matched, bool *ja3c_matched,
+	bool *tlsfp_matched, bool *tlsv_matched)
+{
+	ndpi_host_info(ct_ndpi);
+
+	if(info->host && info->hostname[0])
+		*host_matched = ndpi_host_match(info,ct_ndpi);
+	if(ct_ndpi->flow_opt) {
+	    if(ndpi_log_debug > 2) pr_info("%s: flow_opt %s,%s,%s,%s\n",__func__,
+			ct_ndpi->ja3s  ? ct_ndpi->flow_opt+ct_ndpi->ja3s-1:"",
+			ct_ndpi->ja3c  ? ct_ndpi->flow_opt+ct_ndpi->ja3c-1:"",
+			ct_ndpi->tlsfp ? ct_ndpi->flow_opt+ct_ndpi->tlsfp-1:"",
+			ct_ndpi->tlsv  ? ct_ndpi->flow_opt+ct_ndpi->tlsv-1:""
+			);
+	    if(info->ja3s && ct_ndpi->ja3s)
+		  *ja3s_matched = ndpi_j3_match(ndpi_struct,info,"JA3S_",ct_ndpi->flow_opt+ct_ndpi->ja3s-1);
+	    if(info->ja3c && ct_ndpi->ja3c)
+		  *ja3c_matched = ndpi_j3_match(ndpi_struct,info,"JA3C_",ct_ndpi->flow_opt+ct_ndpi->ja3c-1);
+	    if(info->tlsfp && ct_ndpi->tlsfp)
+		  *tlsfp_matched = ndpi_j3_match(ndpi_struct,info,"TLSFP_",ct_ndpi->flow_opt+ct_ndpi->tlsfp-1);
+	    if(info->tlsv && ct_ndpi->tlsv)
+		  *tlsv_matched = ndpi_j3_match(ndpi_struct,info,"TLSV_",ct_ndpi->flow_opt+ct_ndpi->tlsv-1);
+	}
 }
 
 
@@ -1116,7 +1189,9 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	struct nf_ct_ext_ndpi *ct_ndpi = NULL;
 	struct ndpi_cb *c_proto;
 	uint8_t l4_proto=0,ct_dir=0,detect_complete=1;
-	bool result=false, host_match = true, is_ipv6=false;
+	bool result=false, host_matched = true, is_ipv6=false,
+	     ja3s_matched = false, ja3c_matched = false,
+	     tlsfp_matched = false, tlsv_matched = false;
 	struct ndpi_net *n;
 
 	char ct_buf[128];
@@ -1258,9 +1333,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		detect_complete = test_detect_done(ct_ndpi);
 		proto.app_protocol = ct_ndpi->proto.app_protocol;
 		proto.master_protocol = ct_ndpi->proto.master_protocol;
-		if(info->hostname[0])
-			host_match = ndpi_host_match(info,ct_ndpi);
-
+		ndpi_check_opt(n->ndpi_struct,info,ct_ndpi,
+			&host_matched, &ja3s_matched,
+			&ja3c_matched, &tlsfp_matched,
+			&tlsv_matched);
 		spin_unlock_bh (&ct_ndpi->lock);
 		COUNTER(ndpi_p_cached);
 		if(ndpi_log_debug > 1)
@@ -1268,7 +1344,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		break;
 	    } else {
 		if(ct_proto_last(c_proto))
-		    	COUNTER(ndpi_p_c_last_ct_not);
+			COUNTER(ndpi_p_c_last_ct_not);
 	    }
 	} else 
 		COUNTER(ndpi_p_c_magic_not); // new packet
@@ -1310,8 +1386,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		ct_proto_set_flow(c_proto,ct, !test_flow_yes(ct_ndpi) ? 0:
 			(test_nat_done(ct_ndpi) ? FLOW_NAT_END:FLOW_NAT_START));
 
-		if(info->hostname[0])
-			host_match = ndpi_host_match(info,ct_ndpi);
+		ndpi_check_opt(n->ndpi_struct,info,ct_ndpi,
+			&host_matched, &ja3s_matched,
+			&ja3c_matched, &tlsfp_matched,
+			&tlsv_matched);
 
 		spin_unlock_bh (&ct_ndpi->lock);
 		if(ndpi_log_debug > 1)
@@ -1320,8 +1398,6 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 	if(ct_ndpi->proto.app_protocol == NDPI_PROTOCOL_UNKNOWN ||
 	    ct_ndpi->flow) {
-		struct ndpi_net *n;
-
 		if (skb_is_nonlinear(skb)) {
 			linearized_skb = skb_copy(skb, GFP_ATOMIC);
 			if (linearized_skb == NULL) {
@@ -1368,8 +1444,8 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		    if(r_proto != NDPI_PROTOCOL_UNKNOWN) {
 			proto = ct_ndpi->proto;
 			c_proto->proto = pack_proto(proto);
-			if(test_flow_yes(ct_ndpi))
-				ndpi_host_info(ct_ndpi);
+			//if(test_flow_yes(ct_ndpi))
+			ndpi_host_info(ct_ndpi);
 			atomic64_inc(&n->protocols_cnt[proto.app_protocol]);
 			if(proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
 			   proto.master_protocol != proto.app_protocol)
@@ -1395,8 +1471,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		    }
 		} while(0);
 
-		if(info->hostname[0])
-			host_match = ndpi_host_match(info,ct_ndpi);
+		ndpi_check_opt(n->ndpi_struct,info,ct_ndpi,
+			&host_matched, &ja3s_matched,
+			&ja3c_matched, &tlsfp_matched,
+			&tlsv_matched);
 		spin_unlock_bh (&ct_ndpi->lock);
 
 		if(linearized_skb != NULL)
@@ -1427,6 +1505,23 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		break;
 	}
 
+	if (info->ja3s) {
+		result = ja3s_matched;
+		break;
+	}
+	if (info->ja3c) {
+		result = ja3c_matched;
+		break;
+	}
+	if (info->tlsfp) {
+		result = tlsfp_matched;
+		break;
+	}
+	if (info->tlsv) {
+		result = tlsv_matched;
+		break;
+	}
+
 	if (!info->m_proto && info->p_proto) {
 		result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.app_protocol) != 0 ;
 		break;
@@ -1442,7 +1537,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
     } while(0);
     if(ndpi_log_debug > 1)
 		packet_trace(skb,ct,"detect_done ");
-    return ( result & host_match ) ^ (info->invert != 0);
+    return ( result & host_matched ) ^ (info->invert != 0);
 }
 
 

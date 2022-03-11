@@ -69,6 +69,11 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define NDPI_OPT_HMASTER  (EXT_OPT_BASE+6)
 #define NDPI_OPT_HOST     (EXT_OPT_BASE+7)
 #define NDPI_OPT_INPROGRESS (EXT_OPT_BASE+8)
+#define NDPI_OPT_JA3S     (EXT_OPT_BASE+9)
+#define NDPI_OPT_JA3C     (EXT_OPT_BASE+10)
+#define NDPI_OPT_TLSFP    (EXT_OPT_BASE+11)
+#define NDPI_OPT_TLSV     (EXT_OPT_BASE+12)
+#define NDPI_OPT_LAST     (EXT_OPT_BASE+13)
 
 #define FLAGS_ALL 0x1
 #define FLAGS_ERR 0x2
@@ -77,6 +82,11 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define FLAGS_PROTOCOL 0x10
 #define FLAGS_HOST 0x20
 #define FLAGS_INPROGRESS 0x40
+#define FLAGS_PROTO 0x80
+#define FLAGS_JA3S 0x100
+#define FLAGS_JA3C 0x200
+#define FLAGS_TLSFP 0x400
+#define FLAGS_TLSV 0x800
 
 
 static void ndpi_mt_init(struct xt_entry_match *match)
@@ -118,9 +128,9 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 
 	printf(" %s", cinv);
 	if(info->m_proto && !info->p_proto)
-		printf("--match-master");
+		printf(" --match-master");
 	if(!info->m_proto && info->p_proto)
-		printf("--match-proto");
+		printf(" --match-proto");
 
 	if(info->hostname[0]) {
 		printf(" --host %s",info->hostname);
@@ -136,7 +146,17 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 		printf(" --all ");
 		return;
 	}
-	printf(" --proto " );
+	if(info->ja3s) {
+	  printf(" --ja3s " );
+	} else if(info->ja3c) {
+	  printf(" --ja3c " );
+	} else if(info->tlsfp) {
+	  printf(" --tlsfp " );
+	} else if(info->tlsv) {
+	  printf(" --tlsv " );
+	} else
+	  printf(" --proto " );
+
 	if(c > t/2 + 1) {
 	    printf("all");
 	    for (i = 1; i < NDPI_NUM_BITS; i++) {
@@ -193,8 +213,16 @@ ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
 		printf(" all protocols");
 		return;
 	}
-
-	printf(" protocol%s ",c > 1 ? "s":"");
+	if(info->ja3s) {
+	  printf(" ja3s " );
+	} else if(info->ja3c) {
+	  printf(" ja3c " );
+	} else if(info->tlsfp) {
+	  printf(" tlsfp " );
+	} else if(info->tlsv) {
+	  printf(" tlsv " );
+	} else
+	  printf(" protocol%s ",c > 1 ? "s":"");
 	if(c > t/2 + 1) {
 	    printf("all");
 	    for (i = 1; i < NDPI_NUM_BITS; i++) {
@@ -298,7 +326,9 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 		info->empty = NDPI_BITMASK_IS_ZERO(info->flags);
 		return true;
 	}
-	if(c == NDPI_OPT_PROTO) {
+	if(c == NDPI_OPT_PROTO ||
+	   c == NDPI_OPT_JA3S || c == NDPI_OPT_JA3C ||
+	   c == NDPI_OPT_TLSFP || c == NDPI_OPT_TLSV) {
 		char *np = optarg,*n;
 		int num;
 		int op;
@@ -338,10 +368,14 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 			     else
 				NDPI_DEL_PROTOCOL_FROM_BITMASK(info->flags,num);
 			}
-			*flags |= 1;
+			*flags |= FLAGS_PROTO;
 			np = NULL;
 		}
-		if(NDPI_BITMASK_IS_EMPTY(info->flags)) *flags &= ~1;
+		if(c == NDPI_OPT_JA3S)  { *flags |= FLAGS_JA3S; info->ja3s = 1; }
+		if(c == NDPI_OPT_JA3C)  { *flags |= FLAGS_JA3C; info->ja3c = 1; }
+		if(c == NDPI_OPT_TLSFP) { *flags |= FLAGS_TLSFP; info->tlsfp = 1; }
+		if(c == NDPI_OPT_TLSV)  { *flags |= FLAGS_TLSV;  info->tlsv = 1; }
+		if(NDPI_BITMASK_IS_EMPTY(info->flags)) *flags &= ~FLAGS_PROTO;
 		return *flags != 0;
 	}
 	if(c == NDPI_OPT_ALL) {
@@ -462,6 +496,10 @@ ndpi_mt_help(void)
 		"  --match-proto      Match protocol only\n"
 		"  --host str         Match server host name\n"
 		"                     Use /str/ for regexp match.\n"
+		"  --ja3s proto       Match ja3 server hash (user defined protocol)\n"
+		"  --ja3c proto       Match ja3 client hash (user defined protocol)\n"
+		"  --tlsfp proto      Match tls fingerprint (user defined protocol)\n"
+		"  --tlsv  proto      Match tls version (user defined protocol)\n"
 		"Special protocol names:\n"
 		"  --all              Match any known protocol\n"
 		"  --unknown          Match unknown protocol packets\n");
@@ -471,7 +509,7 @@ ndpi_mt_help(void)
 	ndpi_print_prot_list(1,"Disabled protocols:\n");
 }
 
-static struct option ndpi_mt_opts[NDPI_LAST_IMPLEMENTED_PROTOCOL+11];
+static struct option ndpi_mt_opts[NDPI_OPT_LAST+1];
 
 static struct xtables_match
 ndpi_mt4_reg = {
@@ -794,6 +832,26 @@ void _init(void)
 	ndpi_mt_opts[i].name = "inprogress";
 	ndpi_mt_opts[i].flag = NULL;
 	ndpi_mt_opts[i].has_arg = 0;
+	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_JA3S;
+	ndpi_mt_opts[i].name = "ja3s";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 1;
+	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_JA3C;
+	ndpi_mt_opts[i].name = "ja3c";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 1;
+	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_TLSFP;
+	ndpi_mt_opts[i].name = "tlsfp";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 1;
+	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_TLSV;
+	ndpi_mt_opts[i].name = "tlsv";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 1;
 	ndpi_mt_opts[i].val = i;
 
 	i++;

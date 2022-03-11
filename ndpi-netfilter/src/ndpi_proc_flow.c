@@ -64,44 +64,47 @@ size_t ndpi_dump_start_rec(char *buf, size_t bufsize, time64_t tm)
 	return 8;
 }
 
-size_t ndpi_dump_opt(char *buf, size_t bufsize,const struct ndpi_flow_struct *flow)
+size_t ndpi_dump_opt(char *buf, size_t bufsize,
+		struct nf_ct_ext_ndpi *ct)
 {
 	size_t l = 0,i,flag=0;
 	buf[0] = '\0';
+	if(!ct->flow_opt) return 0;
+
+         if(ndpi_log_debug > 1) pr_info("%s: flow_opt %s,%s,%s,%s\n",__func__,
+                ct->ja3s  ? ct->flow_opt+ct->ja3s-1:"",
+                ct->ja3c  ? ct->flow_opt+ct->ja3c-1:"",
+                ct->tlsfp ? ct->flow_opt+ct->tlsfp-1:"",
+                ct->tlsv  ? ct->flow_opt+ct->tlsv-1:""
+                );
+
 	for(i=0; i < NDPI_FLOW_OPT_MAX && ndpi_flow_opt[i]; i++) {
 	   switch(ndpi_flow_opt[i]) {
 		case 'S':
-			if(!(flag & 1) && flow->protos.tls_quic.ja3_server[0]) {
+			if(!(flag & 1) && ct->ja3s) {
 			    l += snprintf(&buf[l],bufsize-1-l,"%sS=%s",buf[0]?" ":"",
-					  flow->protos.tls_quic.ja3_server);
+					  &ct->flow_opt[ct->ja3s-1]);
 			    flag |= 1;
 			}
 			break;
 		case 'C':
-			if(!(flag & 2) && flow->protos.tls_quic.ja3_client[0]) {
+			if(!(flag & 2) && ct->ja3c) {
 			    l += snprintf(&buf[l],bufsize-1-l,"%sC=%s",buf[0]?" ":"",
-					  flow->protos.tls_quic.ja3_client);
+					  &ct->flow_opt[ct->ja3c-1]);
 			    flag |= 2;
 			}
 			break;
 		case 'F':
-			if(!(flag & 4) && flow->l4.tcp.tls.fingerprint_set) {
-			    uint32_t * sha1 = (uint32_t *)flow->protos.tls_quic.sha1_certificate_fingerprint;
-			    l += snprintf(&buf[l],bufsize-1-l,"%sF=%08x%08x%08x%08x%08x",buf[0]?" ":"",
-					  sha1[0],sha1[1],sha1[2],sha1[3],sha1[4]);
+			if(!(flag & 4) && ct->tlsfp) {
+			    l += snprintf(&buf[l],bufsize-1-l,"%sF=%s",buf[0]?" ":"",
+					  &ct->flow_opt[ct->tlsfp-1]);
 			    flag |= 4;
 			}
 			break;
 		case 'V':
-			if(!(flag & 8) && flow->protos.tls_quic.ssl_version) {
-			    char buf_ver[18];
-			    u_int8_t known_tls = 0;
-			    char *r = ndpi_ssl_version2str(buf_ver, sizeof(buf_ver)-1,
-						    flow->protos.tls_quic.ssl_version, &known_tls);
-			    //if(known_tls) {
-				for(;*r;r++) if(*r == ' ') *r = '_';
-				l += snprintf(&buf[l],bufsize-1-l,"%sV=%s",buf[0]?" ":"",buf_ver);
-			    //}
+			if(!(flag & 8) && ct->tlsv) {
+			    l += snprintf(&buf[l],bufsize-1-l,"%sV=%s",buf[0]?" ":"",
+					    &ct->flow_opt[ct->tlsv-1]);
 			    flag |= 8;
 			}
 			break;
@@ -110,6 +113,7 @@ size_t ndpi_dump_opt(char *buf, size_t bufsize,const struct ndpi_flow_struct *fl
 	   }
 	}
 	buf[l] = '\0';
+        if(ndpi_log_debug > 1) pr_info("%s: result %zd:%s\n",__func__,l,buf);
 	return l;
 }
 ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
@@ -120,10 +124,11 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 	struct flow_info *i;
 	ssize_t ret_len;
 	int o_len,h_len;
+	char buf_opt[512];
 
 	ret_len = v6 ? flow_data_v6_size : flow_data_v4_size;
 	h_len = ct->host ? strlen(ct->host):0;
-	o_len = ct->flow_opt ? strlen(ct->flow_opt):0;
+	o_len = ndpi_dump_opt(buf_opt,sizeof(buf_opt)-1,ct);
 	if(h_len != 0 && o_len != 0)
 		o_len++; // Add space before opttions
 
@@ -196,7 +201,7 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 			   *s++ = ' ';
 		}
 		if(o_len)
-			memcpy(s,ct->flow_opt,o_len);
+			memcpy(s,buf_opt,o_len);
 	}
 	n->str_buf_len = ret_len; 
 	return ret_len;
@@ -292,11 +297,12 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 	    l += snprintf(&buf[l],buflen-l," H=%.*s",sl_host,ct->host);
 	  }
 	  if(ct->flow_opt) {
-	    sl_opt = strlen(ct->flow_opt);
+	    char opt_buf[512];
+	    sl_opt = ndpi_dump_opt(opt_buf,sizeof(opt_buf)-1,ct);
 	    if(sl_opt + sl_host > NF_STR_OPTLEN ) sl_opt = NF_STR_OPTLEN - 4 - sl_host;
 	    if(l + sl_opt + 6 > buflen)
 		   sl_opt = buflen - 6 - l;
-	    l += snprintf(&buf[l],buflen-l," %.*s",sl_opt,ct->flow_opt);
+	    l += snprintf(&buf[l],buflen-l," %.*s",sl_opt,opt_buf);
 	  }
 	}
 	buf[l++] = '\n';

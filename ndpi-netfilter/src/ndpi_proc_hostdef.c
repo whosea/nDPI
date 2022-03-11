@@ -95,7 +95,7 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 				host = &ph->s[hdh+1];
 				hl = strlen(host);
 
-				if(i && l - p + hl > 80) break;
+				if(i && l - p + hl > 132) break;
 
 				if(hl + 1 + (!i ? pl:0) + l + 5 > sizeof(lbuf)) {
 					if(hl + pl + 3 > sizeof(lbuf)) {
