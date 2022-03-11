@@ -100,17 +100,25 @@ This wouldn't allow any HTTP traffic that originates from the machine where the
 rule was added.
 
 ------------------------------------------------------------------
-WARNING! You can't use form '--protoname' for user-defined protocols!
-Only '--proto protoname' form is allowed!
-(Iptables not allow  over 256 options on extensions)
-------------------------------------------------------------------
-
-------------------------------------------------------------------
 BIG FAT WARNING!
 
 Do not discard all the unknown traffic. Tcp-syn packets are always treated as an
-unknown protocol.
+unknown protocol. 
+Use the "inprogress" option to determine when the protocol detection process ends. 
 ------------------------------------------------------------------
+
+Using ja3s/ja3c/tlsfp/tlsv matches.
+
+These options use user-defined protocols.
+You need to create such a protocol and add hashes with additional prefixes to it.
+To check the ja3s hash, add the string JA3S_<hash>. Similar to other options.
+
+Example: 
+  echo "add_custom bad_ctcl" >/proc/net/xt_ndpi/proto
+  echo "bad_ctls:JA3C_63c4972da11f7a873178a9ee53acfd9e" >/proc/net/xt_ndpi/host_proto
+
+  iptables -A ... -m ndpi --ja3c bad_ctcl -j DROP
+
 
 Using NDPI target. To see available options type:
 
@@ -217,9 +225,11 @@ bt_log_size: size of log BT announces (kb). 192 bytes per announce. Default 128.
                  (Only if bt_hash_size > 0).
 
 ndpi_enable_flow: Enable netflow info. See FLOW_INFO.txt
+ndpi_flow_opt:    Output additional info about TLS. See FLOW_INFO.txt
 ndpi_flow_limit:  Limit netflow records. Default 10000000 (~4.3Gb RAM). See FLOW_INFO.txt
 
 ndpi_stun_cache: STUN cache control (0-1). Default 0.
+
 ---------------
 7. procfs files
 ---------------
@@ -284,6 +294,9 @@ ndpi_stun_cache: STUN cache control (0-1). Default 0.
 
   Change settings:
   "echo 'protoname:host[,host...][ protoname:host[,host...]]' >/proc/net/xt_ndpi/host_proto"
+
+  Delete match:
+  "echo '-protoname:host' >/proc/net/xt_ndpi/host_proto"
 
   Delete all hosts matchs:
   "echo 'reset' >/proc/net/xt_ndpi/host_proto"

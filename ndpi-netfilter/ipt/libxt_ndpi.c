@@ -431,6 +431,11 @@ ndpi_mt_check (unsigned int flags)
 	    if(!(flags & FLAGS_ALL))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
 	}
+
+	if (flags & (FLAGS_JA3S|FLAGS_JA3C|FLAGS_TLSFP|FLAGS_TLSV)) {
+	    if(!(flags & FLAGS_PROTO))
+		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
+	}
 }
 
 static int cmp_pname(const void *p1, const void *p2) {
