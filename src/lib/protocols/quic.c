@@ -1301,9 +1301,8 @@ static uint8_t *get_clear_payload(struct ndpi_detection_module_struct *ndpi_stru
     }
 
     source_conn_id_len = packet->payload[6 + dest_conn_id_len];
-    const u_int8_t *dest_conn_id = &packet->payload[6];
     clear_payload = decrypt_initial_packet(ndpi_struct,
-					   dest_conn_id, dest_conn_id_len,
+					   &packet->payload[6], dest_conn_id_len,
 					   source_conn_id_len, version,
 					   clear_payload_len);
   }

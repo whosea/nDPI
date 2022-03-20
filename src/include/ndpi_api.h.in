@@ -590,6 +590,19 @@ extern "C" {
 				   u_int16_t master_protocol,
 				   char *name, u_int name_len);
 
+  u_int16_t ndpi_get_proto_by_name(struct ndpi_detection_module_struct *ndpi_mod,
+		  		   const char *name);
+
+  /**
+   * Get classification confidence as string
+   *
+   * @par     confidence      = the confidence value
+   * @return  the string name of the confidence result
+   *
+   */
+  const char* ndpi_confidence_get_name(ndpi_confidence_t confidence);
+
+#ifndef __KERNEL__
   /**
    * Get protocol category as string
    *
@@ -600,19 +613,6 @@ extern "C" {
    */
   const char* ndpi_category_get_name(struct ndpi_detection_module_struct *ndpi_mod,
 				     ndpi_protocol_category_t category);
-
-  u_int16_t ndpi_get_proto_by_name(struct ndpi_detection_module_struct *ndpi_mod,
-		  		   const char *name);
-
-#ifndef __KERNEL__
-  /**
-   * Get classification confidence as string
-   *
-   * @par     confidence      = the confidence value
-   * @return  the string name of the confidence result
-   *
-   */
-  const char* ndpi_confidence_get_name(ndpi_confidence_t confidence);
 
   /**
    * Set protocol category string

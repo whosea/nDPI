@@ -7136,6 +7136,27 @@ char *ndpi_protocol2name(struct ndpi_detection_module_struct *ndpi_str,
   return(buf);
 }
 
+/* ****************************************************** */
+
+const char *ndpi_confidence_get_name(ndpi_confidence_t confidence)
+{
+  switch(confidence) {
+  case NDPI_CONFIDENCE_UNKNOWN:
+    return "Unknown";
+  case NDPI_CONFIDENCE_MATCH_BY_PORT:
+    return "Match by port";
+  case NDPI_CONFIDENCE_MATCH_BY_IP:
+    return "Match by IP";
+  case NDPI_CONFIDENCE_DPI_CACHE:
+    return "DPI (cache)";
+  case NDPI_CONFIDENCE_DPI:
+    return "DPI";
+  default:
+    return NULL;
+  }
+}
+
+
 #ifndef __KERNEL__
 /* ****************************************************** */
 
@@ -7186,26 +7207,6 @@ void ndpi_category_set_name(struct ndpi_detection_module_struct *ndpi_str,
 
   default:
     break;
-  }
-}
-
-/* ****************************************************** */
-
-const char *ndpi_confidence_get_name(ndpi_confidence_t confidence)
-{
-  switch(confidence) {
-  case NDPI_CONFIDENCE_UNKNOWN:
-    return "Unknown";
-  case NDPI_CONFIDENCE_MATCH_BY_PORT:
-    return "Match by port";
-  case NDPI_CONFIDENCE_MATCH_BY_IP:
-    return "Match by IP";
-  case NDPI_CONFIDENCE_DPI_CACHE:
-    return "DPI (cache)";
-  case NDPI_CONFIDENCE_DPI:
-    return "DPI";
-  default:
-    return NULL;
   }
 }
 

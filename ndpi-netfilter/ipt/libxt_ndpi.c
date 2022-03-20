@@ -73,7 +73,8 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define NDPI_OPT_JA3C     (EXT_OPT_BASE+10)
 #define NDPI_OPT_TLSFP    (EXT_OPT_BASE+11)
 #define NDPI_OPT_TLSV     (EXT_OPT_BASE+12)
-#define NDPI_OPT_LAST     (EXT_OPT_BASE+13)
+#define NDPI_OPT_UNTRACKED (EXT_OPT_BASE+13)
+#define NDPI_OPT_LAST     (EXT_OPT_BASE+14)
 
 #define FLAGS_ALL 0x1
 #define FLAGS_ERR 0x2
@@ -87,6 +88,7 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define FLAGS_JA3C 0x200
 #define FLAGS_TLSFP 0x400
 #define FLAGS_TLSV 0x800
+#define FLAGS_UNTRACKED 0x1000
 
 
 static void ndpi_mt_init(struct xt_entry_match *match)
@@ -106,8 +108,8 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 		printf(" %s--error",cinv);
 		return;
 	}
-	if(info->inprogress) {
-		printf(" %s--inprogress",cinv);
+	if(info->untracked) {
+		printf(" %s--untracked",cinv);
 		return;
 	}
 	if(info->have_master) {
@@ -146,7 +148,9 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 		printf(" --all ");
 		return;
 	}
-	if(info->ja3s) {
+	if(info->inprogress) {
+	  printf(" --inprogress ");
+	} else if(info->ja3s) {
 	  printf(" --ja3s " );
 	} else if(info->ja3c) {
 	  printf(" --ja3c " );
@@ -184,8 +188,8 @@ ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
 		printf(" %sndpi error",cinv);
 		return;
 	}
-	if(info->inprogress) {
-		printf(" %sndpi inprogress",cinv);
+	if(info->untracked) {
+		printf(" %sndpi untracked",cinv);
 		return;
 	}
 	if(info->have_master) {
@@ -213,7 +217,9 @@ ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
 		printf(" all protocols");
 		return;
 	}
-	if(info->ja3s) {
+	if(info->inprogress) {
+	  printf(" inprogress");
+	} else if(info->ja3s) {
 	  printf(" ja3s " );
 	} else if(info->ja3c) {
 	  printf(" ja3c " );
@@ -259,9 +265,9 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
         	*flags |= FLAGS_HMASTER;
 		return true;
 	}
-	if(c == NDPI_OPT_INPROGRESS ) {
-		info->inprogress = 1;
-                *flags |= FLAGS_INPROGRESS;
+	if(c == NDPI_OPT_UNTRACKED ) {
+		info->untracked = 1;
+                *flags |= FLAGS_UNTRACKED;
                 return true;
 	}
 	if(c == NDPI_OPT_MASTER) {
@@ -326,8 +332,8 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 		info->empty = NDPI_BITMASK_IS_ZERO(info->flags);
 		return true;
 	}
-	if(c == NDPI_OPT_PROTO ||
-	   c == NDPI_OPT_JA3S || c == NDPI_OPT_JA3C ||
+	if(c == NDPI_OPT_PROTO || c == NDPI_OPT_INPROGRESS ||
+	   c == NDPI_OPT_JA3S  || c == NDPI_OPT_JA3C ||
 	   c == NDPI_OPT_TLSFP || c == NDPI_OPT_TLSV) {
 		char *np = optarg,*n;
 		int num;
@@ -375,6 +381,8 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 		if(c == NDPI_OPT_JA3C)  { *flags |= FLAGS_JA3C; info->ja3c = 1; }
 		if(c == NDPI_OPT_TLSFP) { *flags |= FLAGS_TLSFP; info->tlsfp = 1; }
 		if(c == NDPI_OPT_TLSV)  { *flags |= FLAGS_TLSV;  info->tlsv = 1; }
+		if(c == NDPI_OPT_INPROGRESS ) { *flags |= FLAGS_INPROGRESS;
+						info->inprogress = 1; }
 		if(NDPI_BITMASK_IS_EMPTY(info->flags)) *flags &= ~FLAGS_PROTO;
 		return *flags != 0;
 	}
@@ -414,15 +422,15 @@ ndpi_mt_check (unsigned int flags)
 	    else
 		return;
 	}
+	if (flags & FLAGS_UNTRACKED) {
+	   if (flags != FLAGS_UNTRACKED)
+		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--untracked' with other options");
+	    else
+		return;
+	}
 	if (flags & FLAGS_HMASTER) {
 	   if(flags & (FLAGS_ALL | FLAGS_MASTER | FLAGS_PROTOCOL))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master' with options match-master,match-proto,proto");
-	      else
-		 return;
-	}
-	if (flags & FLAGS_INPROGRESS) {
-	   if(flags & (FLAGS_ALL | FLAGS_MASTER | FLAGS_PROTOCOL))
-		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--inprogress' with options match-master,match-proto,proto");
 	      else
 		 return;
 	}
@@ -432,7 +440,7 @@ ndpi_mt_check (unsigned int flags)
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
 	}
 
-	if (flags & (FLAGS_JA3S|FLAGS_JA3C|FLAGS_TLSFP|FLAGS_TLSV)) {
+	if (flags & (FLAGS_JA3S|FLAGS_JA3C|FLAGS_TLSFP|FLAGS_TLSV|FLAGS_INPROGRESS)) {
 	    if(!(flags & FLAGS_PROTO))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
 	}
@@ -495,12 +503,13 @@ ndpi_mt_help(void)
 
 	printf( "ndpi match options:\n"
 		"  --error            Match error detecting process\n"
-		"  --inprogress       Match if protocol detection is not finished yet\n"
+		"  --untracked        Match if detection is not started for this connection\n"
 		"  --have-master      Match if master protocol detected\n"
 		"  --match-master     Match master protocol only\n"
 		"  --match-proto      Match protocol only\n"
 		"  --host str         Match server host name\n"
 		"                     Use /str/ for regexp match.\n"
+		"  --inprogress proto Match if protocol detection is not finished yet\n"
 		"  --ja3s proto       Match ja3 server hash (user defined protocol)\n"
 		"  --ja3c proto       Match ja3 client hash (user defined protocol)\n"
 		"  --tlsfp proto      Match tls fingerprint (user defined protocol)\n"
@@ -836,7 +845,7 @@ void _init(void)
 	i=NDPI_OPT_INPROGRESS;
 	ndpi_mt_opts[i].name = "inprogress";
 	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
+	ndpi_mt_opts[i].has_arg = 1;
 	ndpi_mt_opts[i].val = i;
 	i=NDPI_OPT_JA3S;
 	ndpi_mt_opts[i].name = "ja3s";
@@ -857,6 +866,11 @@ void _init(void)
 	ndpi_mt_opts[i].name = "tlsv";
 	ndpi_mt_opts[i].flag = NULL;
 	ndpi_mt_opts[i].has_arg = 1;
+	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_UNTRACKED;
+	ndpi_mt_opts[i].name = "untracked";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 0;
 	ndpi_mt_opts[i].val = i;
 
 	i++;
