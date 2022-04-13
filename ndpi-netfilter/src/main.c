@@ -865,7 +865,7 @@ static void packet_trace(const struct sk_buff *skb,const struct nf_conn * ct,
 }
 
 static int check_known_ipv4_service( struct ndpi_net *n,
-		union nf_inet_addr *ipaddr, uint16_t port, uint8_t protocol) {
+		union nf_inet_addr *ipaddr, uint16_t port, uint8_t protocol,int *l_conf) {
 
 	ndpi_prefix_t ipx;
 	ndpi_patricia_node_t *node;
@@ -875,8 +875,20 @@ static int check_known_ipv4_service( struct ndpi_net *n,
 	spin_lock_bh (&n->ipq_lock);
 	node = ndpi_patricia_search_best(n->ndpi_struct->protocols_ptree,&ipx);
 	if(node) {
-	    if(protocol == IPPROTO_UDP || protocol == IPPROTO_TCP)
+	    if(protocol == IPPROTO_UDP || protocol == IPPROTO_TCP) {
 		app_protocol = ndpi_check_ipport(node,port,protocol == IPPROTO_TCP);
+		if(app_protocol != NDPI_PROTOCOL_UNKNOWN) {
+		    *l_conf = app_protocol & 0x8000 ? NDPI_CONFIDENCE_DPI:NDPI_CONFIDENCE_USERDEF;
+		    app_protocol &= 0x7fff;
+		}
+	    }
+	    if(app_protocol == NDPI_PROTOCOL_UNKNOWN) {
+	    	app_protocol = node->value.u.uv32.user_value;
+		if(app_protocol != NDPI_PROTOCOL_UNKNOWN) {
+		    *l_conf = app_protocol & 0x8000 ? NDPI_CONFIDENCE_DPI:NDPI_CONFIDENCE_MATCH_BY_IP;
+		    app_protocol &= 0x7fff;
+		}
+	    }
 	}
 	spin_unlock_bh (&n->ipq_lock);
 	return app_protocol;
@@ -954,35 +966,23 @@ ndpi_process_packet(struct ndpi_net *n, struct nf_conn * ct, struct nf_ct_ext_nd
 	    }
 	    if (iph && flow) {
 		if(!flow->ip_port_finished) {
-		    flow->ipdef_proto = check_known_ipv4_service(n,
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3,up_port,protocol);
-		    if(flow->ipdef_proto == NDPI_PROTOCOL_UNKNOWN)
-			   flow->ipdef_proto = check_known_ipv4_service(n,
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3,low_port,protocol);
+		    int l_conf = 0;
 		    flow->ip_port_finished = 1;
-		}
+		    flow->ipdef_proto = check_known_ipv4_service(n,
+				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3,up_port,protocol,&l_conf);
+		    if(flow->ipdef_proto == NDPI_PROTOCOL_UNKNOWN)
+			 flow->ipdef_proto = check_known_ipv4_service(n,
+				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3,low_port,protocol,&l_conf);
 	    
-	        if(flow->ip_port_finished && (flow->ipdef_proto & 0x7fff) != NDPI_PROTOCOL_UNKNOWN) {
-		    if(flow->ipdef_proto & 0x8000) {
-			    proto.app_protocol = flow->ipdef_proto & 0x7fff;
-			    flow->ipdef_proto = NDPI_PROTOCOL_UNKNOWN;
+		    if(flow->ipdef_proto != NDPI_PROTOCOL_UNKNOWN ) {
+			 flow->confidence   = l_conf;
 		    } else {
-		        if( flow->num_processed_pkts >= 10 ||
-			    (flow->num_processed_packets[0] && 
-		             flow->num_processed_packets[1]) ||
-		            (flow->num_processed_packets[0] >= 3) ||
-		            (flow->num_processed_packets[1] >= 3) ) {
-			         proto.app_protocol = flow->ipdef_proto;
-			         flow->ipdef_proto = NDPI_PROTOCOL_UNKNOWN;
-		        }
+			if(low_ip > up_ip) { tmp_ip = low_ip; low_ip=up_ip; up_ip = tmp_ip; }
+			if(low_port > up_port) { tmp_port = low_port; low_port=up_port; up_port = tmp_port; }
+				proto = ndpi_guess_undetected_protocol (
+					n->ndpi_struct,flow,protocol,low_ip,low_port,up_ip,up_port);
 		    }
 		}
-	    }
-	    if(proto.app_protocol == NDPI_PROTOCOL_UNKNOWN) {
-		if(low_ip > up_ip) { tmp_ip = low_ip; low_ip=up_ip; up_ip = tmp_ip; }
-		if(low_port > up_port) { tmp_port = low_port; low_port=up_port; up_port = tmp_port; }
-		proto = ndpi_guess_undetected_protocol (
-				n->ndpi_struct,flow,protocol,low_ip,low_port,up_ip,up_port);
 	    }
 	}
 	if( proto.app_protocol != NDPI_PROTOCOL_UNKNOWN ||
@@ -1226,7 +1226,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	struct nf_ct_ext_ndpi *ct_ndpi = NULL;
 	struct ndpi_cb *c_proto;
 	ndpi_protocol_bitmask_struct_t excluded_proto;
-	uint8_t l4_proto=0,ct_dir=0,detect_complete=1,untracked=1;
+	uint8_t l4_proto=0,ct_dir=0,detect_complete=1,untracked=1,confidence=0;
 	bool result=false, host_matched = true, is_ipv6=false,
 	     ja3s_matched = false, ja3c_matched = false,
 	     tlsfp_matched = false, tlsv_matched = false;
@@ -1378,6 +1378,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			detect_complete = 1;
 		if(ct_ndpi->flow)
 			excluded_proto = ct_ndpi->flow->excluded_protocol_bitmask;
+		confidence = ct_ndpi->confidence;
 		proto.app_protocol = ct_ndpi->proto.app_protocol;
 		proto.master_protocol = ct_ndpi->proto.master_protocol;
 		if(ndpi_log_debug > 1)
@@ -1399,6 +1400,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		ct_ndpi->flinfo.ofidx = get_in_if(xt_out(par));
 	
 	detect_complete = test_detect_done(ct_ndpi);
+	confidence = ct_ndpi->confidence;
 	if(ct_ndpi->flow)
 		excluded_proto = ct_ndpi->flow->excluded_protocol_bitmask;
 	/* don't pass icmp for TCP/UDP to ndpi_process_packet()  */
@@ -1504,6 +1506,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		    if(ct_ndpi->flow) {
 			excluded_proto = ct_ndpi->flow->excluded_protocol_bitmask;
 			ct_ndpi->confidence = ct_ndpi->flow->confidence;
+			confidence = ct_ndpi->confidence;
 			ndpi_host_info(ct_ndpi);
 
 			if(ct_ndpi->confidence == NDPI_CONFIDENCE_DPI ||
@@ -1539,6 +1542,7 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	} else {
 		proto = ct_ndpi->proto;
 		detect_complete = ct_ndpi->confidence == NDPI_CONFIDENCE_DPI;
+		confidence = ct_ndpi->confidence;
 	}
 
     } while(0);
@@ -1563,22 +1567,6 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		result = untracked;
 		break;
 	}
-        if(info->inprogress) {
-                result = detect_complete ? 0 : !check_excluded_proto(info,&excluded_proto);
-		break;
-        }
-	if (info->have_master) {
-		result = proto.master_protocol != NDPI_PROTOCOL_UNKNOWN;
-		break;
-	}
-	if(info->empty) {
-		result = true;
-		break;
-	}
-	if (info->m_proto && !info->p_proto) {
-		result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.master_protocol) != 0;
-		break;
-	}
 	if (info->ja3s) {
 		result = ja3s_matched;
 		break;
@@ -1595,23 +1583,50 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		result = tlsv_matched;
 		break;
 	}
-	if (!info->m_proto && info->p_proto) {
-		result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.app_protocol) != 0 ;
-		break;
+	do {
+		result = 1;
+		if(info->host) {
+			result = host_matched ? 1:0;
+			break;
+		}
+		if(info->inprogress) {
+			result = detect_complete ? 0 : !check_excluded_proto(info,&excluded_proto);
+			break;
+		}
+		if(info->empty) {
+			result = 1;
+		}
+		if (info->m_proto && !info->p_proto) {
+			result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.master_protocol) != 0;
+		} else
+		  if (!info->m_proto && info->p_proto) {
+			result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.app_protocol) != 0 ;
+		  } else {
+		    if (proto.app_protocol != NDPI_PROTOCOL_UNKNOWN) {
+			result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.app_protocol) != 0;
+			if(proto.master_protocol !=  NDPI_PROTOCOL_UNKNOWN)
+				result |= NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.master_protocol) != 0;
+		    }
+		  }
+	} while(0);
+
+	if (info->have_master) {
+		result &= proto.master_protocol != NDPI_PROTOCOL_UNKNOWN ? 1:0;
 	}
-	if (proto.app_protocol != NDPI_PROTOCOL_UNKNOWN) {
-		result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.app_protocol) != 0;
-		if(proto.master_protocol !=  NDPI_PROTOCOL_UNKNOWN)
-			result |= NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.master_protocol) != 0;
-		break;
-	}
-	result = NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,proto.master_protocol) != 0;
+	if(info->clevel)
+	  switch(info->clevel) {
+	     case 1: result &= info->clevel < confidence ? 1:0;
+		 break;
+	     case 2: result &= info->clevel > confidence ? 1:0;
+		 break;
+	     default: result &= info->clevel == confidence ? 1:0;
+	  }
     } while(0);
 
     if(ndpi_log_debug > 1)
-	packet_trace(skb,ct,ct_ndpi,"match_done"," result %d",( result & host_matched ) ^ (info->invert != 0));
+	packet_trace(skb,ct,ct_ndpi,"match_done"," result %d", result  ^ (info->invert != 0));
 
-    return ( result & host_matched ) ^ (info->invert != 0);
+    return result ^ (info->invert != 0);
 }
 
 

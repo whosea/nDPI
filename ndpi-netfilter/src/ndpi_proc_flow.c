@@ -64,14 +64,25 @@ size_t ndpi_dump_start_rec(char *buf, size_t bufsize, time64_t tm)
 	return 8;
 }
 
+static inline int add_opt_str(char *buf,size_t l,size_t size,char c,char *str) {
+	size_t nc = strlen(str) + 2 + (l ? 1:0);
+	if(l + nc >= size) return 0;
+	buf += l;
+	if(l) *buf++ = ' ';
+	*buf++ = c;
+	*buf++ = '=';
+	strcpy(buf,str);
+	return nc;
+}
+
 size_t ndpi_dump_opt(char *buf, size_t bufsize,
 		struct nf_ct_ext_ndpi *ct)
 {
 	size_t l = 0,i,flag=0;
-	buf[0] = '\0';
-	if(!ct->flow_opt) return 0;
 
-         if(ndpi_log_debug > 1) pr_info("%s: flow_opt %s,%s,%s,%s\n",__func__,
+	buf[0] = '\0';
+
+        if(ct->flow_opt && ndpi_log_debug > 1) pr_info("%s: flow_opt %s,%s,%s,%s\n",__func__,
                 ct->ja3s  ? ct->flow_opt+ct->ja3s-1:"",
                 ct->ja3c  ? ct->flow_opt+ct->ja3c-1:"",
                 ct->tlsfp ? ct->flow_opt+ct->tlsfp-1:"",
@@ -79,32 +90,37 @@ size_t ndpi_dump_opt(char *buf, size_t bufsize,
                 );
 
 	for(i=0; i < NDPI_FLOW_OPT_MAX && ndpi_flow_opt[i]; i++) {
+	   if(ndpi_flow_opt[i] != 'L' && !ct->flow_opt) continue;
 	   switch(ndpi_flow_opt[i]) {
+		case 'L':
+			if(ct->confidence != NDPI_CONFIDENCE_UNKNOWN && l < bufsize-4) {
+			    if(l) buf[l++] = ' ';
+			    buf[l] = 'L'; buf[l+1] = '=';
+			    buf[l+2] = (char)('0' + (ct->confidence & 7));
+			    l += 3;
+			}
+			break;
 		case 'S':
 			if(!(flag & 1) && ct->ja3s) {
-			    l += snprintf(&buf[l],bufsize-1-l,"%sS=%s",buf[0]?" ":"",
-					  &ct->flow_opt[ct->ja3s-1]);
+			    l += add_opt_str(buf,l,bufsize,'S',&ct->flow_opt[ct->ja3s-1]);
 			    flag |= 1;
 			}
 			break;
 		case 'C':
 			if(!(flag & 2) && ct->ja3c) {
-			    l += snprintf(&buf[l],bufsize-1-l,"%sC=%s",buf[0]?" ":"",
-					  &ct->flow_opt[ct->ja3c-1]);
+			    l += add_opt_str(buf,l,bufsize,'C',&ct->flow_opt[ct->ja3c-1]);
 			    flag |= 2;
 			}
 			break;
 		case 'F':
 			if(!(flag & 4) && ct->tlsfp) {
-			    l += snprintf(&buf[l],bufsize-1-l,"%sF=%s",buf[0]?" ":"",
-					  &ct->flow_opt[ct->tlsfp-1]);
+			    l += add_opt_str(buf,l,bufsize,'F',&ct->flow_opt[ct->tlsfp-1]);
 			    flag |= 4;
 			}
 			break;
 		case 'V':
 			if(!(flag & 8) && ct->tlsv) {
-			    l += snprintf(&buf[l],bufsize-1-l,"%sV=%s",buf[0]?" ":"",
-					    &ct->flow_opt[ct->tlsv-1]);
+			    l += add_opt_str(buf,l,bufsize,'V',&ct->flow_opt[ct->tlsv-1]);
 			    flag |= 8;
 			}
 			break;

@@ -74,6 +74,7 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define NDPI_OPT_TLSFP    (EXT_OPT_BASE+11)
 #define NDPI_OPT_TLSV     (EXT_OPT_BASE+12)
 #define NDPI_OPT_UNTRACKED (EXT_OPT_BASE+13)
+#define NDPI_OPT_CLEVEL   (EXT_OPT_BASE+14)
 #define NDPI_OPT_LAST     (EXT_OPT_BASE+14)
 
 #define FLAGS_ALL 0x1
@@ -89,6 +90,7 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define FLAGS_TLSFP 0x400
 #define FLAGS_TLSV 0x800
 #define FLAGS_UNTRACKED 0x1000
+#define FLAGS_CLEVEL 0x2000
 
 
 static void ndpi_mt_init(struct xt_entry_match *match)
@@ -96,7 +98,33 @@ static void ndpi_mt_init(struct xt_entry_match *match)
 	struct xt_ndpi_mtinfo *info = (void *)match->data;
 	NDPI_BITMASK_RESET(info->flags);
 }
+static const char *clevel2str(int l) {
+	switch(l) {
+	  case 1: return "port";
+	  case 2: return "ip";
+	  case 3: return "user";
+	  case 4: return "cache";
+	  case 5: return "dpi";
+	}
+	return "?";
+}
+static const char *clevel_op2str(int l) {
+	switch(l) {
+	  case 1: return "-";
+	  case 2: return "+";
+	}
+	return "";
+}
+static int str2clevel(const char *s) {
+	int i;
+	char *e;
 
+	for(i=1; i <= 5; i++)
+	    if(!strcasecmp(clevel2str(i),s)) return i;
+	i = strtol(s,&e,0);
+	if(*e) return 0;
+	return i < 0 || i > 5 ? 0 : i;
+}
 static void 
 ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 {
@@ -114,6 +142,11 @@ ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
 	}
 	if(info->have_master) {
 		printf(" %s--have-master",cinv);
+		return;
+	}
+	if(info->clevel) {
+		printf(" %s--clevel %s%s",cinv,
+			clevel_op2str(info->clevel_op),	clevel2str(info->clevel));
 		return;
 	}
 
@@ -196,6 +229,11 @@ ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
 		printf(" %sndpi have-master",cinv);
 		return;
 	}
+	if(info->clevel) {
+		printf(" %sclevel %s%s",cinv,
+			clevel_op2str(info->clevel_op),	clevel2str(info->clevel));
+		return;
+	}
 
         for (t = c = i = 0; i < NDPI_NUM_BITS; i++) {
 		if (!prot_short_str[i] || prot_disabled[i] || !strncmp(prot_short_str[i],"badproto_",9)) continue;
@@ -273,6 +311,25 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 	if(c == NDPI_OPT_MASTER) {
 		info->m_proto = 1;
         	*flags |= FLAGS_MASTER;
+		return true;
+	}
+	if(c == NDPI_OPT_CLEVEL) {
+		int cl = 0;
+		info->clevel_op = 0;
+		if(optarg[0] == '-') {
+			info->clevel_op = 1;
+			cl = str2clevel(optarg+1);
+		} else if(optarg[0] == '+') {
+			info->clevel_op = 2;
+			cl = str2clevel(optarg+1);
+		} else
+			cl = str2clevel(optarg);
+		if(!cl) {
+			printf("Error: invalid clevel %s\n",optarg);
+			return false;
+		}
+		info->clevel = cl;
+        	*flags |= FLAGS_CLEVEL;
 		return true;
 	}
 	if(c == NDPI_OPT_PROTOCOL) {
@@ -506,6 +563,7 @@ ndpi_mt_help(void)
 		"  --untracked        Match if detection is not started for this connection\n"
 		"  --have-master      Match if master protocol detected\n"
 		"  --match-master     Match master protocol only\n"
+		"  --clevel X         Match confidence level. -X - level < X, +X - level > X\n"
 		"  --match-proto      Match protocol only\n"
 		"  --host str         Match server host name\n"
 		"                     Use /str/ for regexp match.\n"
@@ -523,7 +581,7 @@ ndpi_mt_help(void)
 	ndpi_print_prot_list(1,"Disabled protocols:\n");
 }
 
-static struct option ndpi_mt_opts[NDPI_OPT_LAST+1];
+static struct option ndpi_mt_opts[NDPI_OPT_LAST+2]; // 0 + last NULL
 
 static struct xtables_match
 ndpi_mt4_reg = {
@@ -871,6 +929,11 @@ void _init(void)
 	ndpi_mt_opts[i].name = "untracked";
 	ndpi_mt_opts[i].flag = NULL;
 	ndpi_mt_opts[i].has_arg = 0;
+	ndpi_mt_opts[i].val = i;
+	i=NDPI_OPT_CLEVEL;
+	ndpi_mt_opts[i].name = "clevel";
+	ndpi_mt_opts[i].flag = NULL;
+	ndpi_mt_opts[i].has_arg = 1;
 	ndpi_mt_opts[i].val = i;
 
 	i++;

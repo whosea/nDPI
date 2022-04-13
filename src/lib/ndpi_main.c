@@ -7147,6 +7147,8 @@ const char *ndpi_confidence_get_name(ndpi_confidence_t confidence)
     return "Match by port";
   case NDPI_CONFIDENCE_MATCH_BY_IP:
     return "Match by IP";
+  case NDPI_CONFIDENCE_USERDEF:
+    return "User defined";
   case NDPI_CONFIDENCE_DPI_CACHE:
     return "DPI (cache)";
   case NDPI_CONFIDENCE_DPI:

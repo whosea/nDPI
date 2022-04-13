@@ -908,6 +908,7 @@ typedef enum {
   NDPI_CONFIDENCE_UNKNOWN = 0,		/* Unknown classification */
   NDPI_CONFIDENCE_MATCH_BY_PORT,	/* Classification obtained looking only at the L4 ports */
   NDPI_CONFIDENCE_MATCH_BY_IP,		/* Classification obtained looking only at the L3 addresses */
+  NDPI_CONFIDENCE_USERDEF,		/* Classification from user definitions */
   NDPI_CONFIDENCE_DPI_CACHE,		/* Classification results based on same LRU cache (i.e. correlation among sessions) */
   NDPI_CONFIDENCE_DPI,			/* Deep packet inspection */
 

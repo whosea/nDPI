@@ -115,4 +115,6 @@ S - server JA3 hash
 C - client JA3 hash
 F - TLS fingerprint
 V - version of TLS
+L - confidence level (1 - port, 2 - ip, 3 - ip+port, 4 - dpi cache, 5 - dpi)
+
 The information will be added in the order of the options.
