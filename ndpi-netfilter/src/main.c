@@ -1200,6 +1200,22 @@ static void ndpi_check_opt(struct ndpi_detection_module_struct *ndpi_struct,
 		  *tlsv_matched = ndpi_j3_match(ndpi_struct,info,"TLSV_",ct_ndpi->flow_opt+ct_ndpi->tlsv-1);
 	}
 }
+static int check_guessed_protocol(struct nf_ct_ext_ndpi *ct_ndpi,ndpi_protocol_nf *proto) {
+	int r = 0;
+	if(proto->master_protocol == NDPI_PROTOCOL_UNKNOWN &&
+	   ct_ndpi->flow->guessed_protocol_id != NDPI_PROTOCOL_UNKNOWN) {
+		proto->master_protocol = ct_ndpi->flow->guessed_protocol_id;
+		ct_ndpi->proto.master_protocol = ct_ndpi->flow->guessed_protocol_id;
+		r = 1;
+	}
+	if(proto->app_protocol == NDPI_PROTOCOL_UNKNOWN &&
+	   ct_ndpi->flow->guessed_host_protocol_id != NDPI_PROTOCOL_UNKNOWN) {
+		proto->app_protocol = ct_ndpi->flow->guessed_host_protocol_id;
+		ct_ndpi->proto.app_protocol = ct_ndpi->flow->guessed_host_protocol_id;
+		r = 1;
+	}
+	return r;
+}
 static void pr_dc(const char *msg,uint8_t dc,ndpi_protocol_bitmask_struct_t *ex_p) {
     unsigned int *e = &ex_p->fds_bits[0];
     pr_info("%-10s dc:%d ex:%08x%08x%08x%08x%08x%08x%08x%08x\n",
@@ -1508,6 +1524,10 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ct_ndpi->confidence = ct_ndpi->flow->confidence;
 			confidence = ct_ndpi->confidence;
 			ndpi_host_info(ct_ndpi);
+
+			if(ct_ndpi->confidence < NDPI_CONFIDENCE_DPI_CACHE &&
+			   check_guessed_protocol(ct_ndpi,&proto))
+					c_proto->proto = pack_proto(proto);
 
 			if(ct_ndpi->confidence == NDPI_CONFIDENCE_DPI ||
 			   ct_ndpi->flow->fail_with_unknown ) {
