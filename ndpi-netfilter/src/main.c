@@ -1510,15 +1510,6 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		        break;
 		    }
 
-		    // ndpi_process_packet return app_protocol 
-		    if(r_proto != NDPI_PROTOCOL_UNKNOWN) {
-			proto = ct_ndpi->proto;
-			c_proto->proto = pack_proto(proto);
-			atomic64_inc(&n->protocols_cnt[proto.app_protocol]);
-			if(proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
-			   proto.master_protocol != proto.app_protocol)
-				atomic64_inc(&n->protocols_cnt[proto.master_protocol]);
-		    }
 		    if(ct_ndpi->flow) {
 			excluded_proto = ct_ndpi->flow->excluded_protocol_bitmask;
 			ct_ndpi->confidence = ct_ndpi->flow->confidence;
@@ -1528,6 +1519,17 @@ ndpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			if(ct_ndpi->confidence < NDPI_CONFIDENCE_DPI_CACHE &&
 			   check_guessed_protocol(ct_ndpi,&proto))
 					c_proto->proto = pack_proto(proto);
+
+			if(ct_ndpi->confidence != NDPI_CONFIDENCE_UNKNOWN) {
+			    if(proto.app_protocol != NDPI_PROTOCOL_UNKNOWN &&
+				proto.app_protocol <= NDPI_NUM_BITS) {
+				    atomic64_inc(&n->protocols_cnt[proto.app_protocol]);
+				    if( proto.master_protocol != NDPI_PROTOCOL_UNKNOWN &&
+					proto.master_protocol != proto.app_protocol &&
+					proto.master_protocol <= NDPI_NUM_BITS)
+					    atomic64_inc(&n->protocols_cnt[proto.master_protocol]);
+			    }
+			}
 
 			if(ct_ndpi->confidence == NDPI_CONFIDENCE_DPI ||
 			   ct_ndpi->flow->fail_with_unknown ) {
