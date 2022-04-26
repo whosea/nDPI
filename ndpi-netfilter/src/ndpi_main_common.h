@@ -98,3 +98,7 @@ static inline void getnstimeofday64(struct timespec64 *ts) {
 	ktime_get_real_ts64(ts);
 }
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
+#define pde_data(inode) PDE_DATA(inode)
+#endif
