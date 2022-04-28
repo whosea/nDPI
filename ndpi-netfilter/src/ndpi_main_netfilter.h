@@ -50,6 +50,7 @@ struct ndpi_net {
 				*pe_flow,
 				*pe_info,
 				*pe_proto,
+				*pe_debug,
 				*pe_hostdef,
 				*pe_ipdef;
 
@@ -187,13 +188,15 @@ struct nf_ct_ext_ndpi {
 #if __SIZEOF_LONG__ == 8
 	uint16_t		flags;		// 2 bytes
 	uint8_t			l4_proto;	// 1
-	uint8_t			confidence;	// 1
+	uint8_t			confidence:4,	// 1
+				host_proto_prio:4;
 	struct flow_info	flinfo;		// 112 bytes
 #else
 	struct flow_info	flinfo;		// 112 bytes
 	uint16_t		flags;		// 2 bytes
 	uint8_t			l4_proto;	// 1
-	uint8_t			confidence;	// 1
+	uint8_t			confidence:4,	// 1
+				host_proto_prio:4;
 #endif
 	uint16_t		ja3s,ja3c,tlsv,tlsfp;
 						// offset+1 in flow_opt

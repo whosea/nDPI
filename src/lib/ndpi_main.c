@@ -5178,6 +5178,7 @@ u_int32_t ndpi_check_flow_func(struct ndpi_detection_module_struct *ndpi_str,
 
 u_int16_t ndpi_guess_host_protocol_id(struct ndpi_detection_module_struct *ndpi_str,
 				      struct ndpi_flow_struct *flow) {
+#ifndef __KERNEL__
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_str);
   u_int16_t ret = NDPI_PROTOCOL_UNKNOWN;
 
@@ -5204,6 +5205,9 @@ u_int16_t ndpi_guess_host_protocol_id(struct ndpi_detection_module_struct *ndpi_
   }
 
   return(ret);
+#else
+  return NDPI_PROTOCOL_UNKNOWN;
+#endif
 }
 
 /* ********************************************************************************* */

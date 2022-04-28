@@ -26,3 +26,4 @@ int parse_ndpi_ipdef_cmd(struct ndpi_net *n, int f_op, ndpi_prefix_t *prefix, ch
 int parse_ndpi_ipdef(struct ndpi_net *n,char *cmd);
 int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd);
 int parse_ndpi_proto(struct ndpi_net *n,char *cmd);
+int parse_ndpi_debug(struct ndpi_net *n,char *cmd);

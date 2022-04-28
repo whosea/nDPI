@@ -44,7 +44,7 @@ do {
 		n->hosts_tmp = NULL;
 		ret = ENOMEM; break;
 	}
-	if(ndpi_log_debug > 1)
+	if(_DBG_TRACE_SPROC_H)
 		pr_info("host_open:%s %px new\n",n->ns_name,n->host_ac);
 
 	n->host_error = 0;
@@ -52,7 +52,7 @@ do {
 
 } while(0);
 
-	if(ndpi_log_debug > 1)
+	if(_DBG_TRACE_SPROC_H)
 		pr_info("host_open:%s host_ac %px old %px %s\n",
 				n->ns_name,(void *)n->host_ac,
 				ndpi_automa_host(n->ndpi_struct),
@@ -74,7 +74,7 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 	int hdp = 0, hdh = 0;
 	loff_t cpos = 0;
 
-	if(ndpi_log_debug > 1)
+	if(_DBG_TRACE_GPROC_H)
 		pr_info("read: start ppos %lld\n",*ppos);
 
 	while(hdp < NDPI_NUM_BITS ) {
@@ -102,7 +102,7 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 						pr_err("ndpi: lbuf too small\n");
 						continue;
 					}
-					if(ndpi_log_debug > 1) 
+					if(_DBG_TRACE_GPROC_H2) 
 						pr_info("read:3 lbuff full\n");
 					break;
 				}
@@ -123,14 +123,14 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 
 			if(hdh == ph->last) // last hostdef for current protocol
 				host = NULL;
-			if(ndpi_log_debug > 1) 
+			if(_DBG_TRACE_GPROC_H2) 
 				pr_info("read:4 lbuf:%d '%s'\n",l,lbuf);
 
 			if(cpos + l <= *ppos) {
 				cpos += l;
 			} else {
 				if(!count) {
-					if(ndpi_log_debug > 1) 
+					if(_DBG_TRACE_GPROC_H2) 
 						pr_info("read:6 buf full, bpos %d\n",bpos);
 					return bpos;
 				}
@@ -143,14 +143,14 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 				if( l > count) l = count;
 				if (!(ACCESS_OK(VERIFY_WRITE, buf+bpos, l) &&
 					!__copy_to_user(buf+bpos, lbuf+p, l))) return -EFAULT;
-				if(ndpi_log_debug > 1) 
+				if(_DBG_TRACE_GPROC_H2) 
 					pr_info("read:5 copy bpos %d p %d l %d\n",bpos,p,l);
 				(*ppos) += l;
 				bpos  += l;
 				cpos  += l+p;
 				count -= l;
 				if(!count) {
-					if(ndpi_log_debug > 1) 
+					if(_DBG_TRACE_GPROC_H2) 
 						pr_info("read:6 buf full, bpos %d\n",bpos);
 					return bpos;
 				}
@@ -163,10 +163,10 @@ ssize_t n_hostdef_proc_read(struct file *file, char __user *buf,
 			hdh = 0;
 			continue;
 		}
-		if(ndpi_log_debug > 1) 
+		if(_DBG_TRACE_GPROC_H2) 
 			pr_info("read:7 next\n");
 	}
-	if(ndpi_log_debug > 1) 
+	if(_DBG_TRACE_GPROC_H2) 
 		pr_info("read:8 return bpos %d\n",bpos);
 	return bpos;
 }
@@ -193,7 +193,7 @@ int n_hostdef_proc_close(struct inode *inode, struct file *file)
 			pr_err("xt_ndpi:%s Can't update host_proto with errors\n",n->ns_name);
 		}
 
-		if(ndpi_log_debug > 1)
+		if(_DBG_TRACE_GPROC_H)
 			pr_info("host_open:%s release host_ac %px\n",n->ns_name,n->host_ac);
 	    }
 	    ac_automata_release((AC_AUTOMATA_t*)n->host_ac,0);

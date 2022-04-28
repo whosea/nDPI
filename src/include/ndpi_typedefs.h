@@ -1423,7 +1423,9 @@ struct ndpi_flow_struct {
   NDPI_PROTOCOL_BITMASK excluded_protocol_bitmask;
 
   ndpi_protocol_category_t category;
+  /* for kernel mode */
   uint16_t ipdef_proto; /* protocol by ip/port + ip_port_finished */
+  ndpi_confidence_t ipdef_proto_level;
 
   /* NDPI_PROTOCOL_REDIS */
   u_int8_t redis_s2d_first_char, redis_d2s_first_char;

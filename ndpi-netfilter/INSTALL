@@ -103,13 +103,30 @@ rule was added.
 BIG FAT WARNING!
 
 Do not discard all the unknown traffic. Tcp-syn packets are always treated as an
-unknown protocol. 
-Use the "inprogress" option to determine when the protocol detection process ends. 
+unknown protocol.
+Use the "inprogress" option to determine when the protocol detection process ends.
+
+Example of allowing several protocols:
+
+	iptables -A FORWARD -m ndpi --inprogress ssh,dns,https -j ACCEPT
+	iptables -A FORWARD -m ndpi --clevel dpi --proto ssh,dns,https -j ACCEPT
+	iptables -A FORWARD -m ndpi --unknown -j DROP
+
+Example of disabling several protocols:
+
+	iptables -A FORWARD -m ndpi --inprogress ssh,dns,https -j ACCEPT
+	iptables -A FORWARD -m ndpi --clevel dpi --proto ssh,dns,https -j DROP
+	iptables -A FORWARD -m ndpi --unknown -j ACCEPT
+
+Protocols defined in /proc/net/xt_ndpi/host_proto will be considered at the "dpi" confidence level
+Protocols defined in /proc/net/xt_ndpi/ip_proto by ip address have "ip" confidence level.
+Protocols defined in /proc/net/xt_ndpi/ip_proto by ip address and port have "user" confidence level.
+
 ------------------------------------------------------------------
 
 Using ja3s/ja3c/tlsfp/tlsv matches.
 
-These options use user-defined protocols.
+These options can use only user-defined protocols.
 You need to create such a protocol and add hashes with additional prefixes to it.
 To check the ja3s hash, add the string JA3S_<hash>. Similar to other options.
 
@@ -204,7 +221,7 @@ iptables rule for nDPI and then type (as root):
 6. Module parameters
 --------------------
 
-xt_debug:	Debug level for xt_ndpi (0-3). Default 0.
+xt_debug:	Debug level for xt_ndpi. Default 0. See /proc/net/xt_ndpi/debug
 lib_trace:	Maximem debug level for nDPI library. Default 0.
 		0-off, 1-error, 2-trace, 3-debug, 4->extra debug"
 		(Needed configure with --enable-debug-messages option)
@@ -287,7 +304,7 @@ ndpi_stun_cache: STUN cache control (0-1). Default 0.
   2. In both directions at least one packet with a payload is transmitted.
   3. Three or more packets with payload are transmitted in one (any) direction.
 
-/proc/net/xt_ndpi/host_proto - show host based settings (used in DNS,HTTP,SSL)
+/proc/net/xt_ndpi/host_proto - show and change host based settings (used in DNS,HTTP,SSL)
 
   View current settings:
   "cat /proc/net/xt_ndpi/host_proto"
@@ -303,6 +320,17 @@ ndpi_stun_cache: STUN cache control (0-1). Default 0.
 
   Updating /proc/net/xt_ndpi/host_prot is slow and expensive.
   It is recommended to download all the data in one go.
+
+/proc/net/xt_ndpi/debug - show and change debug output
+  
+  View current settings:
+  "cat /proc/net/xt_ndpi/debug"
+  
+  Change settings:
+  "echo 'packet y' >/proc/net/xt_ndpi/debug"
+
+  Disable all debug:
+  "echo 'all y' >/proc/net/xt_ndpi/debug"
 
 Bittorrents-specific files:
 

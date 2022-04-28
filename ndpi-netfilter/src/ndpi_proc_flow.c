@@ -82,22 +82,16 @@ size_t ndpi_dump_opt(char *buf, size_t bufsize,
 
 	buf[0] = '\0';
 
-        if(ct->flow_opt && ndpi_log_debug > 1) pr_info("%s: flow_opt %s,%s,%s,%s\n",__func__,
-                ct->ja3s  ? ct->flow_opt+ct->ja3s-1:"",
-                ct->ja3c  ? ct->flow_opt+ct->ja3c-1:"",
-                ct->tlsfp ? ct->flow_opt+ct->tlsfp-1:"",
-                ct->tlsv  ? ct->flow_opt+ct->tlsv-1:""
-                );
-
 	for(i=0; i < NDPI_FLOW_OPT_MAX && ndpi_flow_opt[i]; i++) {
 	   if(ndpi_flow_opt[i] != 'L' && !ct->flow_opt) continue;
 	   switch(ndpi_flow_opt[i]) {
 		case 'L':
-			if(ct->confidence != NDPI_CONFIDENCE_UNKNOWN && l < bufsize-4) {
+			if(!(flag & 0x10) && ct->confidence != NDPI_CONFIDENCE_UNKNOWN && l < bufsize-4) {
 			    if(l) buf[l++] = ' ';
 			    buf[l] = 'L'; buf[l+1] = '=';
 			    buf[l+2] = (char)('0' + (ct->confidence & 7));
 			    l += 3;
+			    flag |= 0x10;
 			}
 			break;
 		case 'S':
@@ -129,7 +123,6 @@ size_t ndpi_dump_opt(char *buf, size_t bufsize,
 	   }
 	}
 	buf[l] = '\0';
-        if(ndpi_log_debug > 1) pr_info("%s: result %zd:%s\n",__func__,l,buf);
 	return l;
 }
 ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
@@ -312,13 +305,15 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 		   sl_host = buflen - 6 - l;
 	    l += snprintf(&buf[l],buflen-l," H=%.*s",sl_host,ct->host);
 	  }
-	  if(ct->flow_opt) {
+	  {
 	    char opt_buf[512];
 	    sl_opt = ndpi_dump_opt(opt_buf,sizeof(opt_buf)-1,ct);
-	    if(sl_opt + sl_host > NF_STR_OPTLEN ) sl_opt = NF_STR_OPTLEN - 4 - sl_host;
-	    if(l + sl_opt + 6 > buflen)
+	    if(sl_opt) {
+	      if(sl_opt + sl_host > NF_STR_OPTLEN ) sl_opt = NF_STR_OPTLEN - 4 - sl_host;
+	      if(l + sl_opt + 6 > buflen)
 		   sl_opt = buflen - 6 - l;
-	    l += snprintf(&buf[l],buflen-l," %.*s",sl_opt,opt_buf);
+	      l += snprintf(&buf[l],buflen-l," %.*s",sl_opt,opt_buf);
+	    }
 	  }
 	}
 	buf[l++] = '\n';

@@ -275,3 +275,47 @@ nproto_proc_write(struct file *file, const char __user *buffer,
 			parse_ndpi_proto, 256, W_BUF_PROTO);
 }
 
+
+ssize_t ndebug_proc_read(struct file *file, char __user *buf,
+                              size_t count, loff_t *ppos)
+{
+	char lbuf[1024];
+	int l,p,ro;
+	loff_t i_pos = 0;
+
+	p = 0;
+	memset(lbuf,0,sizeof(lbuf));
+	l = dbg_ipt_opt(lbuf,sizeof(lbuf));
+
+	if(i_pos + l <= *ppos )	return 0; // EOF
+
+	ro = 0;
+	if(i_pos < *ppos) {
+		ro = *ppos - i_pos;
+		l -= ro;
+	}
+	if(count < l) l = count;
+	if(!count) return 0;
+
+	if (!(ACCESS_OK(VERIFY_WRITE, buf+p, l) &&
+			!__copy_to_user(buf+p, &lbuf[ro], l))) return -EFAULT;
+	(*ppos) += l;
+	p += l;
+	return p;
+}
+int ndebug_proc_close(struct inode *inode, struct file *file)
+{
+        struct ndpi_net *n = PDE_DATA(file_inode(file));
+	generic_proc_close(n,parse_ndpi_debug,W_BUF_PROTO);
+        return 0;
+}
+
+ssize_t
+ndebug_proc_write(struct file *file, const char __user *buffer,
+                     size_t length, loff_t *loff)
+{
+	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+			parse_ndpi_debug, 256, W_BUF_PROTO);
+}
+
+

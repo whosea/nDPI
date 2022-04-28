@@ -60,28 +60,30 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 
 #define EXT_OPT_BASE 0
 // #define EXT_OPT_BASE NDPI_LAST_IMPLEMENTED_PROTOCOL
-
-#define NDPI_OPT_ERROR    (EXT_OPT_BASE+1)
-#define NDPI_OPT_PROTO    (EXT_OPT_BASE+2)
-#define NDPI_OPT_ALL      (EXT_OPT_BASE+3)
-#define NDPI_OPT_MASTER   (EXT_OPT_BASE+4)
-#define NDPI_OPT_PROTOCOL (EXT_OPT_BASE+5)
-#define NDPI_OPT_HMASTER  (EXT_OPT_BASE+6)
-#define NDPI_OPT_HOST     (EXT_OPT_BASE+7)
-#define NDPI_OPT_INPROGRESS (EXT_OPT_BASE+8)
-#define NDPI_OPT_JA3S     (EXT_OPT_BASE+9)
-#define NDPI_OPT_JA3C     (EXT_OPT_BASE+10)
-#define NDPI_OPT_TLSFP    (EXT_OPT_BASE+11)
-#define NDPI_OPT_TLSV     (EXT_OPT_BASE+12)
-#define NDPI_OPT_UNTRACKED (EXT_OPT_BASE+13)
-#define NDPI_OPT_CLEVEL   (EXT_OPT_BASE+14)
-#define NDPI_OPT_LAST     (EXT_OPT_BASE+14)
+enum ndpi_opt_index {
+	NDPI_OPT_UNKNOWN=0,
+	NDPI_OPT_ALL,
+	NDPI_OPT_ERROR,
+	NDPI_OPT_PROTO,
+	NDPI_OPT_MPROTO,
+	NDPI_OPT_APROTO,
+	NDPI_OPT_HMASTER,
+	NDPI_OPT_HOST,
+	NDPI_OPT_INPROGRESS,
+	NDPI_OPT_JA3S,
+	NDPI_OPT_JA3C,
+	NDPI_OPT_TLSFP,
+	NDPI_OPT_TLSV,
+	NDPI_OPT_UNTRACKED,
+	NDPI_OPT_CLEVEL,
+	NDPI_OPT_LAST
+};
 
 #define FLAGS_ALL 0x1
 #define FLAGS_ERR 0x2
 #define FLAGS_HMASTER 0x4
-#define FLAGS_MASTER 0x8
-#define FLAGS_PROTOCOL 0x10
+#define FLAGS_MPROTO 0x8
+#define FLAGS_APROTO 0x10
 #define FLAGS_HOST 0x20
 #define FLAGS_INPROGRESS 0x40
 #define FLAGS_PROTO 0x80
@@ -91,6 +93,7 @@ static char  prot_disabled[NDPI_NUM_BITS+1] = { 0, };
 #define FLAGS_TLSV 0x800
 #define FLAGS_UNTRACKED 0x1000
 #define FLAGS_CLEVEL 0x2000
+#define FLAGS_HPROTO 0x4000
 
 
 static void ndpi_mt_init(struct xt_entry_match *match)
@@ -100,6 +103,7 @@ static void ndpi_mt_init(struct xt_entry_match *match)
 }
 static const char *clevel2str(int l) {
 	switch(l) {
+	  case 0: return "unknown";
 	  case 1: return "port";
 	  case 2: return "ip";
 	  case 3: return "user";
@@ -126,163 +130,101 @@ static int str2clevel(const char *s) {
 	return i < 0 || i > 5 ? 0 : i;
 }
 static void 
-ndpi_mt4_save(const void *entry, const struct xt_entry_match *match)
+_ndpi_mt4_save(const void *entry, const struct xt_entry_match *match,int save)
 {
 	const struct xt_ndpi_mtinfo *info = (const void *)match->data;
 	const char *cinv = info->invert ? "! ":"";
+	const char *csave = save ? "--":"";
         int i,c,l,t;
 
-	if(info->error) {
-		printf(" %s--error",cinv);
-		return;
-	}
-	if(info->untracked) {
-		printf(" %s--untracked",cinv);
-		return;
-	}
-	if(info->have_master) {
-		printf(" %s--have-master",cinv);
-		return;
-	}
-	if(info->clevel) {
-		printf(" %s--clevel %s%s",cinv,
-			clevel_op2str(info->clevel_op),	clevel2str(info->clevel));
-		return;
-	}
-
         for (t = l = c = i = 0; i < NDPI_NUM_BITS; i++) {
-		if (!prot_short_str[i] || !strncmp(prot_short_str[i],"badproto_",9)) continue;
-		if (!prot_disabled[i]) { 
-		    t++;
-		    if (NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) != 0) {
-			l = i;
-			c++;
-		    }
+		if (!prot_short_str[i] || prot_disabled[i] || 
+				!strncmp(prot_short_str[i],"badproto_",9)) continue;
+		t++;
+		if (NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) != 0) {
+			l = i; c++;
 		}
 	}
 
-	printf(" %s", cinv);
-	if(info->m_proto && !info->p_proto)
-		printf(" --match-master");
-	if(!info->m_proto && info->p_proto)
-		printf(" --match-proto");
+	if(!save)
+		printf(" ndpi");
+	if(info->error) {
+		printf(" %s%serror",cinv,csave);
+		return;
+	}
+	if(info->untracked) {
+		printf(" %s%suntracked",cinv,csave);
+		return;
+	}
+	if(info->invert)
+		printf(" !");
 
 	if(info->hostname[0]) {
-		printf(" --host %s",info->hostname);
+		printf(" %shost %s",csave,info->hostname);
 	}
+	if(info->have_master) {
+		printf(" %shave-master",csave);
+	}
+	if(info->clevel) {
+		printf(" %sclevel %s%s", csave, clevel_op2str(info->clevel_op),
+				clevel2str(info->clevel));
+	}
+	if(info->m_proto && !info->p_proto)
+		printf(" %smatch-m-proto",csave);
+	if(!info->m_proto && info->p_proto)
+		printf(" %smatch-a-proto",csave);
+
 	if(!c) return;
+	printf(" %s",csave);
+	if(info->inprogress) {
+	  printf("inprogress");
+	} else if(info->ja3s) {
+	  printf("ja3s");
+	} else if(info->ja3c) {
+	  printf("ja3c");
+	} else if(info->tlsfp) {
+	  printf("tlsfp");
+	} else if(info->tlsv) {
+	  printf("tlsv");
+	} else
+	  printf("proto");
+
 	if( c == 1) {
-		printf(" --%s%s ",l != NDPI_PROTOCOL_UNKNOWN ? "proto ":"",
-				prot_short_str[l]);
+		printf(" %s",prot_short_str[l]);
 		return;
 	}
 	if( c == t-1 && 
 	    !NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,NDPI_PROTOCOL_UNKNOWN) ) { 
-		printf(" --all ");
+		printf(" all");
 		return;
 	}
-	if(info->inprogress) {
-	  printf(" --inprogress ");
-	} else if(info->ja3s) {
-	  printf(" --ja3s " );
-	} else if(info->ja3c) {
-	  printf(" --ja3c " );
-	} else if(info->tlsfp) {
-	  printf(" --tlsfp " );
-	} else if(info->tlsv) {
-	  printf(" --tlsv " );
-	} else
-	  printf(" --proto " );
 
 	if(c > t/2 + 1) {
-	    printf("all");
+	    printf(" all");
 	    for (i = 1; i < NDPI_NUM_BITS; i++) {
                 if (prot_short_str[i] && !prot_disabled[i] && NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) == 0)
 			printf(",-%s", prot_short_str[i]);
 	    }
 	    return;
 	}
+	printf(" ");
         for (l = i = 0; i < NDPI_NUM_BITS; i++) {
                 if (prot_short_str[i] && !prot_disabled[i] && NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) != 0)
 			printf("%s%s",l++ ? ",":"", prot_short_str[i]);
         }
 }
 
+static void 
+ndpi_mt4_save(const void *entry, const struct xt_entry_match *match) {
+	_ndpi_mt4_save(entry,match,1);
+}
 
 static void 
 ndpi_mt4_print(const void *entry, const struct xt_entry_match *match,
                   int numeric)
 {
-	const struct xt_ndpi_mtinfo *info = (const void *)match->data;
-	const char *cinv = info->invert ? "!":"";
-        int i,c,l,t;
-
-	if(info->error) {
-		printf(" %sndpi error",cinv);
-		return;
-	}
-	if(info->untracked) {
-		printf(" %sndpi untracked",cinv);
-		return;
-	}
-	if(info->have_master) {
-		printf(" %sndpi have-master",cinv);
-		return;
-	}
-	if(info->clevel) {
-		printf(" %sclevel %s%s",cinv,
-			clevel_op2str(info->clevel_op),	clevel2str(info->clevel));
-		return;
-	}
-
-        for (t = c = i = 0; i < NDPI_NUM_BITS; i++) {
-		if (!prot_short_str[i] || prot_disabled[i] || !strncmp(prot_short_str[i],"badproto_",9)) continue;
-		t++;
-		if (NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) != 0) c++;
-	}
-	printf(" %sndpi", cinv);
-	if(info->m_proto && !info->p_proto)
-		printf(" match-master");
-	if(!info->m_proto && info->p_proto)
-		printf(" match-proto");
-	if(info->hostname[0]) {
-		printf(" host %s",info->hostname);
-	}
-	if(!c) return;
-
-	if( c == t-1 && 
-	    !NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags,NDPI_PROTOCOL_UNKNOWN) ) {
-		printf(" all protocols");
-		return;
-	}
-	if(info->inprogress) {
-	  printf(" inprogress");
-	} else if(info->ja3s) {
-	  printf(" ja3s " );
-	} else if(info->ja3c) {
-	  printf(" ja3c " );
-	} else if(info->tlsfp) {
-	  printf(" tlsfp " );
-	} else if(info->tlsv) {
-	  printf(" tlsv " );
-	} else
-	  printf(" protocol%s ",c > 1 ? "s":"");
-	if(c > t/2 + 1) {
-	    printf("all");
-	    for (i = 1; i < NDPI_NUM_BITS; i++) {
-                if (prot_short_str[i] && !prot_disabled[i] && NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) == 0)
-			printf(",-%s", prot_short_str[i]);
-	    }
-	    return;
-	}
-
-        for (l = i = 0; i < NDPI_NUM_BITS; i++) {
-                if (prot_short_str[i] && !prot_disabled[i] && NDPI_COMPARE_PROTOCOL_TO_BITMASK(info->flags, i) != 0)
-                        printf("%s%s",l++ ? ",":"", prot_short_str[i]);
-        }
-
+	_ndpi_mt4_save(entry,match,0);
 }
-
 
 static int 
 ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
@@ -308,9 +250,9 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
                 *flags |= FLAGS_UNTRACKED;
                 return true;
 	}
-	if(c == NDPI_OPT_MASTER) {
+	if(c == NDPI_OPT_MPROTO) {
 		info->m_proto = 1;
-        	*flags |= FLAGS_MASTER;
+        	*flags |= FLAGS_MPROTO;
 		return true;
 	}
 	if(c == NDPI_OPT_CLEVEL) {
@@ -328,13 +270,21 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 			printf("Error: invalid clevel %s\n",optarg);
 			return false;
 		}
+		if(info->clevel == 0 && info->clevel_op == 1) {
+			printf("Error: impossible condition '-unknown'\n");
+			return false;
+		}
+		if(info->clevel == 5 && info->clevel_op == 2) {
+			printf("Error: impossible condition '+dpi'\n");
+			return false;
+		}
 		info->clevel = cl;
         	*flags |= FLAGS_CLEVEL;
 		return true;
 	}
-	if(c == NDPI_OPT_PROTOCOL) {
+	if(c == NDPI_OPT_APROTO) {
 		info->p_proto = 1;
-        	*flags |= FLAGS_PROTOCOL;
+        	*flags |= FLAGS_APROTO;
 		return true;
 	}
 
@@ -386,7 +336,6 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 
 		} else info->re = 0;
 
-		info->empty = NDPI_BITMASK_IS_ZERO(info->flags);
 		return true;
 	}
 	if(c == NDPI_OPT_PROTO || c == NDPI_OPT_INPROGRESS ||
@@ -431,33 +380,36 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 			     else
 				NDPI_DEL_PROTOCOL_FROM_BITMASK(info->flags,num);
 			}
-			*flags |= FLAGS_PROTO;
 			np = NULL;
 		}
-		if(c == NDPI_OPT_JA3S)  { *flags |= FLAGS_JA3S; info->ja3s = 1; }
-		if(c == NDPI_OPT_JA3C)  { *flags |= FLAGS_JA3C; info->ja3c = 1; }
+		if(c == NDPI_OPT_PROTO) { *flags |= FLAGS_PROTO; info->proto = 1; }
+		if(c == NDPI_OPT_JA3S)  { *flags |= FLAGS_JA3S;  info->ja3s = 1; }
+		if(c == NDPI_OPT_JA3C)  { *flags |= FLAGS_JA3C;  info->ja3c = 1; }
 		if(c == NDPI_OPT_TLSFP) { *flags |= FLAGS_TLSFP; info->tlsfp = 1; }
 		if(c == NDPI_OPT_TLSV)  { *flags |= FLAGS_TLSV;  info->tlsv = 1; }
 		if(c == NDPI_OPT_INPROGRESS ) { *flags |= FLAGS_INPROGRESS;
 						info->inprogress = 1; }
-		if(NDPI_BITMASK_IS_EMPTY(info->flags)) *flags &= ~FLAGS_PROTO;
-		return *flags != 0;
+		if(NDPI_BITMASK_IS_EMPTY(info->flags)) {
+			info->empty = 1;
+			*flags &= ~FLAGS_PROTO;
+		} else
+			*flags |= FLAGS_HPROTO;
+
+		return true;
+	}
+	if(c == NDPI_OPT_UNKNOWN) {
+		NDPI_ADD_PROTOCOL_TO_BITMASK(info->flags,NDPI_PROTOCOL_UNKNOWN);
+		info->proto = 1;
+        	*flags |= FLAGS_PROTO | FLAGS_HPROTO;
+		return true;
 	}
 	if(c == NDPI_OPT_ALL) {
 		for (i = 1; i < NDPI_NUM_BITS; i++) {
 	    	    if(prot_short_str[i] && strncmp(prot_short_str[i],"badproto_",9) && !prot_disabled[i])
 			NDPI_ADD_PROTOCOL_TO_BITMASK(info->flags,i);
 		}
-        	*flags |= FLAGS_ALL;
-		return true;
-	}
-	if(c > NDPI_OPT_ALL) {
-		printf("BUG! c > NDPI_NUM_BITS+1\n");
-		return false;
-	}
-	if(c >= 0 && c < NDPI_NUM_BITS) {
-        	NDPI_ADD_PROTOCOL_TO_BITMASK(info->flags, c);
-		*flags |= FLAGS_ALL;
+		info->proto = 1;
+        	*flags |= FLAGS_PROTO | FLAGS_HPROTO | FLAGS_ALL;
 		return true;
 	}
 	return false;
@@ -470,6 +422,7 @@ ndpi_mt4_parse(int c, char **argv, int invert, unsigned int *flags,
 static void
 ndpi_mt_check (unsigned int flags)
 {
+	int nopt = 0;
 	if (!flags)
 		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: missing options.");
 	
@@ -486,21 +439,29 @@ ndpi_mt_check (unsigned int flags)
 		return;
 	}
 	if (flags & FLAGS_HMASTER) {
-	   if(flags & (FLAGS_ALL | FLAGS_MASTER | FLAGS_PROTOCOL))
-		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master' with options match-master,match-proto,proto");
+	   if(flags & (FLAGS_ALL | FLAGS_MPROTO | FLAGS_APROTO))
+		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: cant use '--have-master' with options match-m-proto,match-a-proto,proto");
 	      else
 		 return;
 	}
 
-	if (flags & (FLAGS_PROTOCOL|FLAGS_MASTER)) {
-	    if(!(flags & FLAGS_ALL))
+	if (flags & (FLAGS_APROTO|FLAGS_MPROTO)) {
+	    if(!(flags & FLAGS_HPROTO))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
 	}
 
-	if (flags & (FLAGS_JA3S|FLAGS_JA3C|FLAGS_TLSFP|FLAGS_TLSV|FLAGS_INPROGRESS)) {
-	    if(!(flags & FLAGS_PROTO))
+	if (flags & (FLAGS_PROTO|FLAGS_JA3S|FLAGS_JA3C|FLAGS_TLSFP|FLAGS_TLSV|FLAGS_INPROGRESS)) {
+	    if(!(flags & FLAGS_HPROTO))
 		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: You need to specify at least one protocol");
 	}
+	if(flags & FLAGS_PROTO) nopt++;
+	if(flags & FLAGS_JA3S)  nopt++;
+	if(flags & FLAGS_JA3C)  nopt++;
+	if(flags & FLAGS_TLSFP) nopt++;
+	if(flags & FLAGS_TLSV)  nopt++;
+	if(flags & FLAGS_INPROGRESS) nopt++;
+	if(nopt != 1)
+		 xtables_error(PARAMETER_PROBLEM, "xt_ndpi: --proto|--ja3s|--ja3c|--tlsfp|--tlsv|--inprogress %x %d",flags,nopt);
 }
 
 static int cmp_pname(const void *p1, const void *p2) {
@@ -559,24 +520,27 @@ ndpi_mt_help(void)
         int d;
 
 	printf( "ndpi match options:\n"
-		"  --error            Match error detecting process\n"
-		"  --untracked        Match if detection is not started for this connection\n"
-		"  --have-master      Match if master protocol detected\n"
-		"  --match-master     Match master protocol only\n"
-		"  --clevel X         Match confidence level. -X - level < X, +X - level > X\n"
-		"  --match-proto      Match protocol only\n"
-		"  --host str         Match server host name\n"
-		"                     Use /str/ for regexp match.\n"
-		"  --inprogress proto Match if protocol detection is not finished yet\n"
-		"  --ja3s proto       Match ja3 server hash (user defined protocol)\n"
-		"  --ja3c proto       Match ja3 client hash (user defined protocol)\n"
-		"  --tlsfp proto      Match tls fingerprint (user defined protocol)\n"
-		"  --tlsv  proto      Match tls version (user defined protocol)\n"
+		"  --error                Match error detecting process\n"
+		"  --untracked            Match if detection is not started for this connection\n"
+		"  --host str             Match server host name\n"
+		"                         Use /str/ for regexp match.\n"
+		"  --clevel L             Match confidence level. -L - level < L, +L - level > L\n"
+		"                         Levels: unknown,port,ip,user,cache,dpi\n"
+		"  --have-master          Match if master protocol detected\n"
+		"  --match-m-proto        Match master protocol only\n"
+		"  --match-a-proto        Match application protocol only\n"
+		"  --proto protocols      Match if protocols detected\n"
+		"                         (list of protocols comma separated)\n"
+		"  --inprogress protocols Match if protocols detection is not finished yet\n"
+		"  --ja3s protocols       Match ja3 server hash (user defined protocols)\n"
+		"  --ja3c protocols       Match ja3 client hash (user defined protocols)\n"
+		"  --tlsfp protocols      Match tls fingerprint (user defined protocols)\n"
+		"  --tlsv  protocols      Match tls version (user defined protocols)\n"
 		"Special protocol names:\n"
 		"  --all              Match any known protocol\n"
 		"  --unknown          Match unknown protocol packets\n");
 	d = ndpi_print_prot_list(0,
-			"Enabled protocols: ( option --proto protoname[,protoname...])\n");
+			"Enabled protocols:\n");
 	if(!d) return;
 	ndpi_print_prot_list(1,"Disabled protocols:\n");
 }
@@ -821,7 +785,7 @@ void _init(void)
 	FILE *f_proto = fopen("/proc/net/xt_ndpi/proto","r");
 
 	if(!f_proto)
-		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: kernel module not load.");
+		xtables_error(PARAMETER_PROBLEM, "xt_ndpi: kernel module is not loaded.");
 	pname[0] = '\0';
 	index = 0;
 	while(!feof(f_proto)) {
@@ -852,95 +816,26 @@ void _init(void)
 	if(index >= NDPI_NUM_BITS)
 	    xtables_error(PARAMETER_PROBLEM, "xt_ndpi: kernel module version missmatch.");
 
-/*      for (i = 0; i <= NDPI_LAST_IMPLEMENTED_PROTOCOL; i++){
-                ndpi_mt_opts[i].name = prot_short_str[i];
-                ndpi_mt_opts[i].flag = NULL;
-		ndpi_mt_opts[i].has_arg = 0;
-                ndpi_mt_opts[i].val = i;
-        } */
+#define MT_OPT(np,protoname,nargs) { i=(np); \
+	ndpi_mt_opts[i].name = protoname; ndpi_mt_opts[i].flag = NULL; \
+	ndpi_mt_opts[i].has_arg = nargs;  ndpi_mt_opts[i].val = i; }
 
-	i=0;
-	ndpi_mt_opts[i].name = "unknown";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-
-	i=NDPI_OPT_ERROR;
-	ndpi_mt_opts[i].name = "error";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_PROTO;
-	ndpi_mt_opts[i].name = "proto";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_ALL;
-	ndpi_mt_opts[i].name = "all";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_MASTER;
-	ndpi_mt_opts[i].name = "match-master";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_PROTOCOL;
-	ndpi_mt_opts[i].name = "match-proto";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_HMASTER;
-	ndpi_mt_opts[i].name = "have-master";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_HOST;
-	ndpi_mt_opts[i].name = "host";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_INPROGRESS;
-	ndpi_mt_opts[i].name = "inprogress";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_JA3S;
-	ndpi_mt_opts[i].name = "ja3s";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_JA3C;
-	ndpi_mt_opts[i].name = "ja3c";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_TLSFP;
-	ndpi_mt_opts[i].name = "tlsfp";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_TLSV;
-	ndpi_mt_opts[i].name = "tlsv";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_UNTRACKED;
-	ndpi_mt_opts[i].name = "untracked";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = i;
-	i=NDPI_OPT_CLEVEL;
-	ndpi_mt_opts[i].name = "clevel";
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 1;
-	ndpi_mt_opts[i].val = i;
-
-	i++;
-	ndpi_mt_opts[i].name = NULL;
-	ndpi_mt_opts[i].flag = NULL;
-	ndpi_mt_opts[i].has_arg = 0;
-	ndpi_mt_opts[i].val = 0;
+	MT_OPT(NDPI_OPT_UNKNOWN,"unknown",0)
+	MT_OPT(NDPI_OPT_ALL,"all",0)
+	MT_OPT(NDPI_OPT_ERROR,"error",0)
+	MT_OPT(NDPI_OPT_PROTO,"proto",1)
+	MT_OPT(NDPI_OPT_MPROTO,"match-m-proto",0)
+	MT_OPT(NDPI_OPT_APROTO,"match-a-proto",0)
+	MT_OPT(NDPI_OPT_HMASTER,"have-master",0)
+	MT_OPT(NDPI_OPT_HOST,"host",1)
+	MT_OPT(NDPI_OPT_INPROGRESS,"inprogress",1)
+	MT_OPT(NDPI_OPT_JA3S,"ja3s",1)
+	MT_OPT(NDPI_OPT_JA3C,"ja3c",1)
+	MT_OPT(NDPI_OPT_TLSFP,"tlsfp",1)
+	MT_OPT(NDPI_OPT_TLSV,"tlsv",1)
+	MT_OPT(NDPI_OPT_UNTRACKED,"untracked",0)
+	MT_OPT(NDPI_OPT_CLEVEL,"clevel",1)
+	MT_OPT(NDPI_OPT_LAST,NULL,0)
 
 	xtables_register_match(&ndpi_mt4_reg);
 	xtables_register_targets(ndpi_tg_reg, ARRAY_SIZE(ndpi_tg_reg));
