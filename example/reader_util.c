@@ -1567,13 +1567,13 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 	 inet_ntop(AF_INET,&iph->daddr,ip2,sizeof(ip2)-1);
 	 if(tcph) {
 		 fprintf(stdout,"TCP %s:%u -> %s:%u LEN %u",
-			ip1,ntohs(sport),ip2,ntohs(dport),htons(iph->tot_len));
+			ip1,sport,ip2,dport,htons(iph->tot_len));
 	 } else if(udph) {
 		 fprintf(stdout,"UDP %s:%u -> %s:%u LEN %u",
-			ip1,ntohs(sport),ip2,ntohs(dport),htons(iph->tot_len));
+			ip1,sport,ip2,dport,htons(iph->tot_len));
 	 } else {
 		 fprintf(stdout,"%03d %s:%u -> %s:%u LEN %u",iph->protocol,
-			ip1,ntohs(sport),ip2,ntohs(dport),htons(iph->tot_len));
+			ip1,sport,ip2,dport,htons(iph->tot_len));
 	 }
 	 if(nf_mark != xnf_mark)
 		 fprintf(stdout," NFMARK ipt %08x -> ndpi %08x\n",nf_mark,xnf_mark);
@@ -1696,6 +1696,7 @@ int ndpi_is_datalink_supported(int datalink_type) {
   case DLT_LINUX_SLL:
   case DLT_IEEE802_11_RADIO:
   case DLT_RAW:
+  case DLT_NFLOG:
     return 1;
   default:
     return 0;
