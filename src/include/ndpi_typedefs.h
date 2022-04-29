@@ -73,7 +73,6 @@ typedef enum {
   - nDPI/wireshark/ndpi.lua
   - ndpi_risk2str (in ndpi_utils.c)
   - doc/flow_risks.rst
-  - ndpi_risk_enum (in python/ndpi.py)
   - ndpi_known_risks (ndpi_main.c)
 
   To make sure the risk is also seen by ntopng:
@@ -184,7 +183,12 @@ typedef struct node_t {
 /* NDPI_MASK_SIZE */
 typedef u_int32_t ndpi_ndpi_mask;
 
+
 /* NDPI_PROTO_BITMASK_STRUCT */
+#ifdef NDPI_CFFI_PREPROCESSING
+#define NDPI_NUM_FDS_BITS     16
+#endif
+
 typedef struct ndpi_protocol_bitmask_struct {
   ndpi_ndpi_mask fds_bits[NDPI_NUM_FDS_BITS];
 } ndpi_protocol_bitmask_struct_t;
@@ -195,6 +199,7 @@ typedef void (*ndpi_debug_function_ptr) (u_int32_t protocol, void *module_struct
 					 const char *func, unsigned line,
 					 const char *format, ...);
 
+#ifndef NDPI_CFFI_PREPROCESSING_EXCLUDE_PACKED
 /* ************************************************************ */
 /* ******************* NDPI NETWORKS HEADERS ****************** */
 /* ************************************************************ */
@@ -212,6 +217,13 @@ typedef void (*ndpi_debug_function_ptr) (u_int32_t protocol, void *module_struct
 #define PACK_OFF  __attribute__((packed))
 #endif
 
+/* PLEASE DO NOT REMOVE OR CHANGE THE ORDER OF WHAT IS DELIMITED BY CFFI.NDPI_PACKED_STRUCTURES FLAG AS IT IS USED FOR
+   PYTHON BINDINGS AUTO GENERATION */
+#ifdef NDPI_CFFI_PREPROCESSING
+#define PACK_ON
+#define PACK_OFF
+#endif
+//CFFI.NDPI_PACKED_STRUCTURES
 PACK_ON
 struct ndpi_chdlc
 {
@@ -449,12 +461,6 @@ struct ndpi_dns_packet_header {
   u_int16_t additional_rrs;
 } PACK_OFF;
 
-typedef union
-{
-  u_int32_t ipv4;
-  struct ndpi_in6_addr ipv6;
-} ndpi_ip_addr_t;
-
 
 /* +++++++++++++++++++++++ ICMP header +++++++++++++++++++++++ */
 
@@ -503,6 +509,22 @@ struct ndpi_vxlanhdr {
 /* ************************************************************ */
 /* ******************* ********************* ****************** */
 /* ************************************************************ */
+
+PACK_ON struct tinc_cache_entry {
+  u_int32_t src_address;
+  u_int32_t dst_address;
+  u_int16_t dst_port;
+} PACK_OFF;
+//CFFI.NDPI_PACKED_STRUCTURES
+#endif // NDPI_CFFI_PREPROCESSING_EXCLUDE_PACKED
+
+
+typedef union
+{
+  u_int32_t ipv4;
+  struct ndpi_in6_addr ipv6;
+} ndpi_ip_addr_t;
+
 
 typedef struct message {
   u_int8_t *buffer;
@@ -570,12 +592,6 @@ struct bt_announce {              // 192 bytes
 
 /* NDPI_PROTOCOL_TINC */
 #define TINC_CACHE_MAX_SIZE 10
-
-PACK_ON struct tinc_cache_entry {
-  u_int32_t src_address;
-  u_int32_t dst_address;
-  u_int16_t dst_port;
-} PACK_OFF;
 
 /*
    In case the typedef below is modified, please update
@@ -773,6 +789,7 @@ struct ndpi_flow_udp_struct {
   /* NDPI_PROTOCOL_QUIC */
   u_int8_t *quic_reasm_buf;
   u_int32_t quic_reasm_buf_len;
+  u_int32_t quic_reasm_buf_last_pos;
 
   /* NDPI_PROTOCOL_CSGO */
   u_int8_t csgo_strid[18],csgo_state,csgo_s2;
@@ -1075,6 +1092,9 @@ typedef struct ndpi_proto {
 #define _NDPI_CONFIG_H_
 #endif
 
+/* PLEASE DO NOT REMOVE OR CHANGE THE ORDER OF WHAT IS DELIMITED BY CFFI.NDPI_MODULE_STRUCT FLAG AS IT IS USED FOR
+   PYTHON BINDINGS AUTO GENERATION */
+//CFFI.NDPI_MODULE_STRUCT
 typedef enum {
   ndpi_stun_cache,
   ndpi_hangout_cache
@@ -1223,6 +1243,7 @@ struct ndpi_detection_module_struct {
 };
 
 #endif /* NDPI_LIB_COMPILATION */
+//CFFI.NDPI_MODULE_STRUCT
 
 typedef enum {
    ndpi_cipher_safe = NDPI_CIPHER_SAFE,
@@ -1240,11 +1261,7 @@ struct tls_heuristics {
   u_int8_t is_safari_tls:1, is_firefox_tls:1, is_chrome_tls:1, notused:5;
 };
 
-/*
-  NOTE
-  When the struct below is modified don't forget to update
-  - ndpi_flow_struct (in python/ndpi.py)
- */
+
 struct ndpi_flow_struct {
   u_int16_t detected_protocol_stack[NDPI_PROTOCOL_SIZE];
 
@@ -1607,7 +1624,11 @@ typedef struct {
 
 #define ndpi_private_deserializer ndpi_private_serializer
 
+#ifdef NDPI_CFFI_PREPROCESSING
+typedef struct { char c[72]; } ndpi_serializer;
+#else
 typedef struct { char c[sizeof(ndpi_private_serializer)]; } ndpi_serializer;
+#endif
 
 #define ndpi_deserializer ndpi_serializer
 
