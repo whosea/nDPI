@@ -1295,8 +1295,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "TVUplayer", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE_61,
-			  "FREE61", NDPI_PROTOCOL_CATEGORY_VIDEO,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_PLURALSIGHT,
+			  "Pluralsight", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_THUNDER,
@@ -2721,6 +2721,9 @@ void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str) {
 static void ndpi_add_domain_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str) {
   const char *domains[] = {
     ".local",
+    ".work",
+    /* DGA's are used for caching */
+    "akamaihd.net",
     NULL /* End */
   };
   const ndpi_risk risks_to_mask[] = {
@@ -8428,7 +8431,10 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 
 	num_words++;
 
-	if(strlen(word) < 3) continue;
+	if(num_words > 2)
+	  break; /* Stop after the 2nd word of the domain name */
+	
+	if(strlen(word) < 5) continue;
 
 	if(ndpi_verbose_dga_detection)
 	  printf("-> word(%s) [%s][len: %u]\n", word, name, (unsigned int)strlen(word));
@@ -8466,6 +8472,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	    continue;
 	    break;	 	    
 	  }
+	  
 	  num_bigram_checks++;
 
 	  if(ndpi_verbose_dga_detection)
