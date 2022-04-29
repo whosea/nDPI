@@ -192,6 +192,10 @@ static void ndpi_int_change_protocol(struct ndpi_detection_module_struct *ndpi_s
 				     u_int16_t upper_detected_protocol, u_int16_t lower_detected_protocol,
 				     ndpi_confidence_t confidence);
 
+static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str);
+static void ndpi_enabled_callbacks_init(struct ndpi_detection_module_struct *ndpi_str,
+	  const NDPI_PROTOCOL_BITMASK *dbm, int count_only);
+
 /* ****************************************** */
 
 ndpi_custom_dga_predict_fctn ndpi_dga_function = NULL;
@@ -2681,6 +2685,11 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 
   ndpi_init_protocol_defaults(ndpi_str);
 
+  if(ndpi_callback_init(ndpi_str)) {
+    NDPI_LOG_ERR(ndpi_str, "[NDPI] Error allocating callbacks\n");
+    return NULL;
+  }
+
   for(i = 0; i < NUM_CUSTOM_CATEGORIES; i++)
     snprintf(ndpi_str->custom_category_labels[i], CUSTOM_CATEGORY_LABEL_LEN, "User custom category %u",
 	     (unsigned int) (i + 1));
@@ -3115,6 +3124,11 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_str) {
 #ifndef __KERNEL__
     ndpi_free_geoip(ndpi_str);
 #endif
+
+    if(ndpi_str->callback_buffer)
+	    ndpi_free(ndpi_str->callback_buffer);
+    if(ndpi_str->callback_buffer_tcp_payload)
+	    ndpi_free(ndpi_str->callback_buffer_tcp_payload);
     ndpi_free(ndpi_str);
   }
 }
@@ -3930,14 +3944,19 @@ void ndpi_set_bitmask_protocol_detection(char *label, struct ndpi_detection_modu
 
 /* ******************************************************************** */
 
-void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *ndpi_str,
-                                          const NDPI_PROTOCOL_BITMASK *dbm) {
+static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
+  
   NDPI_PROTOCOL_BITMASK detection_bitmask_local;
   NDPI_PROTOCOL_BITMASK *detection_bitmask = &detection_bitmask_local;
+  struct ndpi_call_function_struct *all_cb = NULL;
   u_int32_t a = 0;
 
-  NDPI_BITMASK_SET(detection_bitmask_local, *dbm);
-  NDPI_BITMASK_SET(ndpi_str->detection_bitmask, *dbm);
+  NDPI_ONE(detection_bitmask);
+
+  if(ndpi_str->callback_buffer) return 0;
+
+  ndpi_str->callback_buffer = ndpi_calloc(NDPI_MAX_SUPPORTED_PROTOCOLS+1,sizeof(struct ndpi_call_function_struct));
+  if(!ndpi_str->callback_buffer) return 1;
 
   /* set this here to zero to be interrupt safe */
   ndpi_str->callback_buffer_size = 0;
@@ -4440,68 +4459,132 @@ void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *n
   /* ----------------------------------------------------------------- */
 
   ndpi_str->callback_buffer_size = a;
+  NDPI_BITMASK_SET(ndpi_str->detection_bitmask, detection_bitmask_local);
+
+  /* Resize callback_buffer */
+  all_cb = ndpi_calloc(a+1,sizeof(struct ndpi_call_function_struct));
+  if(all_cb) {
+	  memcpy((char *)all_cb,(char *)ndpi_str->callback_buffer, (a+1) * sizeof(struct ndpi_call_function_struct));
+	  ndpi_free(ndpi_str->callback_buffer);
+	  ndpi_str->callback_buffer = all_cb;
+  }
 
   NDPI_LOG_DBG2(ndpi_str, "callback_buffer_size is %u\n", ndpi_str->callback_buffer_size);
+  /* Calculating the size of an array for callback functions */
+  ndpi_enabled_callbacks_init(ndpi_str,detection_bitmask,1);
+  all_cb = ndpi_calloc(ndpi_str->callback_buffer_size_tcp_payload +
+		         ndpi_str->callback_buffer_size_tcp_no_payload +
+		         ndpi_str->callback_buffer_size_udp +
+		         ndpi_str->callback_buffer_size_non_tcp_udp,
+		       sizeof(struct ndpi_call_function_struct));
+  if(!all_cb) return 1;
+  ndpi_str->callback_buffer_tcp_payload = all_cb;
+  all_cb += ndpi_str->callback_buffer_size_tcp_payload;
+  ndpi_str->callback_buffer_tcp_no_payload = all_cb;
+  all_cb += ndpi_str->callback_buffer_size_tcp_no_payload;
+  ndpi_str->callback_buffer_udp = all_cb;
+  all_cb += ndpi_str->callback_buffer_size_udp;
+  ndpi_str->callback_buffer_non_tcp_udp = all_cb;
+
+  ndpi_enabled_callbacks_init(ndpi_str,detection_bitmask,0);
+
+  /*   When the module ends, it is necessary to free the memory ndpi_str->callback_buffer and
+       ndpi_str->callback_buffer_tcp_payload  */
+
+  return 0;
+}
+
+static inline int ndpi_proto_cb_tcp_payload(const struct ndpi_detection_module_struct *ndpi_str, uint32_t idx) {
+    return (ndpi_str->callback_buffer[idx].ndpi_selection_bitmask &
+	     (NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP |
+	      NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP |
+              NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC)) != 0;
+}
+
+static inline int ndpi_proto_cb_tcp_nopayload(const struct ndpi_detection_module_struct *ndpi_str, uint32_t idx) {
+    return (ndpi_str->callback_buffer[idx].ndpi_selection_bitmask &
+	     (NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP |
+	      NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP |
+              NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC)) != 0 
+	   && (ndpi_str->callback_buffer[idx].ndpi_selection_bitmask & 
+	       NDPI_SELECTION_BITMASK_PROTOCOL_HAS_PAYLOAD) == 0;
+}
+
+static inline int ndpi_proto_cb_udp(const struct ndpi_detection_module_struct *ndpi_str, uint32_t idx) {
+    return (ndpi_str->callback_buffer[idx].ndpi_selection_bitmask &
+	     (NDPI_SELECTION_BITMASK_PROTOCOL_INT_UDP |
+	      NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP |
+	      NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC)) != 0;
+}
+
+static inline int ndpi_proto_cb_other(const struct ndpi_detection_module_struct *ndpi_str, uint32_t idx) {
+    return (ndpi_str->callback_buffer[idx].ndpi_selection_bitmask &
+	     (NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP |
+	      NDPI_SELECTION_BITMASK_PROTOCOL_INT_UDP |
+	      NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP)) == 0 
+	   ||
+             (ndpi_str->callback_buffer[idx].ndpi_selection_bitmask & 
+	       NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC) != 0;
+}
+
+static void ndpi_enabled_callbacks_init(struct ndpi_detection_module_struct *ndpi_str,
+	  const NDPI_PROTOCOL_BITMASK *dbm, int count_only) {
+  uint32_t a;
 
   /* now build the specific buffer for tcp, udp and non_tcp_udp */
   ndpi_str->callback_buffer_size_tcp_payload = 0;
   ndpi_str->callback_buffer_size_tcp_no_payload = 0;
   for(a = 0; a < ndpi_str->callback_buffer_size; a++) {
-    if((ndpi_str->callback_buffer[a].ndpi_selection_bitmask &
-	(NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP | NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP |
-	 NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC)) != 0) {
+    if(!NDPI_ISSET(dbm,ndpi_str->callback_buffer[a].ndpi_protocol_id)) continue;
+    if(!ndpi_proto_cb_tcp_payload(ndpi_str,a)) continue;
+    if(!count_only) {
       if(_ndpi_debug_callbacks)
-	NDPI_LOG_DBG2(ndpi_str, "callback_buffer_tcp_payload, adding buffer %u as entry %u\n", a,
-		      ndpi_str->callback_buffer_size_tcp_payload);
-
-      memcpy(&ndpi_str->callback_buffer_tcp_payload[ndpi_str->callback_buffer_size_tcp_payload],
-	     &ndpi_str->callback_buffer[a], sizeof(struct ndpi_call_function_struct));
-      ndpi_str->callback_buffer_size_tcp_payload++;
-
-      if((ndpi_str->callback_buffer[a].ndpi_selection_bitmask & NDPI_SELECTION_BITMASK_PROTOCOL_HAS_PAYLOAD) ==
-	 0) {
-	if(_ndpi_debug_callbacks)
-	  NDPI_LOG_DBG2(
-                        ndpi_str,
-                        "\tcallback_buffer_tcp_no_payload, additional adding buffer %u to no_payload process\n", a);
-
-	memcpy(&ndpi_str->callback_buffer_tcp_no_payload[ndpi_str->callback_buffer_size_tcp_no_payload],
-	       &ndpi_str->callback_buffer[a], sizeof(struct ndpi_call_function_struct));
-	ndpi_str->callback_buffer_size_tcp_no_payload++;
-      }
+	  NDPI_LOG_DBG2(ndpi_str, "callback_buffer_tcp_payload, adding buffer %u as entry %u\n", a,
+		        ndpi_str->callback_buffer_size_tcp_payload);
+          memcpy(&ndpi_str->callback_buffer_tcp_payload[ndpi_str->callback_buffer_size_tcp_payload],
+	         &ndpi_str->callback_buffer[a], sizeof(struct ndpi_call_function_struct));
     }
+    ndpi_str->callback_buffer_size_tcp_payload++;
+  }
+  for(a = 0; a < ndpi_str->callback_buffer_size; a++) {
+    if(!NDPI_ISSET(dbm,ndpi_str->callback_buffer[a].ndpi_protocol_id)) continue;
+    if(!ndpi_proto_cb_tcp_nopayload(ndpi_str,a)) continue;
+    if(!count_only) {
+      if(_ndpi_debug_callbacks)
+	  NDPI_LOG_DBG2( ndpi_str,
+                        "\tcallback_buffer_tcp_no_payload, additional adding buffer %u to no_payload process\n", a);
+	  memcpy(&ndpi_str->callback_buffer_tcp_no_payload[ndpi_str->callback_buffer_size_tcp_no_payload],
+	         &ndpi_str->callback_buffer[a], sizeof(struct ndpi_call_function_struct));
+    }
+    ndpi_str->callback_buffer_size_tcp_no_payload++;
   }
 
   ndpi_str->callback_buffer_size_udp = 0;
   for(a = 0; a < ndpi_str->callback_buffer_size; a++) {
-    if((ndpi_str->callback_buffer[a].ndpi_selection_bitmask &
-	(NDPI_SELECTION_BITMASK_PROTOCOL_INT_UDP | NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP |
-	 NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC)) != 0) {
+    if(!NDPI_ISSET(dbm,ndpi_str->callback_buffer[a].ndpi_protocol_id)) continue;
+    if(!ndpi_proto_cb_udp(ndpi_str,a)) continue;
+    if(!count_only) {
       if(_ndpi_debug_callbacks)
-	NDPI_LOG_DBG2(ndpi_str, "callback_buffer_size_udp: adding buffer : %u as entry %u\n", a,
-		      ndpi_str->callback_buffer_size_udp);
+	 NDPI_LOG_DBG2(ndpi_str, "callback_buffer_size_udp: adding buffer : %u\n", a);
 
       memcpy(&ndpi_str->callback_buffer_udp[ndpi_str->callback_buffer_size_udp], &ndpi_str->callback_buffer[a],
 	     sizeof(struct ndpi_call_function_struct));
-      ndpi_str->callback_buffer_size_udp++;
     }
+    ndpi_str->callback_buffer_size_udp++;
   }
 
   ndpi_str->callback_buffer_size_non_tcp_udp = 0;
   for(a = 0; a < ndpi_str->callback_buffer_size; a++) {
-    if((ndpi_str->callback_buffer[a].ndpi_selection_bitmask &
-	(NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP | NDPI_SELECTION_BITMASK_PROTOCOL_INT_UDP |
-	 NDPI_SELECTION_BITMASK_PROTOCOL_INT_TCP_OR_UDP)) == 0 ||
-       (ndpi_str->callback_buffer[a].ndpi_selection_bitmask & NDPI_SELECTION_BITMASK_PROTOCOL_COMPLETE_TRAFFIC) !=
-       0) {
+    if(!NDPI_ISSET(dbm,ndpi_str->callback_buffer[a].ndpi_protocol_id)) continue;
+    if(!ndpi_proto_cb_other(ndpi_str,a)) continue;
+    if(!count_only) {
       if(_ndpi_debug_callbacks)
-	NDPI_LOG_DBG2(ndpi_str, "callback_buffer_non_tcp_udp: adding buffer : %u as entry %u\n", a,
-		      ndpi_str->callback_buffer_size_non_tcp_udp);
+	NDPI_LOG_DBG2(ndpi_str, "callback_buffer_non_tcp_udp: adding buffer : %u\n", a);
 
       memcpy(&ndpi_str->callback_buffer_non_tcp_udp[ndpi_str->callback_buffer_size_non_tcp_udp],
 	     &ndpi_str->callback_buffer[a], sizeof(struct ndpi_call_function_struct));
-      ndpi_str->callback_buffer_size_non_tcp_udp++;
     }
+    ndpi_str->callback_buffer_size_non_tcp_udp++;
   }
 }
 
@@ -4752,6 +4835,12 @@ static inline uint32_t get_timestamp(uint64_t ts_l,uint32_t divisor) {
 #else
 	return (uint32_t)(ts_l/divisor);
 #endif
+}
+
+void ndpi_set_protocol_detection_bitmask2(struct ndpi_detection_module_struct *ndpi_str,
+                                          const NDPI_PROTOCOL_BITMASK *dbm) {
+  ndpi_enabled_callbacks_init(ndpi_str,dbm,0);
+  NDPI_BITMASK_SET(ndpi_str->detection_bitmask, *dbm);
 }
 
 /* ************************************************ */
@@ -8330,8 +8419,12 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
       tmp[j] = '\0';
       len = j;
 
+      u_int max_num_consecutive_digits_first_word = 0, num_word = 0;
+      
       for(word = strtok_r(tmp, ".", &tok_tmp); ; word = strtok_r(NULL, ".", &tok_tmp)) {
-	if(!word) break;
+	u_int num_consecutive_digits = 0;
+	
+	if(!word) break; else num_word++;
 
 	num_words++;
 
@@ -8343,7 +8436,16 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	trigram_char_skip = 0;
 
 	for(i = 0; word[i+1] != '\0'; i++) {
-	  switch(word[i]) {
+	  if(isdigit(word[i]))
+	    num_consecutive_digits++;
+	  else {
+	    if((num_word == 1) && (num_consecutive_digits > max_num_consecutive_digits_first_word))
+	      max_num_consecutive_digits_first_word = num_consecutive_digits;
+	    
+	    num_consecutive_digits = 0;
+	  }
+	  
+	  switch(word[i]) {	    
 	  case '-':
 	    num_dash++;
 	    /*
@@ -8362,7 +8464,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 
 	  case '.':
 	    continue;
-	    break;
+	    break;	 	    
 	  }
 	  num_bigram_checks++;
 
@@ -8409,8 +8511,14 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	    }
 	  }
 	} /* for */
-      } /* for */
 
+	if((num_word == 1) && (num_consecutive_digits > max_num_consecutive_digits_first_word))
+	  max_num_consecutive_digits_first_word = num_consecutive_digits;
+      } /* for */
+      
+      if(ndpi_verbose_dga_detection)
+	printf("[NDPI] max_num_consecutive_digits_first_word=%u\n", max_num_consecutive_digits_first_word);	
+      
       if(ndpi_verbose_dga_detection)
 	printf("[%s][num_found: %u][num_impossible: %u][num_digits: %u][num_bigram_checks: %u][num_vowels: %u/%u][num_trigram_vowels: %u][num_trigram_found: %u/%u][vowels: %u][rc: %u]\n",
 	       name, num_found, num_impossible, num_digits, num_bigram_checks, num_vowels, len, num_trigram_vowels,
@@ -8439,6 +8547,10 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 	rc = 1;
 
       if(num_dash > 2)
+	rc = 0;
+
+      /* Skip names whose first word item has at least 3 consecutive digits */
+      if(max_num_consecutive_digits_first_word > 2)
 	rc = 0;
 
       if(ndpi_verbose_dga_detection) {
