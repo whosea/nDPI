@@ -20,6 +20,7 @@
 /* ****************************************************** */
 
 
+#if 0
 static ndpi_network ndpi_protocol_twitter_protocol_list[] = {
  { 0x0819C200 /* 8.25.194.0/23 */, 23, NDPI_PROTOCOL_TWITTER },
  { 0x0819C400 /* 8.25.196.0/23 */, 23, NDPI_PROTOCOL_TWITTER },
@@ -58,3 +59,4 @@ static ndpi_network ndpi_protocol_twitter_protocol_list[] = {
  /* End */
  { 0x0, 0, 0 }
 };
+#endif

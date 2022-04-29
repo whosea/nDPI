@@ -20,6 +20,7 @@
 /* ****************************************************** */
 
 
+#if 0
 static ndpi_network ndpi_protocol_teamviewer_protocol_list[] = {
  { 0x2D936C00 /* 45.147.108.0/22 */, 22, NDPI_PROTOCOL_TEAMVIEWER },
  { 0xB9BC2000 /* 185.188.32.0/22 */, 22, NDPI_PROTOCOL_TEAMVIEWER },
@@ -31,3 +32,4 @@ static ndpi_network ndpi_protocol_teamviewer_protocol_list[] = {
  /* End */
  { 0x0, 0, 0 }
 };
+#endif

@@ -20,6 +20,7 @@
 /* ****************************************************** */
 
 
+#if 0
 static ndpi_network ndpi_protocol_facebook_protocol_list[] = {
  { 0x1F0D1800 /* 31.13.24.0/21 */, 21, NDPI_PROTOCOL_FACEBOOK },
  { 0x1F0D4000 /* 31.13.64.0/18 */, 18, NDPI_PROTOCOL_FACEBOOK },
@@ -72,3 +73,4 @@ static ndpi_network ndpi_protocol_facebook_protocol_list[] = {
  /* End */
  { 0x0, 0, 0 }
 };
+#endif

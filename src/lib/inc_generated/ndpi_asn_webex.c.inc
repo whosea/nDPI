@@ -20,6 +20,7 @@
 /* ****************************************************** */
 
 
+#if 0
 static ndpi_network ndpi_protocol_webex_protocol_list[] = {
  { 0x17590000 /* 23.89.0.0/17 */, 17, NDPI_PROTOCOL_WEBEX },
  { 0x17598000 /* 23.89.128.0/19 */, 19, NDPI_PROTOCOL_WEBEX },
@@ -49,3 +50,4 @@ static ndpi_network ndpi_protocol_webex_protocol_list[] = {
  /* End */
  { 0x0, 0, 0 }
 };
+#endif

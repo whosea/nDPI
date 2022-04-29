@@ -32,7 +32,8 @@
 static void ssdp_parse_lines(struct ndpi_detection_module_struct
 					 *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  struct ndpi_packet_struct *packet = &ndpi_struct->packet;
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
+
 
   ndpi_parse_packet_line_info(ndpi_struct, flow);
 
