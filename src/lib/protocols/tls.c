@@ -323,14 +323,13 @@ static void checkTLSSubprotocol(struct ndpi_detection_module_struct *ndpi_struct
 
       if(ndpi_lru_find_cache(ndpi_struct->tls_cert_cache, key,
 			     &cached_proto, 0 /* Don't remove it as it can be used for other connections */)) {
-	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, cached_proto, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NULL};
 
 	flow->detected_protocol_stack[0] = cached_proto,
 	flow->detected_protocol_stack[1] = NDPI_PROTOCOL_TLS;
 	ndpi_set_detected_protocol(ndpi_struct, flow, cached_proto, NDPI_PROTOCOL_TLS, NDPI_CONFIDENCE_DPI_CACHE);
 #ifndef __KERNEL__
 	{
-	  ndpi_protocol ret = NDPI_PROTOCOL_NULL;
+	  ndpi_protocol ret = { NDPI_PROTOCOL_TLS, cached_proto, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NULL};
 	  flow->category = ndpi_get_proto_category(ndpi_struct, ret);
 	  ndpi_check_subprotocol_risk(ndpi_struct, flow, cached_proto);
 	}
@@ -669,12 +668,11 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
       if(rc == 0) {
 	/* Match found */
 	u_int16_t proto_id = (u_int16_t)val;
-	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, proto_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NULL};
 
 	ndpi_set_detected_protocol(ndpi_struct, flow, proto_id, NDPI_PROTOCOL_TLS, NDPI_CONFIDENCE_DPI);
 #ifndef __KERNEL__
 	{
-	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, proto_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED};
+	ndpi_protocol ret = { NDPI_PROTOCOL_TLS, proto_id, NDPI_PROTOCOL_CATEGORY_UNSPECIFIED, NULL};
 	flow->category = ndpi_get_proto_category(ndpi_struct, ret);
 	}
 #endif
@@ -1024,6 +1022,12 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 	/* Let's do a quick check to make sure this really looks like TLS */
 	if(block_len < 16384 /* Max TLS block size */)
 	  ndpi_looks_like_tls(ndpi_struct, flow);
+
+    if (packet->payload[1] == 0x03 && packet->payload[2] <= 4 &&
+        block_len == (u_int32_t)packet->payload_packet_len - 5)
+    {
+      ndpi_int_tls_add_connection(ndpi_struct, flow, NDPI_PROTOCOL_TLS);
+    }
 
 	if(flow->l4.tcp.tls.certificate_processed) {
 	  if(flow->l4.tcp.tls.num_tls_blocks < ndpi_struct->num_tls_blocks_to_follow)
