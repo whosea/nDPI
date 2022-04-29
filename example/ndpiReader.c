@@ -3413,20 +3413,20 @@ static void printResults(u_int64_t processing_time_usec, u_int64_t setup_time_us
 	  b = 0;
 	}
 #ifdef WIN32
-        /* localtime() on Windows is thread-safe */
-        time_t tv_sec = pcap_start.tv_sec;
+	/* localtime() on Windows is thread-safe */
+	time_t tv_sec = pcap_start.tv_sec;
 	struct tm * tm_ptr = localtime(&tv_sec);
-        result = *tm_ptr;
+	result = *tm_ptr;
 #else
 	localtime_r(&pcap_start.tv_sec, &result);
 #endif
 	strftime(when, sizeof(when), "%d/%b/%Y %H:%M:%S", &result);
 	printf("\tAnalysis begin:        %s\n", when);
 #ifdef WIN32
-        /* localtime() on Windows is thread-safe */
-        tv_sec = pcap_end.tv_sec;
+	/* localtime() on Windows is thread-safe */
+	tv_sec = pcap_end.tv_sec;
 	tm_ptr = localtime(&tv_sec);
-        result = *tm_ptr;
+	result = *tm_ptr;
 #else
 	localtime_r(&pcap_end.tv_sec, &result);
 #endif
@@ -4011,14 +4011,13 @@ void * processing_thread(void *_thread_id) {
     }
   } else
 #endif
-    if((!quiet_mode)) {
+    if((!json_flag) && (!quiet_mode)) {
 #ifdef WIN64
       printf("Running thread %lld...\n", thread_id);
 #else
       printf("Running thread %ld...\n", thread_id);
 #endif
     }
-
 
 #ifdef USE_DPDK
   while(dpdk_run_capture) {
@@ -4083,6 +4082,11 @@ void test_lib() {
   long long int thread_id;
 #else
   long thread_id;
+#endif
+
+#ifdef HAVE_LIBJSON_C
+  json_init();
+  if(stats_flag)  json_open_stats_file();
 #endif
 
 #ifdef DEBUG_TRACE
@@ -5458,6 +5462,24 @@ void compressedBitmapUnitTest() {
 
 /* *********************************************** */
 
+void zscoreUnitTest() {
+  u_int32_t values[] = { 1, 3, 3, 4, 5, 2, 6, 7, 30, 16 };
+  u_int32_t i;
+  u_int32_t num_outliers, num = sizeof(values) / sizeof(u_int32_t);
+  bool outliers[num], do_trace = false;
+
+  num_outliers = ndpi_find_outliers(values, outliers, num);
+
+  if(do_trace) {
+    printf("outliers: %u\n", num_outliers);
+    
+    for(i=0; i<num; i++)
+      printf("%u %s\n", values[i], outliers[i] ? "OUTLIER" : "OK");
+  }
+}
+
+/* *********************************************** */
+
 /**
    @brief MAIN FUNCTION
 **/
@@ -5501,6 +5523,7 @@ int original_main(int argc, char **argv) {
       exit(0);
 #endif
 
+      zscoreUnitTest();
       sesUnitTest();
       desUnitTest();
 
