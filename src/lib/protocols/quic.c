@@ -1026,6 +1026,7 @@ static void update_reasm_buf_bitmap(u_int8_t *buffer_bitmap,
                                 const u_int32_t recv_pos,
                                 const u_int32_t recv_len)
 {
+  u_int32_t i;
   if (!recv_len || !buffer_bitmap_size || recv_pos + recv_len > buffer_bitmap_size * 8)
     return;
   const u_int32_t start_byte = recv_pos / 8;
@@ -1035,7 +1036,7 @@ static void update_reasm_buf_bitmap(u_int8_t *buffer_bitmap,
   if (start_byte == end_byte)
     buffer_bitmap[start_byte] |= (((1U << recv_len) - 1U) << start_bit); // fill from bit 'start_bit' until bit 'end_bit', both inclusive
   else{
-    for (u_int32_t i = start_byte + 1; i <= end_byte - 1; i++)
+    for (i = start_byte + 1; i <= end_byte - 1; i++)
       buffer_bitmap[i] = 0xff; // completely received byte
     buffer_bitmap[start_byte] |= ~((1U << start_bit) - 1U); // fill from bit 'start_bit' until bit 7, both inclusive
     buffer_bitmap[end_byte] |= (1U << (end_bit + 1U)) - 1U; // fill from bit 0 until bit 'end_bit', both inclusive
@@ -1047,8 +1048,9 @@ static int is_reasm_buf_complete(const u_int8_t *buffer_bitmap,
 {
   const u_int32_t complete_bytes = buffer_len / 8;
   const u_int32_t remaining_bits = buffer_len % 8;
+  u_int32_t i;
 
-  for(u_int32_t i = 0; i < complete_bytes; i++)
+  for(i = 0; i < complete_bytes; i++)
     if (buffer_bitmap[i] != 0xff)
       return 0;
 
