@@ -183,7 +183,7 @@ typedef enum {
   NDPI_PROTOCOL_GTP                   = 152,
   NDPI_PROTOCOL_WSD                   = 153,
   NDPI_PROTOCOL_LLMNR                 = 154,
-  NDPI_PROTOCOL_FREE_155              = 155, /* FREE */
+  NDPI_PROTOCOL_TOCA_BOCA             = 155,
   NDPI_PROTOCOL_SPOTIFY               = 156,
   NDPI_PROTOCOL_MESSENGER             = 157,
   NDPI_PROTOCOL_H323                  = 158,
@@ -199,7 +199,7 @@ typedef enum {
   NDPI_PROTOCOL_CORBA                 = 168,
   NDPI_PROTOCOL_UBUNTUONE             = 169,
   NDPI_PROTOCOL_WHOIS_DAS             = 170,
-  NDPI_PROTOCOL_FREE_171              = 171, /* FREE */
+  NDPI_PROTOCOL_SD_RTN                = 171, /* Agora SD-RTN: https://www.agora.io/en */
   NDPI_PROTOCOL_SOCKS                 = 172,
   NDPI_PROTOCOL_NINTENDO              = 173,
   NDPI_PROTOCOL_RTMP                  = 174,

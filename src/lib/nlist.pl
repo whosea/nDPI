@@ -84,6 +84,15 @@ while(<F>) {
 				} while($_ !~ /^\s*#endif/);
 			next;
 		}
+		if(/#ifdef CUSTOM_NDPI_PROTOCOLS/) {
+				$_ = <F>;
+				die if !/#include/;
+				print R "$_";
+				$_ = <F>;
+				die if !/#endif/;
+				print R "$_";
+				next;
+		}
 		die "?: ".$_;
 	}
 	if($st == 2) { # comment

@@ -18,10 +18,6 @@
  *
  */
 
-#ifdef HAVE_CONFIG_H
-#include "ndpi_config.h"
-#endif
-
 #ifndef __KERNEL__
 #include <stdlib.h>
 #include <errno.h>

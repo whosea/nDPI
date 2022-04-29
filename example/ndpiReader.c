@@ -486,7 +486,7 @@ static void help(u_int long_help) {
          "  -w <path>                 | Write test output on the specified file. This is useful for\n"
          "                            | testing purposes in order to compare results across runs\n"
          "  -h                        | This help\n"
-	 "  -H                        | This help plus some information about supported protocols/risks\n"
+         "  -H                        | This help plus some information about supported protocols/risks\n"
          "  -v <1|2|3>                | Verbose 'unknown protocol' packet print.\n"
          "                            | 1 = verbose\n"
          "                            | 2 = very verbose\n"

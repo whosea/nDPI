@@ -141,6 +141,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/rtsp.c \
 		     protocols/rx.c \
 		     protocols/s7comm.c \
+		     protocols/sd_rtn.c \
 		     protocols/sflow.c \
 		     protocols/shoutcast.c \
 		     protocols/sip.c \
@@ -170,6 +171,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/tls.c \
 		     protocols/teredo.c \
 		     protocols/tvuplayer.c \
+		     protocols/tocaboca.c \
 		     protocols/ubntac2.c \
 		     protocols/usenet.c \
 		     protocols/viber.c \
