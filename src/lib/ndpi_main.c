@@ -2632,6 +2632,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   if((sizeof(categories) / sizeof(char *)) != NDPI_PROTOCOL_NUM_CATEGORIES) {
     NDPI_LOG_ERR(ndpi_str, "[NDPI] invalid categories length: expected %u, got %u\n", NDPI_PROTOCOL_NUM_CATEGORIES,
 		 (unsigned int) (sizeof(categories) / sizeof(char *)));
+    ndpi_free(ndpi_str);
     return(NULL);
   }
 
@@ -2681,6 +2682,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 
   if((ndpi_str->custom_categories.ipAddresses == NULL) || (ndpi_str->custom_categories.ipAddresses_shadow == NULL)) {
     NDPI_LOG_ERR(ndpi_str, "[NDPI] Error allocating Patricia trees\n");
+    ndpi_free(ndpi_str);
     return(NULL);
   }
 
@@ -2688,6 +2690,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
 
   if(ndpi_callback_init(ndpi_str)) {
     NDPI_LOG_ERR(ndpi_str, "[NDPI] Error allocating callbacks\n");
+    ndpi_free(ndpi_str);
     return NULL;
   }
 
@@ -4829,8 +4832,11 @@ void ndpi_free_flow_data(struct ndpi_flow_struct* flow) {
     }
 
     if(flow->l4_proto == IPPROTO_UDP) {
-      if(flow->l4.udp.quic_reasm_buf)
-	ndpi_free(flow->l4.udp.quic_reasm_buf);
+      if(flow->l4.udp.quic_reasm_buf){
+        ndpi_free(flow->l4.udp.quic_reasm_buf);
+        if(flow->l4.udp.quic_reasm_buf_bitmap)
+          ndpi_free(flow->l4.udp.quic_reasm_buf_bitmap);
+      }
     }
   }
 }
