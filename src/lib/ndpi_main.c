@@ -1065,6 +1065,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			      NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_DIRECT_DOWNLOAD_LINK, NDPI_PROTOCOL_GNUTELLA,
 			      NDPI_PROTOCOL_MAPLESTORY, NDPI_PROTOCOL_ZATTOO, NDPI_PROTOCOL_WORLDOFWARCRAFT,
 			      NDPI_PROTOCOL_THUNDER, NDPI_PROTOCOL_IRC,
+			      NDPI_PROTOCOL_IPP,
 			      NDPI_PROTOCOL_MATCHED_BY_CONTENT,
 			      NDPI_PROTOCOL_NO_MORE_SUBPROTOCOLS); /* NDPI_PROTOCOL_HTTP can have (content-matched) subprotocols */
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_MDNS,
@@ -1290,8 +1291,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "TVUplayer", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_QQLIVE,
-			  "QQLive", NDPI_PROTOCOL_CATEGORY_VIDEO,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_FREE_61,
+			  "FREE61", NDPI_PROTOCOL_CATEGORY_VIDEO,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_THUNDER,
@@ -1662,10 +1663,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "LLMNR", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 5355, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 5355, 0, 0, 0, 0) /* UDP */); /* Missing dissector: port based only */
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_POTENTIALLY_DANGEROUS, NDPI_PROTOCOL_REMOTE_SCAN,
-			  "RemoteScan", NDPI_PROTOCOL_CATEGORY_NETWORK,
-			  ndpi_build_default_ports(ports_a, 6077, 0, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 6078, 0, 0, 0, 0) /* UDP */); /* Missing dissector: port based only */
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_POTENTIALLY_DANGEROUS, NDPI_PROTOCOL_FREE_155,
+			  "FREE155", NDPI_PROTOCOL_CATEGORY_NETWORK,
+			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_H323,
 			  "H323", NDPI_PROTOCOL_CATEGORY_VOIP,
 			  ndpi_build_default_ports(ports_a, 1719, 1720, 0, 0, 0) /* TCP */,
@@ -1718,10 +1719,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "Whois-DAS", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 43, 4343, 0, 0, 0), /* TCP */
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0));    /* UDP */
-  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_COLLECTD,
-			  "Collectd", NDPI_PROTOCOL_CATEGORY_SYSTEM_OS,
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_FREE_171,
+			  "FREE171", NDPI_PROTOCOL_CATEGORY_SYSTEM_OS,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0),      /* TCP */
-			  ndpi_build_default_ports(ports_b, 25826, 0, 0, 0, 0)); /* UDP */
+			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0)); /* UDP */
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SOCKS,
 			  "SOCKS", NDPI_PROTOCOL_CATEGORY_WEB,
 			  ndpi_build_default_ports(ports_a, 1080, 0, 0, 0, 0),  /* TCP */
@@ -4778,7 +4779,7 @@ static int ndpi_init_packet(struct ndpi_detection_module_struct *ndpi_str,
   packet->current_time_ms = current_time_ms;
   packet->current_time = get_timestamp(current_time_ms,ndpi_str->ticks_per_second);
 
-  packet->iph = (struct ndpi_iphdr *)packet_data;
+  packet->iph = (const struct ndpi_iphdr *)packet_data;
 
   /* reset payload_packet_len, will be set if ipv4 tcp or udp */
   packet->payload = NULL;

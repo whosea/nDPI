@@ -51,7 +51,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/citrix.c \
 		     protocols/cpha.c \
 		     protocols/coap.c \
-		     protocols/collectd.c \
 		     protocols/corba.c \
 		     protocols/crossfire.c \
 		     protocols/csgo.c \

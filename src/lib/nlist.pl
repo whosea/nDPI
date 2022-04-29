@@ -10,6 +10,7 @@ foreach my $f (glob('*match.c.inc')) {
 	next if $f eq 'ndpi_dga_match.c.inc';
 	next if $f eq 'ndpi_content_match.c.inc';
 	next if $f !~ /^ndpi_([a-z0-9_]+)match.c.inc$/;
+	next if $f eq 'ndpi_icloud_private_relay_match.c.inc';
 	match_inc($f,"ndpi_protocol_.*_protocol_list");
 }
 
