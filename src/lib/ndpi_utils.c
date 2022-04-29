@@ -741,7 +741,7 @@ const char* ndpi_cipher2str(u_int32_t cipher) {
     {
       static char buf[8];
 
-      snprintf(buf, sizeof(buf), "0X%04X", cipher);
+      ndpi_snprintf(buf, sizeof(buf), "0X%04X", cipher);
       return(buf);
     }
   }
@@ -786,7 +786,7 @@ static int ndpi_find_non_eng_bigrams(struct ndpi_detection_module_struct *ndpi_s
 				     char *str) {
   char s[3];
 
-  if((isdigit(str[0]) && isdigit(str[1]))
+  if((isdigit((int)str[0]) && isdigit((int)str[1]))
      || ndpi_is_other_char(str[0])
      || ndpi_is_other_char(str[1])
      )
@@ -943,7 +943,7 @@ char* ndpi_ssl_version2str(char *buf, int buf_len,
   if(unknown_tls_version)
     *unknown_tls_version = 1;
 
-  snprintf(buf, buf_len, "TLS (%04X)", version);
+  ndpi_snprintf(buf, buf_len, "TLS (%04X)", version);
 
   return buf;
 }
@@ -1426,7 +1426,7 @@ int ndpi_dpi2json(struct ndpi_detection_module_struct *ndpi_struct,
 
 	if(flow->protos.tls_quic.sha1_certificate_fingerprint[0] != '\0') {
 	  for(i=0, off=0; i<20; i++) {
-	    int rc = snprintf(&buf[off], sizeof(buf)-off,"%s%02X", (i > 0) ? ":" : "",
+	    int rc = ndpi_snprintf(&buf[off], sizeof(buf)-off,"%s%02X", (i > 0) ? ":" : "",
 			      flow->protos.tls_quic.sha1_certificate_fingerprint[i] & 0xFF);
 
 	    if(rc <= 0) break; else off += rc;
@@ -1920,7 +1920,7 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     break;
 
   default:
-    snprintf(buf, sizeof(buf), "%d", (int)risk);
+    ndpi_snprintf(buf, sizeof(buf), "%d", (int)risk);
     return(buf);
   }
 }

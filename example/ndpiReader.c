@@ -26,11 +26,18 @@
 #endif
 #include <sched.h>
 #endif
+
+#include "ndpi_api.h"
+#include "../src/lib/third_party/include/uthash.h"
+#include "../src/lib/third_party/include/ahocorasick.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
 #ifdef WIN32
 #include <winsock2.h> /* winsock.h is included automatically */
+#include <windows.h>
+#include <ws2tcpip.h>
 #include <process.h>
 #include <io.h>
 #define getopt getopt____
@@ -45,12 +52,10 @@
 #include <search.h>
 #include <pcap.h>
 #include <signal.h>
+#include <time.h>
 #include <pthread.h>
 #include <assert.h>
 #include <math.h>
-#include "ndpi_api.h"
-#include "../src/lib/third_party/include/uthash.h"
-#include "../src/lib/third_party/include/ahocorasick.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -4011,7 +4016,7 @@ void * processing_thread(void *_thread_id) {
     }
   } else
 #endif
-    if((!json_flag) && (!quiet_mode)) {
+    if((!quiet_mode)) {
 #ifdef WIN64
       printf("Running thread %lld...\n", thread_id);
 #else
@@ -4082,11 +4087,6 @@ void test_lib() {
   long long int thread_id;
 #else
   long thread_id;
-#endif
-
-#ifdef HAVE_LIBJSON_C
-  json_init();
-  if(stats_flag)  json_open_stats_file();
 #endif
 
 #ifdef DEBUG_TRACE
@@ -4457,9 +4457,9 @@ void bpf_filter_pkt_peak_filter(json_object **jObj_bpfFilter,
 
     while(i < sh_size && src_host_array[i] != NULL) {
       if(i+1 == sh_size || src_host_array[i+1] == NULL)
-        l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s", src_host_array[i]);
+	l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s", src_host_array[i]);
       else
-        l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s or ", src_host_array[i]);
+	l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s or ", src_host_array[i]);
 
       i++;
     }
@@ -4478,14 +4478,14 @@ void bpf_filter_pkt_peak_filter(json_object **jObj_bpfFilter,
 
     while(i < dh_size && dst_host_array[i] != NULL) {
       if(i+1 == dh_size || dst_host_array[i+1] == NULL)
-        l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s", dst_host_array[i]);
+	l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s", dst_host_array[i]);
       else
-        l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s or ", dst_host_array[i]);
+	l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s or ", dst_host_array[i]);
 
       i++;
     }
 
-    l += ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s", ")");
+    l +=  ndpi_snprintf(&filter[l], sizeof(filter)-l, "%s", ")");
     produced = 1;
   }
 
