@@ -69,7 +69,7 @@
 #include "ndpi_network_list.c.inc"
 
 #include "ndpi_content_match.c.inc"
-#include "inc_generated/ndpi_dga_match.c.inc"
+#include "ndpi_dga_match.c.inc"
 #if 0
 #include "inc_generated/ndpi_azure_match.c.inc"
 #include "inc_generated/ndpi_tor_match.c.inc"
@@ -3585,7 +3585,8 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
  *  - host and category are separated by a single TAB
  *  - empty lines or lines starting with # are ignored
  */
-int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, const char *path) {
+int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str,
+			      const char *path, void *user_data) {
   char buffer[512], *line, *name, *category, *saveptr;
   FILE *fd;
   int len, num = 0;
@@ -3615,7 +3616,9 @@ int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, con
       category = strtok_r(NULL, "\t", &saveptr);
 
       if(category) {
-	int rc = ndpi_load_category(ndpi_str, name, (ndpi_protocol_category_t) atoi(category));
+	int rc = ndpi_load_category(ndpi_str, name,
+				    (ndpi_protocol_category_t) atoi(category),
+				    user_data);
 
 	if(rc >= 0)
 	  num++;
@@ -5696,8 +5699,10 @@ void ndpi_process_extra_packet(struct ndpi_detection_module_struct *ndpi_str, st
 #endif
 
 #ifndef __KERNEL__
-int ndpi_load_ip_category(struct ndpi_detection_module_struct *ndpi_str, const char *ip_address_and_mask,
-			  ndpi_protocol_category_t category) {
+int ndpi_load_ip_category(struct ndpi_detection_module_struct *ndpi_str,
+			  const char *ip_address_and_mask,
+			  ndpi_protocol_category_t category,
+			  void *user_data) {
   ndpi_patricia_node_t *node;
   struct in_addr pin;
   int bits = 32;
@@ -5722,6 +5727,7 @@ int ndpi_load_ip_category(struct ndpi_detection_module_struct *ndpi_str, const c
 
   if((node = add_to_ptree(ndpi_str->custom_categories.ipAddresses_shadow, AF_INET, &pin, bits)) != NULL) {
     node->value.u.uv32.user_value = (u_int16_t)category, node->value.u.uv32.additional_user_value = 0;
+    node->custom_user_data = user_data;
   }
 
   return(0);
@@ -5746,11 +5752,11 @@ int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_str, c
 
 /* Loads an IP or name category */
 int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct, const char *ip_or_name,
-		       ndpi_protocol_category_t category) {
+		       ndpi_protocol_category_t category, void *user_data) {
   int rv;
 
   /* Try to load as IP address first */
-  rv = ndpi_load_ip_category(ndpi_struct, ip_or_name, category);
+  rv = ndpi_load_ip_category(ndpi_struct, ip_or_name, category, user_data);
 
   if(rv < 0) {
     /* IP load failed, load as hostname */
@@ -5764,10 +5770,11 @@ int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct, const c
 
 int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_str) {
   int i;
+  static char *built_in = "built-in";
 
   /* First add the nDPI known categories matches */
   for(i = 0; category_match[i].string_to_match != NULL; i++)
-    ndpi_load_category(ndpi_str, category_match[i].string_to_match, category_match[i].protocol_category);
+    ndpi_load_category(ndpi_str, category_match[i].string_to_match, category_match[i].protocol_category,built_in);
 
   /* Free */
   ac_automata_release((AC_AUTOMATA_t *) ndpi_str->custom_categories.hostnames.ac_automa,
@@ -8312,7 +8319,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
       char tmp[128], *word, *tok_tmp;
       u_int i, j, max_tmp_len = sizeof(tmp)-1;
 
-      len = snprintf(tmp, max_tmp_len, "%s", name);
+      len = ndpi_snprintf(tmp, max_tmp_len, "%s", name);
       if(len < 0) {
 
 	if(ndpi_verbose_dga_detection)
@@ -8541,7 +8548,7 @@ int ndpi_check_dga_name(struct ndpi_detection_module_struct *ndpi_str,
 
       if(num_bigram_checks
 	 /* We already checked num_dots > 0 */
-	 && ((num_found == 0) || ((num_digits > 5) && (num_words <= 3))
+	 && ((num_found == 0) || ((num_digits > 5) && (num_words <= 3) && (num_impossible > 0))
 	     || enough(num_found, num_impossible)
 	     || ((num_trigram_checked > 2)
 		 && ((num_trigram_found < (num_trigram_checked/2))

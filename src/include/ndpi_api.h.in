@@ -110,7 +110,7 @@ extern "C" {
   void * ndpi_flow_malloc(size_t size);
   void   ndpi_flow_free(void *ptr);
   u_int32_t ndpi_get_tot_allocated_memory(void);
-  
+ 
   /**
    * Search the first occurrence of substring -find- in -s-
    * The search is limited to the first -slen- characters of the string
@@ -766,10 +766,11 @@ extern "C" {
    *
    * @par     ndpi_mod = the detection module
    * @par     path     = the path of the file
+   * @par     user_data = pointer to some user data value
    * @return  0 if the file is loaded correctly;
    *          -1 else
    */
-  int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, const char* path);
+  int ndpi_load_categories_file(struct ndpi_detection_module_struct *ndpi_str, const char* path, void *user_data);
 
   /**
    * Read a file and load the list of risky domains
@@ -940,12 +941,12 @@ extern "C" {
   int ndpi_match_string(void *_automa, char *string_to_match);
 
   int ndpi_load_ip_category(struct ndpi_detection_module_struct *ndpi_struct,
-			    const char *ip_address_and_mask, ndpi_protocol_category_t category);
+			    const char *ip_address_and_mask, ndpi_protocol_category_t category,void *);
   int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_struct,
 				  const char *name_to_add, ndpi_protocol_category_t category);
 #ifndef __KERNEL__
   int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct,
-			 const char *ip_or_name, ndpi_protocol_category_t category);
+			 const char *ip_or_name, ndpi_protocol_category_t category,void *);
   int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_struct);
   int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_struct,
 				     u_int32_t saddr,

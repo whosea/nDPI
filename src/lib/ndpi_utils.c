@@ -2449,3 +2449,36 @@ void ndpi_set_tls_cert_expire_days(struct ndpi_detection_module_struct *ndpi_str
 				   u_int8_t num_days) {
   ndpi_str->tls_certificate_expire_in_x_days = num_days;
 }
+
+/* ******************************************* */
+
+int ndpi_vsnprintf(char * str, size_t size, char const * format, va_list va_args)
+{
+#ifdef WIN32
+  if (str == NULL || size == 0 || format == NULL)
+  {
+    return -1;
+  }
+
+  int ret = vsnprintf_s(str, size, _TRUNCATE, format, va_args);
+
+  if (ret < 0)
+  {
+    return size;
+  } else {
+    return ret;
+  }
+#else
+  return vsnprintf(str, size, format, va_args);
+#endif
+}
+
+int ndpi_snprintf(char * str, size_t size, char const * format, ...)
+{
+  va_list va_args;
+
+  va_start(va_args, format);
+  int ret = ndpi_vsnprintf(str, size, format, va_args);
+  va_end(va_args);
+  return ret;
+}
