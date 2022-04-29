@@ -5780,12 +5780,14 @@ int ndpi_load_ip_category(struct ndpi_detection_module_struct *ndpi_str,
     node->custom_user_data = user_data;
   }
 
+  
   return(0);
 }
 
 /* ********************************************************************************* */
 
-int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_str, const char *name_to_add,
+int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_str,
+				const char *name_to_add,
 				ndpi_protocol_category_t category) {
 
   if(ndpi_str->custom_categories.hostnames_shadow.ac_automa == NULL)
@@ -5794,7 +5796,8 @@ int ndpi_load_hostname_category(struct ndpi_detection_module_struct *ndpi_str, c
   if(name_to_add == NULL)
     return(-1);
 
-  return ndpi_string_to_automa(ndpi_str,(AC_AUTOMATA_t *)ndpi_str->custom_categories.hostnames_shadow.ac_automa,
+  return ndpi_string_to_automa(ndpi_str,
+			       (AC_AUTOMATA_t *)ndpi_str->custom_categories.hostnames_shadow.ac_automa,
 			       name_to_add,category,category, 0, 0, 1); /* at_end */
 }
 
@@ -5809,7 +5812,13 @@ int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct, const c
   rv = ndpi_load_ip_category(ndpi_struct, ip_or_name, category, user_data);
 
   if(rv < 0) {
-    /* IP load failed, load as hostname */
+    /* 
+       IP load failed, load as hostname 
+
+       NOTE: 
+       we cannot add user_data here as with Aho-Corasick this
+       information would not be used
+    */
     rv = ndpi_load_hostname_category(ndpi_struct, ip_or_name, category);
   }
 
@@ -5821,10 +5830,11 @@ int ndpi_load_category(struct ndpi_detection_module_struct *ndpi_struct, const c
 int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_str) {
   int i;
   static char *built_in = "built-in";
-
+  
   /* First add the nDPI known categories matches */
   for(i = 0; category_match[i].string_to_match != NULL; i++)
-    ndpi_load_category(ndpi_str, category_match[i].string_to_match, category_match[i].protocol_category,built_in);
+    ndpi_load_category(ndpi_str, category_match[i].string_to_match,
+		       category_match[i].protocol_category, built_in);
 
   /* Free */
   ac_automata_release((AC_AUTOMATA_t *) ndpi_str->custom_categories.hostnames.ac_automa,
@@ -5856,8 +5866,33 @@ int ndpi_enable_loaded_categories(struct ndpi_detection_module_struct *ndpi_str)
 
 /* ********************************************************************************* */
 
-int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_str, u_int32_t saddr, u_int32_t daddr,
+/* NOTE u_int32_t is represented in network byte order */
+void* ndpi_find_ipv4_category_userdata(struct ndpi_detection_module_struct *ndpi_str,
+				       u_int32_t saddr) {
+  ndpi_patricia_node_t *node;
+  
+  if(saddr == 0)
+    node = NULL;
+  else {
+    ndpi_prefix_t prefix;
+    
+    ndpi_fill_prefix_v4(&prefix, (struct in_addr *) &saddr, 32,
+			((ndpi_patricia_tree_t *) ndpi_str->protocols_ptree)->maxbits);
+    node = ndpi_patricia_search_best(ndpi_str->custom_categories.ipAddresses, &prefix);
+  }
+
+  return(node ? node->custom_user_data : NULL);
+}
+
+/* ********************************************************************************* */
+
+/* NOTE u_int32_t is represented in network byte order */
+int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_str,
+				   u_int32_t saddr, u_int32_t daddr,
 				   ndpi_protocol *ret) {
+
+  ret->custom_category_userdata = NULL;
+  
   if(ndpi_str->custom_categories.categories_loaded) {
     ndpi_prefix_t prefix;
     ndpi_patricia_node_t *node;
@@ -5881,7 +5916,7 @@ int ndpi_fill_ip_protocol_category(struct ndpi_detection_module_struct *ndpi_str
 
     if(node) {
       ret->category = (ndpi_protocol_category_t) node->value.u.uv32.user_value;
-
+      ret->custom_category_userdata = node->custom_user_data;
       return(1);
     }
   }
@@ -6090,7 +6125,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
   u_int32_t num_calls = 0;
   ndpi_protocol ret = { flow->detected_protocol_stack[1], flow->detected_protocol_stack[0]
 #ifndef __KERNEL__
-	  , flow->category 
+	  , flow->category, NULL
 #endif
   };
 
@@ -6927,8 +6962,10 @@ ndpi_protocol_category_t ndpi_get_flow_category(struct ndpi_detection_module_str
   return(flow->category);
 }
 
+/* ********************************************************************************* */
+
 void ndpi_get_flow_ndpi_proto(struct ndpi_detection_module_struct *ndpi_str, struct ndpi_flow_struct *flow,
-                struct ndpi_proto * ndpi_proto)
+			      struct ndpi_proto * ndpi_proto)
 {
   ndpi_proto->master_protocol = ndpi_get_flow_masterprotocol(ndpi_str, flow);
   ndpi_proto->app_protocol = ndpi_get_flow_appprotocol(ndpi_str, flow);

@@ -73,7 +73,7 @@ union ndpi_patricia_node_value_t {
     } uv32;
     
     u_int64_t uv64;
-
+    
     void *user_data;
   } u;
 };
