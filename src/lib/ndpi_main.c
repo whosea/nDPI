@@ -92,6 +92,17 @@
 #include "inc_generated/ndpi_asn_webex.c.inc"
 #include "inc_generated/ndpi_asn_teamviewer.c.inc"
 #include "inc_generated/ndpi_asn_facebook.c.inc"
+#include "inc_generated/ndpi_asn_tencent.c.inc"
+#include "inc_generated/ndpi_asn_opendns.c.inc"
+#include "inc_generated/ndpi_asn_dropbox.c.inc"
+#include "inc_generated/ndpi_asn_starcraft.c.inc"
+#include "inc_generated/ndpi_asn_ubuntuone.c.inc"
+#include "inc_generated/ndpi_asn_twitch.c.inc"
+#include "inc_generated/ndpi_asn_hotspotshield.c.inc"
+#include "inc_generated/ndpi_asn_github.c.inc"
+#include "inc_generated/ndpi_asn_steam.c.inc"
+#include "inc_generated/ndpi_asn_bloomberg.c.inc"
+#include "inc_generated/ndpi_asn_citrix.c.inc"
 #endif
 
 #include "inc_generated/ndpi_icloud_private_relay_match.c.inc"
@@ -1952,6 +1963,18 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "GoogleCloud", NDPI_PROTOCOL_CATEGORY_CLOUD,
                           ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_TENCENT,
+                          "Tencent", NDPI_PROTOCOL_CATEGORY_SOCIAL_NETWORK,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_RAKNET,
+                          "RakNet", NDPI_PROTOCOL_CATEGORY_GAME,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0), /* TCP */
+                          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_XIAOMI,
+                          "Xiaomi", NDPI_PROTOCOL_CATEGORY_WEB,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -2590,6 +2613,17 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_webex_protocol_list);
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_teamviewer_protocol_list);
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_facebook_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_tencent_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_opendns_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_dropbox_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_starcraft_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_ubuntuone_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_twitch_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_hotspot_shield_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_github_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_steam_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_bloomberg_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_citrix_protocol_list);
     }
 #endif
   }
@@ -3437,7 +3471,8 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
   char *at, *proto, *elem;
   ndpi_proto_defaults_t *def;
   u_int subprotocol_id, i;
-
+  int id;
+  
   at = strrchr(rule, '@');
   if(at == NULL) {
     /* This looks like a mask rule or an invalid rule */
@@ -3489,15 +3524,12 @@ int ndpi_handle_rule(struct ndpi_detection_module_struct *ndpi_str, char *rule, 
     }
   }
 
-  for(i = 0, def = NULL; i < ndpi_str->ndpi_num_supported_protocols; i++) {
-    if(ndpi_str->proto_defaults[i].protoName
-       && strcasecmp(ndpi_str->proto_defaults[i].protoName, proto) == 0) {
-      def = &ndpi_str->proto_defaults[i];
-      subprotocol_id = i;
-      break;
-    }
-  }
-
+  if((id = ndpi_get_protocol_id(ndpi_str, proto)) != -1) {
+    subprotocol_id = (u_int)id;
+    def = &ndpi_str->proto_defaults[subprotocol_id];
+  } else
+    def = NULL;
+  
   if(def == NULL) {
     if(!do_add) {
       /* We need to remove a rule */
@@ -4467,6 +4499,12 @@ static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
 
   /* SD-RTN Software Defined Real-time Network */
   init_sd_rtn_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* RakNet */
+  init_raknet_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* Xiaomi */
+  init_xiaomi_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
@@ -8626,4 +8664,23 @@ char *ndpi_hostname_sni_set(struct ndpi_flow_struct *flow, const u_int8_t *value
   dst[i] = '\0';
 
   return dst;
+}
+
+/* ******************************************************************** */
+
+char *ndpi_user_agent_set(struct ndpi_flow_struct *flow, const u_int8_t *value, size_t value_len)
+{
+  if (flow->http.user_agent != NULL)
+  {
+    return NULL;
+  }
+
+  flow->http.user_agent = ndpi_malloc(value_len + 1);
+  if (flow->http.user_agent != NULL)
+  {
+    memcpy(flow->http.user_agent, value, value_len);
+    flow->http.user_agent[value_len] = '\0';
+  }
+
+  return flow->http.user_agent;
 }

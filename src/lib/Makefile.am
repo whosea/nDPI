@@ -132,6 +132,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/qq.c \
 		     protocols/quic.c \
 		     protocols/radius.c \
+		     protocols/raknet.c \
 		     protocols/rdp.c \
 		     protocols/redis_net.c \
 		     protocols/rsync.c \
@@ -187,6 +188,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/wsd.c \
 		     protocols/xbox.c \
 		     protocols/xdmcp.c \
+		     protocols/xiaomi.c \
 		     protocols/zattoo.c \
 		     protocols/zeromq.c \
 		     protocols/smpp.c \
