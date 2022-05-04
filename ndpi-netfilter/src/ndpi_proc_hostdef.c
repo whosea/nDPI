@@ -196,7 +196,7 @@ int n_hostdef_proc_close(struct inode *inode, struct file *file)
 		if(_DBG_TRACE_GPROC_H)
 			pr_info("host_open:%s release host_ac %px\n",n->ns_name,n->host_ac);
 	    }
-	    ac_automata_release((AC_AUTOMATA_t*)n->host_ac,0);
+	    ac_automata_release((AC_AUTOMATA_t*)n->host_ac,1);
 	    n->host_ac = NULL;
 	    str_hosts_done(n->hosts_tmp);
 	    n->hosts_tmp = NULL;
