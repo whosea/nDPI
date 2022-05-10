@@ -108,14 +108,14 @@ Use the "inprogress" option to determine when the protocol detection process end
 
 Example of allowing several protocols:
 
-	iptables -A FORWARD -m ndpi --inprogress ssh,dns,https -j ACCEPT
-	iptables -A FORWARD -m ndpi --clevel dpi --proto ssh,dns,https -j ACCEPT
+	iptables -A FORWARD -m ndpi --inprogress ssh,dns,tls -j ACCEPT
+	iptables -A FORWARD -m ndpi --clevel dpi --proto ssh,dns,tls -j ACCEPT
 	iptables -A FORWARD -m ndpi --unknown -j DROP
 
 Example of disabling several protocols:
 
-	iptables -A FORWARD -m ndpi --inprogress ssh,dns,https -j ACCEPT
-	iptables -A FORWARD -m ndpi --clevel dpi --proto ssh,dns,https -j DROP
+	iptables -A FORWARD -m ndpi --inprogress ssh,dns,tls -j ACCEPT
+	iptables -A FORWARD -m ndpi --clevel dpi --proto ssh,dns,tls -j DROP
 	iptables -A FORWARD -m ndpi --unknown -j ACCEPT
 
 Protocols defined in /proc/net/xt_ndpi/host_proto will be considered at the "dpi" confidence level
@@ -141,7 +141,10 @@ Using NDPI target. To see available options type:
 
         iptables -j NDPI --help
 
-NDPI target may be using for packet marking (see MARK target) or packet classify (see CLASSIFY target).
+NDPI target may be using for packet marking (see MARK target), packet classify (see CLASSIFY target)
+and selecting traffic for "netflow" (see ipt_netflow).
+There is a limitation: the "-j NDPI" target must be after the "-m ndpi" match. 
+They can be used in one rule "iptables ... -m ndpi ... -j NDPI ..."
 Values for mark or class may be give from /proc/net/xt_ndpi/proto (see procfs section below) or specified in netfilter rules (--values).
 
 Example (traffic shaper)
@@ -246,6 +249,8 @@ ndpi_flow_opt:    Output additional info about TLS. See FLOW_INFO.txt
 ndpi_flow_limit:  Limit netflow records. Default 10000000 (~4.3Gb RAM). See FLOW_INFO.txt
 
 ndpi_stun_cache: STUN cache control (0-1). Default 0.
+
+tls_buf_size: The maximum buffer size in kB for the TLS protocol. default 8, range 2-16
 
 ---------------
 7. procfs files

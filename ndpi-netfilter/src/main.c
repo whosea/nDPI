@@ -325,7 +325,7 @@ module_param_named(mtu, ndpi_mtu, ulong, 0600);
 MODULE_PARM_DESC(mtu,"Skip checking nonlinear skbuff larger than MTU");
 
 module_param_named(tls_buf_size, tls_buf_size, ulong, 0600);
-MODULE_PARM_DESC(tls_buf_size,"The maximum buffer size in kB for the TLS protocol. default 4, range 2-16");
+MODULE_PARM_DESC(tls_buf_size,"The maximum buffer size in kB for the TLS protocol. default 8, range 2-16");
 
 module_param_named(bt_log_size, bt_log_size, ulong, 0400);
 MODULE_PARM_DESC(bt_log_size,"Keep information about the lastes N bt-hash. default 0, range: 32 - 512");
