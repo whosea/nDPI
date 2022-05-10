@@ -135,6 +135,7 @@ struct flow_info {
 #define f_snat		6
 #define f_dnat		7
 #define f_userid	8
+#define f_tlsdone	9
 
 static inline void clear_bit_simple(int num,uint16_t *sword) {
 	*sword &= ~(1u << (num & 15));
@@ -155,6 +156,7 @@ static inline int test_bit_simple(int num,uint16_t *sword) {
 #define test_snat(ct_ndpi)		test_bit_simple(f_snat,&ct_ndpi->flags)
 #define test_dnat(ct_ndpi)		test_bit_simple(f_dnat,&ct_ndpi->flags)
 #define test_userid(ct_ndpi)		test_bit_simple(f_userid,&ct_ndpi->flags)
+#define test_tlsdone(ct_ndpi)		test_bit_simple(f_tlsdone,&ct_ndpi->flags)
 
 #define set_flow_info(ct_ndpi)	set_bit_simple(f_flow_info,&ct_ndpi->flags)
 #define set_for_delete(ct_ndpi)	set_bit_simple(f_for_delete,&ct_ndpi->flags)
@@ -165,6 +167,7 @@ static inline int test_bit_simple(int num,uint16_t *sword) {
 #define set_snat(ct_ndpi)	set_bit_simple(f_snat,&ct_ndpi->flags)
 #define set_dnat(ct_ndpi)	set_bit_simple(f_dnat,&ct_ndpi->flags)
 #define set_userid(ct_ndpi)	set_bit_simple(f_userid,&ct_ndpi->flags)
+#define set_tlsdone(ct_ndpi)	set_bit_simple(f_tlsdone,&ct_ndpi->flags)
 
 #define clear_flow_info(ct_ndpi)	clear_bit_simple(f_flow_info,&ct_ndpi->flags)
 #define clear_for_delete(ct_ndpi) clear_bit_simple(f_for_delete,&ct_ndpi->flags)
@@ -175,6 +178,7 @@ static inline int test_bit_simple(int num,uint16_t *sword) {
 #define clear_snat(ct_ndpi)	clear_bit_simple(f_snat,&ct_ndpi->flags)
 #define clear_dnat(ct_ndpi)	clear_bit_simple(f_dnat,&ct_ndpi->flags)
 #define clear_userid(ct_ndpi)	clear_bit_simple(f_userid,&ct_ndpi->flags)
+#define clear_tlsdone(ct_ndpi)	clear_bit_simple(f_tlsdone,&ct_ndpi->flags)
 
 
 struct nf_ct_ext_ndpi {
