@@ -864,34 +864,30 @@ int ndpi_has_human_readeable_string(struct ndpi_detection_module_struct *ndpi_st
 /* ********************************** */
 
 static const char* ndpi_get_flow_info_by_proto_id(struct ndpi_flow_struct const * const flow,
-                                                  u_int16_t proto_id)
-{
-  switch (proto_id)
-  {
-    case NDPI_PROTOCOL_DNS:
-    case NDPI_PROTOCOL_HTTP:
-        return flow->host_server_name;
-    case NDPI_PROTOCOL_QUIC:
-    case NDPI_PROTOCOL_TLS:
-        if (flow->protos.tls_quic.hello_processed != 0)
-        {
-          return flow->host_server_name;
-        }
-        break;
+                                                  u_int16_t proto_id) {
+  switch (proto_id) {
+  case NDPI_PROTOCOL_DNS:
+  case NDPI_PROTOCOL_HTTP:
+    return flow->host_server_name;
+    
+  case NDPI_PROTOCOL_QUIC:
+  case NDPI_PROTOCOL_TLS:
+    if (flow->protos.tls_quic.hello_processed != 0)
+      return flow->host_server_name;        
+    break;
   }
-
+  
   return NULL;
 }
 
+/* ********************************** */
+
 const char* ndpi_get_flow_info(struct ndpi_flow_struct const * const flow,
-                               ndpi_protocol const * const l7_protocol)
-{
+                               ndpi_protocol const * const l7_protocol) {
   char const * const app_protocol_info = ndpi_get_flow_info_by_proto_id(flow, l7_protocol->app_protocol);
 
-  if (app_protocol_info != NULL)
-  {
-    return app_protocol_info;
-  }
+  if (app_protocol_info != NULL)  
+    return app_protocol_info;  
 
   return ndpi_get_flow_info_by_proto_id(flow, l7_protocol->master_protocol);
 }
@@ -1803,28 +1799,28 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("Weak TLS Cipher");
 
   case NDPI_TLS_CERTIFICATE_EXPIRED:
-    return("TLS Cert Expire");
+    return("TLS Cert Expired");
 
   case NDPI_TLS_CERTIFICATE_MISMATCH:
     return("TLS Cert Mismatch");
 
   case NDPI_HTTP_SUSPICIOUS_USER_AGENT:
-    return("HTTP Susp User-Agent");
+    return("HTTP Suspicious User-Agent");
 
   case NDPI_HTTP_NUMERIC_IP_HOST:
     return("HTTP Numeric IP Address");
 
   case NDPI_HTTP_SUSPICIOUS_URL:
-    return("HTTP Susp URL");
+    return("HTTP Suspicious URL");
 
   case NDPI_HTTP_SUSPICIOUS_HEADER:
-    return("HTTP Susp Header");
+    return("HTTP Suspicious Header");
 
   case NDPI_TLS_NOT_CARRYING_HTTPS:
     return("TLS (probably) Not Carrying HTTPS");
 
   case NDPI_SUSPICIOUS_DGA_DOMAIN:
-    return("Susp DGA Domain name");
+    return("Suspicious DGA Domain name");
 
   case NDPI_MALFORMED_PACKET:
     return("Malformed Packet");
@@ -1839,19 +1835,19 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("SMB Insecure Vers");
 
   case NDPI_TLS_SUSPICIOUS_ESNI_USAGE:
-    return("TLS Susp ESNI Usage");
+    return("TLS Suspicious ESNI Usage");
 
   case NDPI_UNSAFE_PROTOCOL:
     return("Unsafe Protocol");
 
   case NDPI_DNS_SUSPICIOUS_TRAFFIC:
-    return("Susp DNS Traffic"); /* Exfiltration ? */
+    return("Suspicious DNS Traffic"); /* Exfiltration ? */
 
   case NDPI_TLS_MISSING_SNI:
     return("Missing SNI TLS Extn");
 
   case NDPI_HTTP_SUSPICIOUS_CONTENT:
-    return("HTTP Susp Content");
+    return("HTTP Suspicious Content");
 
   case NDPI_RISKY_ASN:
     return("Risky ASN");
@@ -1875,13 +1871,13 @@ const char* ndpi_risk2str(ndpi_risk_enum risk) {
     return("TLS Cert Validity Too Long");
 
   case NDPI_TLS_SUSPICIOUS_EXTENSION:
-    return("TLS Susp Extension");
+    return("TLS Suspicious Extn");
 
   case NDPI_TLS_FATAL_ALERT:
     return("TLS Fatal Alert");
 
   case NDPI_SUSPICIOUS_ENTROPY:
-    return("Susp Entropy");
+    return("Suspicious Entropy");
 
   case NDPI_CLEAR_TEXT_CREDENTIALS:
     return("Clear-Text Credentials");
@@ -2452,6 +2448,23 @@ void ndpi_set_tls_cert_expire_days(struct ndpi_detection_module_struct *ndpi_str
 
 /* ******************************************* */
 
+u_int32_t ndpi_get_flow_error_code(struct ndpi_flow_struct *flow) {
+  switch(flow->detected_protocol_stack[0] /* app_protocol */) {
+  case NDPI_PROTOCOL_DNS:
+    return(flow->protos.dns.reply_code);
+
+  case NDPI_PROTOCOL_HTTP:
+    return(flow->http.response_status_code);
+ 
+  case NDPI_PROTOCOL_SNMP:
+    return(flow->protos.snmp.error_status);
+ }
+
+  return(0);
+}
+
+/* ******************************************* */
+
 int ndpi_vsnprintf(char * str, size_t size, char const * format, va_list va_args)
 {
 #ifdef WIN32
@@ -2473,6 +2486,8 @@ int ndpi_vsnprintf(char * str, size_t size, char const * format, va_list va_args
 #endif
 }
 
+/* ******************************************* */
+
 int ndpi_snprintf(char * str, size_t size, char const * format, ...)
 {
   va_list va_args;
@@ -2482,3 +2497,4 @@ int ndpi_snprintf(char * str, size_t size, char const * format, ...)
   va_end(va_args);
   return ret;
 }
+
