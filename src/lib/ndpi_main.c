@@ -133,11 +133,6 @@ static void *(*_ndpi_malloc)(size_t size);
 static void (*_ndpi_free)(void *ptr);
 
 static u_int32_t _ticks_per_second = 1000;
-#ifdef __KERNEL__
-  #ifdef FRAG_MAN
-  #error "Cant use FRAG_MAN  with _KERNEL_"
-  #endif
-#endif
 struct ndpi_detection_module_struct xxx0;
 /* ****************************************** */
 
@@ -6309,7 +6304,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 	  }
 	} /* for */
 
-	if(!found) {
+	if(!found_port) {
 	  ndpi_default_ports_tree_node_t *r = ndpi_get_guessed_protocol_id(ndpi_str, packet->udp ? IPPROTO_UDP : IPPROTO_TCP,
 									     sport, dport);
 
@@ -6339,7 +6334,7 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
 	goto check_default_ports;
       }
 
-      if(!found) {
+      if(!found_port) {
 	ndpi_default_ports_tree_node_t *r = ndpi_get_guessed_protocol_id(ndpi_str, packet->udp ? IPPROTO_UDP : IPPROTO_TCP,
 									   sport, dport);
 	
