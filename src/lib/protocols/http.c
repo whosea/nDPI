@@ -446,8 +446,8 @@ static void ndpi_check_user_agent(struct ndpi_detection_module_struct *ndpi_stru
 
     if (i == ua_len)
     {
-      float upper_case_ratio = (float)upper_case_count / (float)ua_len;
-      if (upper_case_ratio >= 0.2f)
+      int upper_case_ratio = upper_case_count*100 / ua_len;
+      if (upper_case_ratio >= 20)
       {
         ndpi_set_risk(ndpi_struct, flow, NDPI_HTTP_SUSPICIOUS_USER_AGENT);
       }
