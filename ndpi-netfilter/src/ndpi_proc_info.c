@@ -305,7 +305,7 @@ ssize_t ndebug_proc_read(struct file *file, char __user *buf,
 }
 int ndebug_proc_close(struct inode *inode, struct file *file)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	generic_proc_close(n,parse_ndpi_debug,W_BUF_PROTO);
         return 0;
 }
@@ -314,7 +314,7 @@ ssize_t
 ndebug_proc_write(struct file *file, const char __user *buffer,
                      size_t length, loff_t *loff)
 {
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+	return generic_proc_write(pde_data(file_inode(file)), buffer, length, loff,
 			parse_ndpi_debug, 256, W_BUF_PROTO);
 }
 
