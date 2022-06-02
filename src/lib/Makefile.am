@@ -110,6 +110,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/modbus.c \
 		     protocols/mongodb.c \
 		     protocols/mpegts.c \
+		     protocols/mpegdash.c \
 		     protocols/mqtt.c \
 		     protocols/mssql_tds.c \
 		     protocols/mysql.c \
