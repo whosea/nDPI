@@ -203,7 +203,7 @@ static int krb_decode_asn1_blocks_skip(struct ndpi_detection_module_struct *ndpi
 static void krb_strncpy_lower(char * const dst, size_t dst_siz,
                               char const * const src, size_t src_siz)
 {
-   int dst_len = ndpi_min(src_siz, dst_siz - 1),i;
+  int i, dst_len = ndpi_min(src_siz, dst_siz - 1);
 
    dst[dst_len] = '\0';
 

@@ -166,6 +166,7 @@ void ndpi_search_raknet(struct ndpi_detection_module_struct *ndpi_struct,
     case 0x13: /* New Incoming Connection */
       {
 	size_t i;
+
         ip_addr_offset = 4 + raknet_dissect_ip(packet, 0);
         if (op == 0x10)
         {

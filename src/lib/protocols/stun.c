@@ -422,7 +422,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
 #ifdef DEBUG_STUN
             printf("==> Skype found\n");
 #endif
-            flow->guessed_host_protocol_id = NDPI_PROTOCOL_SKYPE_CALL;
+            flow->guessed_host_protocol_id = NDPI_PROTOCOL_SKYPE_TEAMS_CALL;
             return(NDPI_IS_STUN);
           }
 
@@ -443,7 +443,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
           printf("==> Skype (2) found\n");
 #endif
 
-          flow->guessed_host_protocol_id = NDPI_PROTOCOL_SKYPE_CALL;
+          flow->guessed_host_protocol_id = NDPI_PROTOCOL_SKYPE_TEAMS_CALL;
           return(NDPI_IS_STUN);
           break;
 
@@ -455,7 +455,7 @@ static ndpi_int_stun_t ndpi_int_check_stun(struct ndpi_detection_module_struct *
             printf("==> Skype (3) found\n");
 #endif
 
-            flow->guessed_host_protocol_id = NDPI_PROTOCOL_SKYPE_CALL;
+            flow->guessed_host_protocol_id = NDPI_PROTOCOL_SKYPE_TEAMS_CALL;
             return(NDPI_IS_STUN);
           }
           break;
