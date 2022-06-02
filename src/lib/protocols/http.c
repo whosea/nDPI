@@ -612,7 +612,7 @@ static void ndpi_check_numeric_ip(struct ndpi_detection_module_struct *ndpi_stru
   {
     char str[64];
 
-    snprintf(str, sizeof(str), "Found host %.*s", ip_len, ip);
+    snprintf(str, sizeof(str), "Found host %.*s", (int)(s-ip), ip);
     ndpi_set_risk(ndpi_struct, flow, NDPI_HTTP_NUMERIC_IP_HOST, str);
   }
 }
