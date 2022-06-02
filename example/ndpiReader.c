@@ -1559,6 +1559,9 @@ if(!rep_mini) {
       fprintf(out, "]");
 
       fprintf(out, "[Risk Score: %u]", ndpi_risk2score(flow->risk, &cli_score, &srv_score));
+
+      if(flow->risk_str)
+	fprintf(out, "[Risk Info: %s]", flow->risk_str);
     }
 
     if(flow->ssh_tls.ssl_version != 0) fprintf(out, "[%s]", ndpi_ssl_version2str(buf_ver, sizeof(buf_ver),

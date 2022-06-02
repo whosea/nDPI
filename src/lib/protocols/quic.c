@@ -384,7 +384,7 @@ static gcry_error_t hkdf_expand(int hashalgo, const uint8_t *prk, uint32_t prk_l
     gcry_md_write(h, &c, sizeof(c));                    /* constant 0x01..N */
 
     memcpy(lastoutput, gcry_md_read(h, hashalgo), hash_len);
-    memcpy(out + offset, lastoutput, MIN(hash_len, out_len - offset));
+    memcpy(out + offset, lastoutput, ndpi_min(hash_len, out_len - offset));
   }
 
   gcry_md_close(h);
@@ -1412,10 +1412,13 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
 
       if(ndpi_is_valid_hostname(flow->host_server_name,
 				strlen(flow->host_server_name)) == 0) {
-	ndpi_set_risk(ndpi_struct, flow, NDPI_INVALID_CHARACTERS);
+	char str[128];
+
+	snprintf(str, sizeof(str), "Invalid host %s", flow->host_server_name);
+	ndpi_set_risk(ndpi_struct, flow, NDPI_INVALID_CHARACTERS, str);
 	
 	/* This looks like an attack */
-	ndpi_set_risk(ndpi_struct, flow, NDPI_POSSIBLE_EXPLOIT);
+	ndpi_set_risk(ndpi_struct, flow, NDPI_POSSIBLE_EXPLOIT, NULL);
       }
       
       sni_found = 1;
@@ -1443,7 +1446,7 @@ static void process_chlo(struct ndpi_detection_module_struct *ndpi_struct,
   /* Add check for missing SNI */
   if(flow->host_server_name[0] == '\0') {
     /* This is a bit suspicious */
-    ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_MISSING_SNI);
+    ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_MISSING_SNI, NULL);
   }
 }
 
