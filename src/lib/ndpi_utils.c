@@ -2540,6 +2540,7 @@ int ndpi_snprintf(char * str, size_t size, char const * format, ...) {
 
 /* ******************************************* */
 
+#ifndef __KERNEL__
 char* ndpi_get_flow_risk_info(struct ndpi_flow_struct *flow,
 			      char *out, u_int out_len,
 			      u_int8_t use_json) {
@@ -2596,3 +2597,4 @@ char* ndpi_get_flow_risk_info(struct ndpi_flow_struct *flow,
     return(out[0] == '\0' ? NULL : out);
   }
 }
+#endif

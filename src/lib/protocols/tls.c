@@ -606,7 +606,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 		    dNSName_len = strlen(dNSName);
 		    cleanupServerName(dNSName, dNSName_len);
 
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
 		    printf("[TLS] dNSName %s [%s][len: %u][leftover: %d]\n", dNSName,
 			   flow->host_server_name, len,
 			   packet->payload_packet_len-i-len);
@@ -624,7 +624,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 		    }
 
 		    if(matched_name == 0) {
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
 		      printf("[TLS] Trying to match '%s' with '%s'\n",
 			     flow->host_server_name,
 			     dNSName);
@@ -672,7 +672,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
 
 		    i += len;
 		  } else {
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
 		    printf("[TLS] Leftover %u bytes", packet->payload_packet_len - i);
 #endif
 		    ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_SUSPICIOUS_EXTENSION, NULL);

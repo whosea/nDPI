@@ -3287,6 +3287,7 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
 
 	if(packet->payload_packet_len < sizeof(struct ndpi_icmphdr))
 	  ndpi_set_risk(ndpi_str, flow, NDPI_MALFORMED_PACKET, NULL);
+#ifndef __KERNEL__ 
 	else {
 	  u_int8_t icmp_type = (u_int8_t)packet->payload[0];
 	  u_int8_t icmp_code = (u_int8_t)packet->payload[1];
@@ -3294,7 +3295,6 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
 	  /* https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml */
 	  if(((icmp_type >= 44) && (icmp_type <= 252))
 	     || (icmp_code > 15))
-#ifndef __KERNEL__ 
 	    ndpi_set_risk(ndpi_str, flow, NDPI_MALFORMED_PACKET, NULL);
 
 	  if (packet->payload_packet_len > sizeof(struct ndpi_icmphdr)) {
@@ -3313,8 +3313,8 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
 	      ndpi_set_risk(ndpi_str, flow, NDPI_MALFORMED_PACKET, NULL);
 	    }
 	  }
-#endif
 	}
+#endif
       }
       return(NDPI_PROTOCOL_IP_ICMP);
       break;

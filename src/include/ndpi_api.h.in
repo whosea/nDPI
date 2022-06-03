@@ -1778,13 +1778,13 @@ extern "C" {
   ndpi_bitmap_iterator* ndpi_bitmap_iterator_alloc(ndpi_bitmap* b);
   void ndpi_bitmap_iterator_free(ndpi_bitmap* b);
   bool ndpi_bitmap_iterator_next(ndpi_bitmap_iterator* i, uint32_t *value);
-#endif
 
   /* ******************************* */
 
   char* ndpi_get_flow_risk_info(struct ndpi_flow_struct *flow,
 				char *out, u_int out_len,
 				u_int8_t use_json);
+#endif
 
 #ifdef __cplusplus
 }
