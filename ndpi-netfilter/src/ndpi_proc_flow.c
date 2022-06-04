@@ -326,7 +326,7 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 ssize_t nflow_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	if(n->acc_last_op != 1) { // seek 0 after write command
 		n->acc_last_op = 1;
 		nflow_proc_read_start(n);
@@ -385,7 +385,7 @@ static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 }
 
 int nflow_proc_open(struct inode *inode, struct file *file) {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 
 	if(!ndpi_enable_flow) return -EINVAL;
 
@@ -399,7 +399,7 @@ int nflow_proc_open(struct inode *inode, struct file *file) {
 
 int nflow_proc_close(struct inode *inode, struct file *file)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	if(!ndpi_enable_flow) return -EINVAL;
 	generic_proc_close(n,parse_ndpi_flow,W_BUF_FLOW);
 	if(flow_read_debug)
@@ -414,17 +414,17 @@ ssize_t
 nflow_proc_write(struct file *file, const char __user *buffer,
 		                     size_t length, loff_t *loff)
 {
-struct ndpi_net *n = PDE_DATA(file_inode(file));
+struct ndpi_net *n = pde_data(file_inode(file));
 	if(!ndpi_enable_flow) return -EINVAL;
 	if(n->flow_l) return -EINVAL; // Reading in progress!
 	n->acc_last_op = 2;
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+	return generic_proc_write(pde_data(file_inode(file)), buffer, length, loff,
 				  parse_ndpi_flow, 4060 , W_BUF_FLOW);
 }
 
 loff_t nflow_proc_llseek(struct file *file, loff_t offset, int whence) {
 	if(whence == SEEK_SET) {
-		struct ndpi_net *n = PDE_DATA(file_inode(file));
+		struct ndpi_net *n = pde_data(file_inode(file));
 		if(offset == 0) {
 			if(flow_read_debug)
 				pr_info("%s:%s seek start\n", __func__,n->ns_name);

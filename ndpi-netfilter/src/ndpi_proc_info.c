@@ -130,21 +130,21 @@ ssize_t _ninfo_proc_read(struct ndpi_net *n, char __user *buf,
 ssize_t ninfo_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-return _ninfo_proc_read(PDE_DATA(file_inode(file)),buf,count,ppos,AF_INET);
+return _ninfo_proc_read(pde_data(file_inode(file)),buf,count,ppos,AF_INET);
 }
 
 #ifdef NDPI_DETECTION_SUPPORT_IPV6
 ssize_t ninfo6_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-return _ninfo_proc_read(PDE_DATA(file_inode(file)),buf,count,ppos,AF_INET6);
+return _ninfo_proc_read(pde_data(file_inode(file)),buf,count,ppos,AF_INET6);
 }
 #endif
 
 ssize_t ninfo_proc_write(struct file *file, const char __user *buffer,
                      size_t length, loff_t *loff)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	char buf[32];
 	int idx;
 
@@ -163,7 +163,7 @@ ssize_t ninfo_proc_write(struct file *file, const char __user *buffer,
 ssize_t nann_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
         struct ndpi_detection_module_struct *ndpi_struct = n->ndpi_struct;
 	struct bt_announce *b = ndpi_struct->bt_ann;
 	int  bt_len = ndpi_struct->bt_ann_len;
@@ -198,7 +198,7 @@ ssize_t nann_proc_read(struct file *file, char __user *buf,
 ssize_t nproto_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	char lbuf[128];
 	char c_buf[32];
 	int i,l,p,ro;
@@ -262,7 +262,7 @@ ssize_t nproto_proc_read(struct file *file, char __user *buf,
 
 int nproto_proc_close(struct inode *inode, struct file *file)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	generic_proc_close(n,parse_ndpi_proto,W_BUF_PROTO);
         return 0;
 }
@@ -271,7 +271,7 @@ ssize_t
 nproto_proc_write(struct file *file, const char __user *buffer,
                      size_t length, loff_t *loff)
 {
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+	return generic_proc_write(pde_data(file_inode(file)), buffer, length, loff,
 			parse_ndpi_proto, 256, W_BUF_PROTO);
 }
 
@@ -305,7 +305,7 @@ ssize_t ndebug_proc_read(struct file *file, char __user *buf,
 }
 int ndebug_proc_close(struct inode *inode, struct file *file)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	generic_proc_close(n,parse_ndpi_debug,W_BUF_PROTO);
         return 0;
 }
@@ -314,7 +314,7 @@ ssize_t
 ndebug_proc_write(struct file *file, const char __user *buffer,
                      size_t length, loff_t *loff)
 {
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+	return generic_proc_write(pde_data(file_inode(file)), buffer, length, loff,
 			parse_ndpi_debug, 256, W_BUF_PROTO);
 }
 
