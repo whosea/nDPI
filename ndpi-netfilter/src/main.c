@@ -839,7 +839,7 @@ ndpi_alloc_flow (struct nf_ct_ext_ndpi *ct_ndpi)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
 static struct nf_ct_hook ndpi_nf_ct_hook={NULL,NULL,NULL};
-static struct nf_ct_hook *ndpi_nf_ct_hook_old=NULL;
+static const struct nf_ct_hook *ndpi_nf_ct_hook_old=NULL;
 #endif
 
 static void (*ndpi_nf_ct_destroy)(struct nf_conntrack *) = NULL;
@@ -3092,7 +3092,7 @@ static void replace_nf_destroy(void)
 	BUG_ON(ndpi_nf_ct_destroy == NULL);
         rcu_assign_pointer(nf_ct_destroy, ndpi_destroy_conntrack);
 #else
-	struct nf_ct_hook *hook;
+	const struct nf_ct_hook *hook;
 	hook = rcu_dereference_protected(nf_ct_hook,lockdep_is_held(&ndpi_hook_mutex));
 	BUG_ON(hook == NULL);
 	ndpi_nf_ct_hook_old = hook;
@@ -3116,7 +3116,7 @@ static void restore_nf_destroy(void)
 	BUG_ON(destroy != ndpi_destroy_conntrack);
 	rcu_assign_pointer(nf_ct_destroy,ndpi_nf_ct_destroy);
 #else
-	struct nf_ct_hook *hook;
+	const struct nf_ct_hook *hook;
 	hook = rcu_dereference_protected(nf_ct_hook,lockdep_is_held(&ndpi_hook_mutex));
 	BUG_ON(hook != &ndpi_nf_ct_hook);
 	rcu_assign_pointer(nf_ct_hook,ndpi_nf_ct_hook_old);

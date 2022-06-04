@@ -29,6 +29,10 @@
 
 #include "ndpi_api.h"
 
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
+
 /* See http://web.mit.edu/kolya/afs/rx/rx-spec for protocol description. */
 
 /* The should be no need for explicit packing, but just in case... */

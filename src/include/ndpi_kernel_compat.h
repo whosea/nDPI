@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 
 #include <asm/byteorder.h>
+#include <linux/types.h>
 #include <linux/time.h>
 #include <linux/in6.h>
 #define UINT32_MAX	U32_MAX
