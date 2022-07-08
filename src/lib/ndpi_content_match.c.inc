@@ -1685,6 +1685,9 @@ ndpi_protocol_match host_match[] =
    { "gotoroom.com",           "GoTo", NDPI_PROTOCOL_GOTO, NDPI_PROTOCOL_CATEGORY_VOIP, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DEFAULT_LEVEL },
    { "joinwebinar.com",        "GoTo", NDPI_PROTOCOL_GOTO, NDPI_PROTOCOL_CATEGORY_VOIP, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DEFAULT_LEVEL },
 
+   { "1kxun.com",              "1kxun", NDPI_PROTOCOL_1KXUN, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_DEFAULT_LEVEL },
+   { "1kxun.mobi",             "1kxun", NDPI_PROTOCOL_1KXUN, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_DEFAULT_LEVEL },
+
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_content_match_host_match.c.inc"
 #endif
@@ -1717,6 +1720,7 @@ static ndpi_tls_cert_name_match tls_certificate_match [] = {
    specified above
 */
 
+#ifndef __KERNEL__
 #ifndef __KERNEL__
 #ifndef __KERNEL__
 static ndpi_category_match category_match[] = {
@@ -1838,6 +1842,7 @@ static ndpi_category_match category_match[] = {
 
    { NULL, 0 }
 };
+#endif
 #endif
 #endif
 

@@ -1048,7 +1048,7 @@ typedef enum {
 typedef struct ndpi_proto_defaults {
   char *protoName;
   ndpi_protocol_category_t protoCategory;
-  u_int8_t isClearTextProto;
+  u_int8_t isClearTextProto:1, isAppProtocol:1, _notused:6;
   u_int16_t *subprotocols;
   u_int32_t subprotocol_count;
   u_int16_t protoId, protoIdx;
@@ -1321,7 +1321,7 @@ struct ndpi_flow_struct {
   char flow_extra_info[16];
 
   /* General purpose field used to save mainly hostname/SNI information.
-   * In details it used for: DNS and NETBIOS name, HTTP and DHCP hostname,
+   * In details it used for: DNS, SSDP and NETBIOS name, HTTP and DHCP hostname,
    * WHOIS request, TLS/QUIC server name, XIAOMI domain and STUN realm.
    *
    * Please, think *very* hard before increasing its size!
