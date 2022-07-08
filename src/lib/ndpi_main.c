@@ -1875,7 +1875,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_TARGUS_GETDATA,
 			  "TargusDataspeed", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 5001, 5201, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 5001, 5201, 0, 0, 0) /* UDP */);
+			  ndpi_build_default_ports(ports_b, 5001, 5201, 0, 0, 0) /* UDP */); /* Missing dissector: port based only */
   ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 1 /* app proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_AMAZON_VIDEO,
 			  "AmazonVideo", NDPI_PROTOCOL_CATEGORY_CLOUD,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
@@ -4511,9 +4511,6 @@ static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
   /* Amazon_Video */
   init_amazon_video_dissector(ndpi_str, &a, detection_bitmask);
 
-  /* Targus Getdata */
-  init_targus_getdata_dissector(ndpi_str, &a, detection_bitmask);
-
   /* S7 comm */
   init_s7comm_dissector(ndpi_str, &a, detection_bitmask);
 
@@ -5708,6 +5705,7 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
 			   &cached_proto, 0 /* Don't remove it as it can be used for other connections */)) {
       ndpi_set_detected_protocol(ndpi_str, flow, cached_proto, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
       ret.master_protocol = flow->detected_protocol_stack[1], ret.app_protocol = flow->detected_protocol_stack[0];
+      ndpi_fill_protocol_category(ndpi_str, flow, &ret);
       return(ret);
     }
   }
@@ -5818,6 +5816,7 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
 	we need to distinguish between it and hangout
 	thing that should be handled by the STUN dissector
       */
+      ndpi_set_detected_protocol(ndpi_str, flow, NDPI_PROTOCOL_HANGOUT_DUO, NDPI_PROTOCOL_STUN, NDPI_CONFIDENCE_DPI /* TODO */);
       ret.app_protocol = NDPI_PROTOCOL_HANGOUT_DUO;
     }
   }
@@ -5829,15 +5828,15 @@ ndpi_protocol ndpi_detection_giveup(struct ndpi_detection_module_struct *ndpi_st
 					 flow->saddr, flow->sport,
 					 flow->daddr, flow->dport)) {
       /* This looks like BitTorrent */
+      ndpi_set_detected_protocol(ndpi_str, flow, NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
       ret.app_protocol = NDPI_PROTOCOL_BITTORRENT;
-      flow->confidence = NDPI_CONFIDENCE_DPI_CACHE;
     } else if((flow->l4_proto == IPPROTO_UDP) /* Zoom/UDP used for video */
 	      && (((ntohs(flow->sport) == 8801 /* Zoom port */) && ndpi_search_into_zoom_cache(ndpi_str, flow->saddr))
 		  || ((ntohs(flow->dport) == 8801 /* Zoom port */) && ndpi_search_into_zoom_cache(ndpi_str, flow->daddr))
 		  )) {
       /* This looks like Zoom */
+      ndpi_set_detected_protocol(ndpi_str, flow, NDPI_PROTOCOL_ZOOM, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI_CACHE);
       ret.app_protocol = NDPI_PROTOCOL_ZOOM;
-      flow->confidence = NDPI_CONFIDENCE_DPI_CACHE;
     }
   }
 
@@ -7613,13 +7612,33 @@ const char *ndpi_category_get_name(struct ndpi_detection_module_struct *ndpi_str
 
 /* ****************************************************** */
 
+static int category_depends_on_master(int proto)
+{
+  switch(proto) {
+  case NDPI_PROTOCOL_MAIL_POP:
+  case NDPI_PROTOCOL_MAIL_SMTP:
+  case NDPI_PROTOCOL_MAIL_IMAP:
+  case NDPI_PROTOCOL_MAIL_POPS:
+  case NDPI_PROTOCOL_MAIL_SMTPS:
+  case NDPI_PROTOCOL_MAIL_IMAPS:
+	  return 1;
+  }
+  return 0;
+}
+
+/* ****************************************************** */
+
 ndpi_protocol_category_t ndpi_get_proto_category(struct ndpi_detection_module_struct *ndpi_str,
 						 ndpi_protocol proto) {
   if(proto.category != NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
     return(proto.category);
 
-  /* simple rule: sub protocol first, master after */
-  else if((proto.master_protocol == NDPI_PROTOCOL_UNKNOWN) ||
+  /* Simple rule: sub protocol first, master after, with some exceptions (i.e. mail) */
+
+  if(category_depends_on_master(proto.master_protocol)) {
+    if(ndpi_is_valid_protoId(proto.master_protocol))
+      return(ndpi_str->proto_defaults[proto.master_protocol].protoCategory);
+  } else if((proto.master_protocol == NDPI_PROTOCOL_UNKNOWN) ||
 	  (ndpi_str->proto_defaults[proto.app_protocol].protoCategory != NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)) {
     if(ndpi_is_valid_protoId(proto.app_protocol))
       return(ndpi_str->proto_defaults[proto.app_protocol].protoCategory);
@@ -7947,7 +7966,8 @@ static u_int16_t ndpi_automa_match_string_subprotocol(struct ndpi_detection_modu
     flow->detected_protocol_stack[1] = master_protocol_id,
     flow->detected_protocol_stack[0] = matching_protocol_id;
     flow->confidence = NDPI_CONFIDENCE_DPI;
-    if(flow->category == NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
+    if(!category_depends_on_master(master_protocol_id) &&
+       flow->category == NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
       flow->category = ret_match->protocol_category;
 
     return(flow->detected_protocol_stack[0]);
@@ -8052,7 +8072,8 @@ int ndpi_match_hostname_protocol(struct ndpi_detection_module_struct *ndpi_struc
 
   if(subproto != NDPI_PROTOCOL_UNKNOWN) {
     ndpi_set_detected_protocol(ndpi_struct, flow, subproto, master_protocol, NDPI_CONFIDENCE_DPI);
-    ndpi_int_change_category(ndpi_struct, flow, ret_match.protocol_category);
+    if(!category_depends_on_master(master_protocol))
+      ndpi_int_change_category(ndpi_struct, flow, ret_match.protocol_category);
     return(1);
   } else
     return(0);

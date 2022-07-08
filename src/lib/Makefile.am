@@ -165,7 +165,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/steam.c \
 		     protocols/stun.c \
 		     protocols/syslog.c \
-		     protocols/targus_getdata.c \
 		     protocols/tcp_udp.c \
 		     protocols/teamspeak.c \
 		     protocols/teamviewer.c \
