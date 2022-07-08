@@ -1688,6 +1688,11 @@ ndpi_protocol_match host_match[] =
    { "1kxun.com",              "1kxun", NDPI_PROTOCOL_1KXUN, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_DEFAULT_LEVEL },
    { "1kxun.mobi",             "1kxun", NDPI_PROTOCOL_1KXUN, NDPI_PROTOCOL_CATEGORY_STREAMING, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_DEFAULT_LEVEL },
 
+   { "tunnelbear.com",         "TunnelBear", NDPI_PROTOCOL_TUNNELBEAR, NDPI_PROTOCOL_CATEGORY_VPN, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DEFAULT_LEVEL },
+   { "polargrizzly.com",       "TunnelBear", NDPI_PROTOCOL_TUNNELBEAR, NDPI_PROTOCOL_CATEGORY_VPN, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DEFAULT_LEVEL },
+
+   { "cloudflareclient.com",   "CloudflareWarp", NDPI_PROTOCOL_CLOUDFLARE_WARP, NDPI_PROTOCOL_CATEGORY_VPN, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DEFAULT_LEVEL },
+
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_content_match_host_match.c.inc"
 #endif
@@ -1707,6 +1712,8 @@ static ndpi_tls_cert_name_match tls_certificate_match [] = {
   { "CN=*.gateway.messenger.live.com", NDPI_PROTOCOL_SKYPE_TEAMS },
   { "OU=FortiGate",                    NDPI_PROTOCOL_FORTICLIENT },
   { "CN=www.update.microsoft.com",     NDPI_PROTOCOL_WINDOWS_UPDATE },
+  { "CN=*.tunnelbear.com",             NDPI_PROTOCOL_TUNNELBEAR },
+  { "CN=cloudflareclient.com",         NDPI_PROTOCOL_CLOUDFLARE_WARP },
 
   { NULL, 0 }
 };
@@ -1720,8 +1727,6 @@ static ndpi_tls_cert_name_match tls_certificate_match [] = {
    specified above
 */
 
-#ifndef __KERNEL__
-#ifndef __KERNEL__
 #ifndef __KERNEL__
 static ndpi_category_match category_match[] = {
    { ".edgecastcdn.net",                 NDPI_PROTOCOL_CATEGORY_MEDIA },
@@ -1842,7 +1847,5 @@ static ndpi_category_match category_match[] = {
 
    { NULL, 0 }
 };
-#endif
-#endif
 #endif
 

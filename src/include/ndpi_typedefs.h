@@ -129,7 +129,10 @@ typedef enum {
   NDPI_ERROR_CODE_DETECTED,
   NDPI_HTTP_CRAWLER_BOT,
   NDPI_ANONYMOUS_SUBSCRIBER,
-
+  NDPI_UNIDIRECTIONAL_TRAFFIC, /* NOTE: as nDPI can detect a protocol with one packet, make sure
+				  your app will clear this risk if future packets (not sent to nDPI)
+				  are received in the opposite direction */
+  
   /* Leave this as last member */
   NDPI_MAX_RISK /* must be <= 63 due to (**) */
 } ndpi_risk_enum;
@@ -1321,7 +1324,7 @@ struct ndpi_flow_struct {
   char flow_extra_info[16];
 
   /* General purpose field used to save mainly hostname/SNI information.
-   * In details it used for: DNS, SSDP and NETBIOS name, HTTP and DHCP hostname,
+   * In details it used for: COLLECTD, DNS, SSDP and NETBIOS name, HTTP and DHCP hostname,
    * WHOIS request, TLS/QUIC server name, XIAOMI domain and STUN realm.
    *
    * Please, think *very* hard before increasing its size!
@@ -1414,6 +1417,10 @@ struct ndpi_flow_struct {
     } ssh;
 
     struct {
+      char filename[128];
+    } tftp;
+
+    struct {
       u_int8_t username_detected:1, username_found:1,
 	password_detected:1, password_found:1,
 	_pad:4;
@@ -1426,6 +1433,10 @@ struct ndpi_flow_struct {
       char server_username[32];
       char command[48];
     } rsh;
+
+    struct {
+      char client_username[32];
+    } collectd;
 
     struct {
       char version[32];
@@ -1742,18 +1753,11 @@ struct ndpi_bin {
 
 /* **************************************** */
 
-struct ndpi_str_hash_info {
-  char *key;         /* Key   */
-  u_int8_t key_len;
-  u_int8_t value;    /* Value */
-  struct ndpi_str_hash_info *next;
-};
-
-typedef struct {
-  u_int32_t num_buckets, max_num_entries;
-  struct ndpi_str_hash_info **buckets;
+typedef struct ndpi_str_hash {
+  unsigned int hash;
+  void *value;
+  u_int8_t private_data[0];
 } ndpi_str_hash;
-
 
 /* **************************************** */
 

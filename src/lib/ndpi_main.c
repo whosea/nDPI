@@ -184,6 +184,7 @@ static ndpi_risk_info ndpi_known_risks[] = {
   { NDPI_ERROR_CODE_DETECTED,                   NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
   { NDPI_HTTP_CRAWLER_BOT,                      NDPI_RISK_LOW,    CLIENT_LOW_RISK_PERCENTAGE  },
   { NDPI_ANONYMOUS_SUBSCRIBER,                  NDPI_RISK_MEDIUM, CLIENT_FAIR_RISK_PERCENTAGE },
+  { NDPI_UNIDIRECTIONAL_TRAFFIC,                NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE },
 
   /* Leave this as last member */
   { NDPI_MAX_RISK,                              NDPI_RISK_LOW,    CLIENT_FAIR_RISK_PERCENTAGE }
@@ -1057,11 +1058,11 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_MAIL_SMTP,
 			  "SMTP", NDPI_PROTOCOL_CATEGORY_MAIL,
-			  ndpi_build_default_ports(ports_a, 25, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_a, 25, 587, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 1 /* app proto */, NDPI_PROTOCOL_SAFE, NDPI_PROTOCOL_MAIL_SMTPS,
 			  "SMTPS", NDPI_PROTOCOL_CATEGORY_MAIL,
-			  ndpi_build_default_ports(ports_a, 465, 587, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_a, 465, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_UNSAFE, NDPI_PROTOCOL_MAIL_IMAP,
 			  "IMAP", NDPI_PROTOCOL_CATEGORY_MAIL,
@@ -1091,7 +1092,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_a, 80, 0 /* ntop */, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_subprotocols(ndpi_str, NDPI_PROTOCOL_HTTP,
-			      NDPI_PROTOCOL_AIMINI, NDPI_PROTOCOL_CROSSFIRE,
+			      NDPI_PROTOCOL_AIMINI, NDPI_PROTOCOL_CROSSFIRE, NDPI_PROTOCOL_SOAP,
 			      NDPI_PROTOCOL_BITTORRENT, NDPI_PROTOCOL_DIRECT_DOWNLOAD_LINK, NDPI_PROTOCOL_GNUTELLA,
 			      NDPI_PROTOCOL_MAPLESTORY, NDPI_PROTOCOL_ZATTOO, NDPI_PROTOCOL_WORLDOFWARCRAFT,
 			      NDPI_PROTOCOL_THUNDER, NDPI_PROTOCOL_IRC,
@@ -1141,7 +1142,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_SYSLOG,
 			  "Syslog", NDPI_PROTOCOL_CATEGORY_SYSTEM_OS,
-			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+			  ndpi_build_default_ports(ports_a, 514, 601, 6514, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 514, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_DHCP,
 			  "DHCP", NDPI_PROTOCOL_CATEGORY_NETWORK,
@@ -1383,8 +1384,8 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "STUN", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 3478, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 0 /* nw proto */, NDPI_PROTOCOL_SAFE, NDPI_PROTOCOL_IP_IPSEC,
-			  "IPsec", NDPI_PROTOCOL_CATEGORY_VPN,
+  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 0 /* nw proto */, NDPI_PROTOCOL_SAFE, NDPI_PROTOCOL_IPSEC,
+			  "IPSec", NDPI_PROTOCOL_CATEGORY_VPN,
 			  ndpi_build_default_ports(ports_a, 500, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 500, 4500, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_IP_GRE,
@@ -1651,7 +1652,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "Telegram", NDPI_PROTOCOL_CATEGORY_CHAT,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 1 /* app proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_QUIC,
+  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_QUIC,
 			  "QUIC", NDPI_PROTOCOL_CATEGORY_WEB,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 443, 0, 0, 0, 0) /* UDP */);
@@ -1948,7 +1949,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_Z3950,
-			  "Z39.50", NDPI_PROTOCOL_CATEGORY_NETWORK,
+			  "Z3950", NDPI_PROTOCOL_CATEGORY_NETWORK,
 			  ndpi_build_default_ports(ports_a, 210, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 1 /* app proto */, NDPI_PROTOCOL_FUN, NDPI_PROTOCOL_LIKEE,
@@ -2011,14 +2012,22 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
                           "MpegDash", NDPI_PROTOCOL_CATEGORY_MEDIA,
                           ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  /* 
+     Note: removed RSH port 514 as TCP/514 is often used for syslog and RSH is as such on;y
+     if both source and destination ports are 514. So we removed the default for RSH and used with syslog
+  */
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_UNSAFE, NDPI_PROTOCOL_RSH,
                           "RSH", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
-                          ndpi_build_default_ports(ports_a, 514, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_IP_PIM,
-			  "IP_PIM", NDPI_PROTOCOL_CATEGORY_NETWORK,
-			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
-			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+                          "IP_PIM", NDPI_PROTOCOL_CATEGORY_NETWORK,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_COLLECTD,
+                          "collectd", NDPI_PROTOCOL_CATEGORY_SYSTEM_OS,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_b, 25826, 0, 0, 0, 0) /* UDP */);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -3296,7 +3305,7 @@ u_int16_t ndpi_guess_protocol_id(struct ndpi_detection_module_struct *ndpi_str, 
     switch(proto) {
     case NDPI_IPSEC_PROTOCOL_ESP:
     case NDPI_IPSEC_PROTOCOL_AH:
-      return(NDPI_PROTOCOL_IP_IPSEC);
+      return(NDPI_PROTOCOL_IPSEC);
       break;
     case NDPI_GRE_PROTOCOL_TYPE:
       return(NDPI_PROTOCOL_IP_GRE);
@@ -4568,6 +4577,12 @@ static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
   /* RSH */
   init_rsh_dissector(ndpi_str, &a, detection_bitmask);
 
+  /* IPsec */
+  init_ipsec_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* collectd */
+  init_collectd_dissector(ndpi_str, &a, detection_bitmask);
+
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
 #endif
@@ -5122,6 +5137,29 @@ static int ndpi_init_packet(struct ndpi_detection_module_struct *ndpi_str,
 
 /* ************************************************ */
 
+static u_int8_t ndpi_is_multi_or_broadcast(struct ndpi_packet_struct *packet) {
+
+  if(packet->iph) {
+    /* IPv4 */
+    u_int32_t daddr = ntohl(packet->iph->daddr);
+
+    if(((daddr & 0xE0000000) == 0xE0000000 /* multicast */)
+       || ((daddr & 0x000000FF) == 0x000000FF /* last byte is 0xFF, not super correct, but a good approximation */)
+       || ((daddr & 0x000000FF) == 0x00000000 /* last byte is 0x00, not super correct, but a good approximation */)
+       || (daddr == 0xFFFFFFFF))
+      return(1);
+  } else if(packet->iphv6) {
+    /* IPv6 */
+    
+    if((ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[0]) & 0xFF000000) == 0xFF000000)
+      return(1);
+  }
+
+  return(0);
+}
+
+/* ************************************************ */
+
 void ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
 			      struct ndpi_flow_struct *flow) {
   if(!flow) {
@@ -5162,7 +5200,6 @@ void ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
     }
 
     if(tcph != NULL) {
-
       flow->sport = tcph->source, flow->dport = tcph->dest; /* (*#*) */
 
       if(!ndpi_str->direction_detect_disable)
@@ -5240,6 +5277,18 @@ void ndpi_connection_tracking(struct ndpi_detection_module_struct *ndpi_str,
       flow->packet_direction_counter[packet->packet_direction]++;
     }
 
+    if(ndpi_is_multi_or_broadcast(packet))
+      ; /* multicast or broadcast */
+    else {
+      if(flow->packet_direction_counter[0] == 0)
+	ndpi_set_risk(ndpi_str, flow, NDPI_UNIDIRECTIONAL_TRAFFIC, "No client to server traffic"); /* Should never happen */
+      else if(flow->packet_direction_counter[1] == 0)
+	ndpi_set_risk(ndpi_str, flow, NDPI_UNIDIRECTIONAL_TRAFFIC, "No server to client traffic");
+      else {
+	flow->risk &= ~(1ULL << NDPI_UNIDIRECTIONAL_TRAFFIC); /* Clear bit */
+      }
+    }
+    
     if(flow->byte_counter[packet->packet_direction] + packet->payload_packet_len >
        flow->byte_counter[packet->packet_direction]) {
       flow->byte_counter[packet->packet_direction] += packet->payload_packet_len;

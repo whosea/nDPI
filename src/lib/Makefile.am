@@ -51,6 +51,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/citrix.c \
 		     protocols/cpha.c \
 		     protocols/coap.c \
+		     protocols/collectd.c \
 		     protocols/corba.c \
 		     protocols/crossfire.c \
 		     protocols/csgo.c \
@@ -90,6 +91,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/icecast.c \
 		     protocols/imo.c \
 		     protocols/iec60870-5-104.c \
+		     protocols/ipsec.c \
 		     protocols/ipp.c \
 		     protocols/irc.c \
 		     protocols/jabber.c \
