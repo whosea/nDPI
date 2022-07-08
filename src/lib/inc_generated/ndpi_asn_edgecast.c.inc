@@ -20,6 +20,7 @@
 /* ****************************************************** */
 
 
+#if 0
 static ndpi_network ndpi_protocol_edgecast_protocol_list[] = {
  { 0x05684000 /* 5.104.64.0/24 */, 24, NDPI_PROTOCOL_EDGECAST },
  { 0x05684200 /* 5.104.66.0/23 */, 23, NDPI_PROTOCOL_EDGECAST },
@@ -180,3 +181,4 @@ static ndpi_network ndpi_protocol_edgecast_protocol_list[] = {
  /* End */
  { 0x0, 0, 0 }
 };
+#endif

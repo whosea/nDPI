@@ -1718,6 +1718,7 @@ static ndpi_tls_cert_name_match tls_certificate_match [] = {
 */
 
 #ifndef __KERNEL__
+#ifndef __KERNEL__
 static ndpi_category_match category_match[] = {
    { ".edgecastcdn.net",                 NDPI_PROTOCOL_CATEGORY_MEDIA },
    { ".hwcdn.net",                       NDPI_PROTOCOL_CATEGORY_MEDIA },
@@ -1837,5 +1838,6 @@ static ndpi_category_match category_match[] = {
 
    { NULL, 0 }
 };
+#endif
 #endif
 

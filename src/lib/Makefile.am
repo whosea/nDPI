@@ -136,6 +136,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/raknet.c \
 		     protocols/rdp.c \
 		     protocols/redis_net.c \
+		     protocols/rsh.c \
 		     protocols/rsync.c \
 		     protocols/rtcp.c \
 		     protocols/rtmp.c \
