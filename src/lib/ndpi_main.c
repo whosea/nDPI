@@ -105,6 +105,7 @@
 #include "inc_generated/ndpi_asn_bloomberg.c.inc"
 #include "inc_generated/ndpi_asn_citrix.c.inc"
 #include "inc_generated/ndpi_asn_edgecast.c.inc"
+#include "inc_generated/ndpi_asn_goto.c.inc"
 #endif
 
 #include "inc_generated/ndpi_icloud_private_relay_match.c.inc"
@@ -1997,6 +1998,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
                           "MpegDash", NDPI_PROTOCOL_CATEGORY_MEDIA,
                           ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, NDPI_PROTOCOL_UNSAFE, NDPI_PROTOCOL_RSH,
+                          "RSH", NDPI_PROTOCOL_CATEGORY_REMOTE_ACCESS,
+                          ndpi_build_default_ports(ports_a, 514, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -2649,6 +2654,7 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_bloomberg_protocol_list);
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_citrix_protocol_list);
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_edgecast_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_goto_protocol_list);
     }
 #endif
   }
@@ -4535,6 +4541,9 @@ static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
 
   /* MpegDash */
   init_mpegdash_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* RSH */
+  init_rsh_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"

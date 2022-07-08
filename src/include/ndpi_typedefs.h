@@ -1422,6 +1422,12 @@ struct ndpi_flow_struct {
     } telnet;
 
     struct {
+      char client_username[32];
+      char server_username[32];
+      char command[48];
+    } rsh;
+
+    struct {
       char version[32];
     } ubntac2;
 
