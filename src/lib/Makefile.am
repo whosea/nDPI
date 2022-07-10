@@ -89,6 +89,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/http.c \
 		     protocols/iax.c \
 		     protocols/icecast.c \
+		     protocols/i3d.c \
 		     protocols/imo.c \
 		     protocols/iec60870-5-104.c \
 		     protocols/ipsec.c \
@@ -174,6 +175,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/thunder.c \
 		     protocols/tls.c \
 		     protocols/teredo.c \
+		     protocols/riotgames.c \
 		     protocols/tvuplayer.c \
 		     protocols/tocaboca.c \
 		     protocols/ubntac2.c \

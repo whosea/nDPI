@@ -1469,13 +1469,14 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 	return(0); /* Not found */
 
       ja3->server.num_cipher = 1, ja3->server.cipher[0] = ntohs(*((u_int16_t*)&packet->payload[offset]));
+#ifndef __KERNEL__
       if((flow->protos.tls_quic.server_unsafe_cipher = ndpi_is_safe_ssl_cipher(ja3->server.cipher[0])) == 1) {
 	char str[64];
 
 	snprintf(str, sizeof(str), "Cipher %s", ndpi_cipher2str(ja3->server.cipher[0]));
 	ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_WEAK_CIPHER, str);
       }
-      
+#endif
       flow->protos.tls_quic.server_cipher = ja3->server.cipher[0];
 
 #ifdef DEBUG_TLS

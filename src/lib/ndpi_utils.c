@@ -77,6 +77,7 @@ struct pcre_struct {
 };
 #endif
 
+#ifndef __KERNEL__
 /*
  * Please keep this strcture in sync with
  * `struct ndpi_str_hash` in src/include/ndpi_typedefs.h
@@ -90,7 +91,7 @@ typedef struct ndpi_str_hash_private {
 _Static_assert(sizeof(struct ndpi_str_hash) == sizeof(struct ndpi_str_hash_private) - sizeof(UT_hash_handle),
                "Please keep `struct ndpi_str_hash` and `struct ndpi_str_hash_private` syncd.");
 #endif
-
+#endif
 /* ****************************************** */
 
 /* implementation of the punycode check function */
@@ -2096,7 +2097,7 @@ u_int32_t ndpi_quick_16_byte_hash(u_int8_t *in_16_bytes_long) {
 }
 
 /* ******************************************************************** */
-
+#ifndef __KERNEL__
 int ndpi_hash_init(ndpi_str_hash **h)
 {
   if (h == NULL)
@@ -2171,7 +2172,7 @@ int ndpi_hash_add_entry(ndpi_str_hash **h, char *key, u_int8_t key_len, void *va
   HASH_ADD_INT(*h_priv, hash, new);
   return 0;
 }
-
+#endif
 /* ********************************************************************************* */
 
 static u_int64_t ndpi_host_ip_risk_ptree_match(struct ndpi_detection_module_struct *ndpi_str,

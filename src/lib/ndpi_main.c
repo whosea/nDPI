@@ -7980,10 +7980,11 @@ static u_int16_t ndpi_automa_match_string_subprotocol(struct ndpi_detection_modu
     flow->detected_protocol_stack[1] = master_protocol_id,
     flow->detected_protocol_stack[0] = matching_protocol_id;
     flow->confidence = NDPI_CONFIDENCE_DPI;
+#ifndef __KERNEL__
     if(!category_depends_on_master(master_protocol_id) &&
        flow->category == NDPI_PROTOCOL_CATEGORY_UNSPECIFIED)
       flow->category = ret_match->protocol_category;
-
+#endif
     return(flow->detected_protocol_stack[0]);
   }
 
@@ -8086,8 +8087,10 @@ int ndpi_match_hostname_protocol(struct ndpi_detection_module_struct *ndpi_struc
 
   if(subproto != NDPI_PROTOCOL_UNKNOWN) {
     ndpi_set_detected_protocol(ndpi_struct, flow, subproto, master_protocol, NDPI_CONFIDENCE_DPI);
+#ifndef __KERNEL__
     if(!category_depends_on_master(master_protocol))
       ndpi_int_change_category(ndpi_struct, flow, ret_match.protocol_category);
+#endif
     return(1);
   } else
     return(0);

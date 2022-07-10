@@ -1622,8 +1622,10 @@ static int ndpi_search_quic_extra(struct ndpi_detection_module_struct *ndpi_stru
     /* In "extra_eval" data path, if we change the classification, we need to update the category, too */
     proto.master_protocol = NDPI_PROTOCOL_QUIC;
     proto.app_protocol = NDPI_PROTOCOL_SNAPCHAT_CALL;
+#ifndef __KERNEL__
     proto.category = NDPI_PROTOCOL_CATEGORY_UNSPECIFIED;
     ndpi_fill_protocol_category(ndpi_struct, flow, &proto);
+#endif
   } else {
     /* Unexpected traffic pattern: we should investigate it... */
     NDPI_LOG_INFO(ndpi_struct, "To investigate...\n");
