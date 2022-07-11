@@ -48,13 +48,14 @@
 
 /* #define SMTP_DEBUG 1 */
 
+extern int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
+                           struct ndpi_flow_struct *flow);
+
 static void ndpi_int_mail_smtp_add_connection(struct ndpi_detection_module_struct
 					      *ndpi_struct, struct ndpi_flow_struct *flow) {
 #ifdef SMTP_DEBUG
   printf("**** %s()\n", __FUNCTION__);
 #endif
-
-  flow->guessed_protocol_id = NDPI_PROTOCOL_MAIL_SMTP; /* Avoid SMTPS to be used s sub-protocol */
 
   ndpi_set_detected_protocol(ndpi_struct, flow,
 			     NDPI_PROTOCOL_MAIL_SMTP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
@@ -93,12 +94,16 @@ static void get_credentials_auth_plain(struct ndpi_detection_module_struct *ndpi
       user_len = i - 1;
   }
   if(user_len > 0) {
+    char buf[64];
+    
     user_len = ndpi_min(user_len, sizeof(flow->l4.tcp.ftp_imap_pop_smtp.username) - 1);
 
     memcpy(flow->l4.tcp.ftp_imap_pop_smtp.username, out + 1, user_len);
     flow->l4.tcp.ftp_imap_pop_smtp.username[user_len] = '\0';
 
-    ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS, "Found username");
+    snprintf(buf, sizeof(buf), "Found username (%s)",
+	     flow->l4.tcp.ftp_imap_pop_smtp.username);
+    ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS, buf);
 
     if(1 + user_len + 1 < out_len) {
       unsigned int pwd_len;
@@ -235,7 +240,8 @@ void ndpi_search_mail_smtp_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 		u_int8_t buf[48];
 		u_char *out;
 		size_t out_len;
-
+		char msg[64];
+		  
 		ndpi_user_pwd_payload_copy(buf, sizeof(buf), 0,
 					   packet->line[a].ptr, packet->line[a].len);
 
@@ -254,7 +260,9 @@ void ndpi_search_mail_smtp_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 		  ndpi_free(out);
 		}
 		
-		ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS, "Found username");
+		snprintf(msg, sizeof(msg), "Found SMTP username (%s)",
+			 flow->l4.tcp.ftp_imap_pop_smtp.username);
+		ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS, msg);
 	      } else if(flow->l4.tcp.ftp_imap_pop_smtp.password[0] == '\0') {
 		/* Password */
 		u_int8_t buf[48];
@@ -292,8 +300,8 @@ void ndpi_search_mail_smtp_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 	}
       }
 
-      if(packet->line[a].len >= 8) {
-	if((packet->line[a].ptr[0] == 'S' || packet->line[a].ptr[0] == 's')
+  if(packet->line[a].len >= 8) {
+    if((packet->line[a].ptr[0] == 'S' || packet->line[a].ptr[0] == 's')
 	   && (packet->line[a].ptr[1] == 'T' || packet->line[a].ptr[1] == 't')
 	   && (packet->line[a].ptr[2] == 'A' || packet->line[a].ptr[2] == 'a')
 	   && (packet->line[a].ptr[3] == 'R' || packet->line[a].ptr[3] == 'r')
@@ -303,9 +311,9 @@ void ndpi_search_mail_smtp_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 	   && (packet->line[a].ptr[7] == 'S' || packet->line[a].ptr[7] == 's')) {
 	  flow->l4.tcp.smtp_command_bitmask |= SMTP_BIT_STARTTLS;
 	  flow->l4.tcp.ftp_imap_pop_smtp.auth_tls = 1;
-	  flow->l4.tcp.ftp_imap_pop_smtp.auth_done = 1;
-	}
-      }
+      flow->l4.tcp.ftp_imap_pop_smtp.auth_done = 0;
+    }
+  }
 
       if(packet->line[a].len >= 4) {
 	if((packet->line[a].ptr[0] == 'D' || packet->line[a].ptr[0] == 'd')
@@ -374,12 +382,45 @@ void ndpi_search_mail_smtp_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 /* **************************************** */
 
 int ndpi_extra_search_mail_smtp_tcp(struct ndpi_detection_module_struct *ndpi_struct,
-				    struct ndpi_flow_struct *flow) {
-  int rc;
+				    struct ndpi_flow_struct *flow)
+{
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
+  int rc = 0;
 
-  ndpi_search_mail_smtp_tcp(ndpi_struct, flow);
+  if (flow->l4.tcp.smtp_command_bitmask & SMTP_BIT_STARTTLS &&
+      packet->payload_packet_len > 5)
+  {
+    uint8_t const * const block = &packet->payload[5];
+    uint8_t const * const p = &packet->payload[0];
+    uint16_t const block_len = packet->payload_packet_len - 5;
+    uint16_t const l = packet->payload_packet_len;
 
-  rc = (flow->l4.tcp.ftp_imap_pop_smtp.password[0] == '\0') ? 1 : 0;
+    packet->payload = block;
+    packet->payload_packet_len = block_len;
+
+    if (processTLSBlock(ndpi_struct, flow) != 0) {
+      rc = 1;
+    }
+
+    packet->payload = p;
+    packet->payload_packet_len = l;
+
+    /* STARTTLS may be followed by a 220 - Service ready */
+    if (rc == 0 && memcmp(packet->payload, "220", 3) != 0)
+    {
+      flow->l4.tcp.ftp_imap_pop_smtp.auth_done = 1;
+      if (flow->guessed_host_protocol_id == NDPI_PROTOCOL_UNKNOWN) {
+        ndpi_set_detected_protocol(ndpi_struct, flow,
+                                   NDPI_PROTOCOL_MAIL_SMTPS, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
+      } else {
+        ndpi_set_detected_protocol(ndpi_struct, flow,
+                                   flow->guessed_host_protocol_id, NDPI_PROTOCOL_MAIL_SMTPS, NDPI_CONFIDENCE_DPI);
+      }
+    }
+  } else {
+    ndpi_search_mail_smtp_tcp(ndpi_struct, flow);
+    rc = (flow->l4.tcp.ftp_imap_pop_smtp.password[0] == '\0') ? 1 : 0;
+  }
 
 #ifdef SMTP_DEBUG
   printf("**** %s() [rc: %d]\n", __FUNCTION__, rc);

@@ -140,6 +140,26 @@ typedef enum {
 typedef u_int64_t ndpi_risk; /* (**) */
 
 typedef enum {
+  NDPI_PARAM_HOSTNAME  /* char* */,
+  NDPI_PARAM_ISSUER_DN /* char* */,
+  NDPI_PARAM_HOST_IPV4 /* u_int32_t* */, /* Network byte order */
+
+  /*
+    IMPORTANT
+    please update ndpi_check_flow_risk_exceptions()
+    (in ndpi_utils.c) whenever you add a new parameter
+  */
+  
+  /* Leave this as last member */
+  NDPI_MAX_RISK_PARAM_ID
+} ndpi_risk_param_id;
+  
+typedef struct {
+  ndpi_risk_param_id id;
+  void *value; /* char* for strings, u_int32_t* for IPv4 addresses */
+} ndpi_risk_params;
+
+typedef enum {
   NDPI_RISK_LOW,
   NDPI_RISK_MEDIUM,
   NDPI_RISK_HIGH,
@@ -1483,9 +1503,13 @@ struct ndpi_flow_struct {
   /* NDPI_PROTOCOL_REDIS */
   u_int8_t redis_s2d_first_char, redis_d2s_first_char;
 
+  /* Only packets with L5 data (ie no TCP SYN, pure ACKs, ...) */
   u_int16_t packet_counter;		      // can be 0 - 65000
   u_int16_t packet_direction_counter[2];
-  u_int16_t byte_counter[2];
+
+  /* Every packets */
+  u_int16_t packet_direction_complete_counter[2];      // can be 0 - 65000
+
   /* NDPI_PROTOCOL_BITTORRENT */
   u_int32_t bittorrent_seq;
   u_int8_t bittorrent_stage;		      // can be 0 - 255
@@ -1574,8 +1598,7 @@ typedef struct {
 
 typedef u_int32_t ndpi_init_prefs;
 
-typedef enum
-  {
+typedef enum {
     ndpi_no_prefs                  = 0,
     ndpi_dont_load_tor_list        = (1 << 0),
     ndpi_dont_init_libgcrypt       = (1 << 1),

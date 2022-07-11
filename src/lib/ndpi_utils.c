@@ -2195,6 +2195,65 @@ static u_int64_t ndpi_host_ip_risk_ptree_match(struct ndpi_detection_module_stru
 
 /* ********************************************************************************* */
 
+/* Check isuerDN exception */
+u_int8_t ndpi_check_issuerdn_risk_exception(struct ndpi_detection_module_struct *ndpi_str,
+					    char *issuerDN) {
+  ndpi_list *head = ndpi_str->trusted_issuer_dn;
+
+    while(head != NULL) {
+      if(strcmp(issuerDN, head->value) == 0)
+	return(1); /* This is a trusted DN */
+      else
+	head = head->next;
+  }
+  
+    return(0 /* no exception */);
+}
+
+/* ********************************************************************************* */
+
+/* Check host exception */
+static u_int8_t ndpi_check_hostname_risk_exception(struct ndpi_detection_module_struct *ndpi_str,
+						   struct ndpi_flow_struct *flow,
+						   char *hostname) {
+  ndpi_automa *automa = &ndpi_str->host_risk_mask_automa;
+  u_int8_t ret = 0;
+  
+  if(automa->ac_automa) {
+    AC_TEXT_t ac_input_text;
+    AC_REP_t match;
+    
+    ac_input_text.astring = hostname, ac_input_text.length = strlen(hostname);
+    ac_input_text.option = 0;
+    
+    if(ac_automata_search(automa->ac_automa, &ac_input_text, &match) > 0) {
+      if(flow) flow->risk_mask &= match.number64;
+      ret = 1;
+    }
+  }
+  
+  return(ret);
+}
+
+/* ********************************************************************************* */
+
+/* Check host exception */
+static u_int8_t ndpi_check_ipv4_exception(struct ndpi_detection_module_struct *ndpi_str,
+					  struct ndpi_flow_struct *flow,
+					  u_int32_t addr) {
+  struct in_addr pin;
+  u_int64_t r;
+  
+  pin.s_addr = addr;
+  r = ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
+  
+  if(flow) flow->risk_mask &= r;
+  
+  return((r != (u_int64_t)-1) ? 1 : 0);
+}
+
+  /* ********************************************************************************* */
+
 static void ndpi_handle_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str,
 					struct ndpi_flow_struct *flow) {
   char *host;
@@ -2210,19 +2269,8 @@ static void ndpi_handle_risk_exceptions(struct ndpi_detection_module_struct *ndp
   if(!flow->host_risk_mask_evaluated) {
     if(host && (host[0] != '\0')) {
       /* Check host exception */
-      ndpi_automa *automa = &ndpi_str->host_risk_mask_automa;
-
-      if(automa->ac_automa) {
-	AC_TEXT_t ac_input_text;
-	AC_REP_t match;
-
-	ac_input_text.astring = host, ac_input_text.length = strlen(host);
-	ac_input_text.option = 0;
-
-	if(ac_automata_search(automa->ac_automa, &ac_input_text, &match) > 0)
-	   flow->risk_mask &= match.number64;
-      }
-
+      ndpi_check_hostname_risk_exception(ndpi_str, flow, host);
+      
       /* Used to avoid double checks (e.g. in DNS req/rsp) */
       flow->host_risk_mask_evaluated = 1;
     }
@@ -2231,13 +2279,8 @@ static void ndpi_handle_risk_exceptions(struct ndpi_detection_module_struct *ndp
   /* TODO: add IPv6 support */
   if(!flow->ip_risk_mask_evaluated) {
     if(flow->is_ipv6 == 0) {
-      struct in_addr pin;
-
-      pin.s_addr = flow->saddr;
-      flow->risk_mask &= ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
-
-      pin.s_addr = flow->daddr;
-      flow->risk_mask &= ndpi_host_ip_risk_ptree_match(ndpi_str, &pin);
+      ndpi_check_ipv4_exception(ndpi_str, flow, flow->saddr /* Source */);
+      ndpi_check_ipv4_exception(ndpi_str, flow, flow->daddr /* Destination */);
     }
 
     flow->ip_risk_mask_evaluated = 1;
@@ -2269,6 +2312,33 @@ void ndpi_set_risk(struct ndpi_detection_module_struct *ndpi_str,
 	  flow->risk_infos[flow->num_risk_infos].info = s;
 	  flow->num_risk_infos++;
 	}
+      }
+    }
+  }
+}
+
+/* ******************************************************************** */
+
+void ndpi_unset_risk(struct ndpi_detection_module_struct *ndpi_str,
+		     struct ndpi_flow_struct *flow, ndpi_risk_enum r) {
+  if(ndpi_isset_risk(ndpi_str, flow, r)) {
+    u_int8_t i, j;
+    ndpi_risk v = 1ull << r;
+
+    flow->risk &= ~v;
+
+    for(i = 0; i < flow->num_risk_infos; i++) {
+      if(flow->risk_infos[i].id == r) {
+        flow->risk_infos[i].id = 0;
+        if(flow->risk_infos[i].info) {
+          ndpi_free(flow->risk_infos[i].info);
+          flow->risk_infos[i].info = NULL;
+        }
+        for(j = i + 1; j < flow->num_risk_infos; j++) {
+          flow->risk_infos[j - 1].id = flow->risk_infos[j].id;
+          flow->risk_infos[j - 1].info = flow->risk_infos[j].info;
+        }
+        flow->num_risk_infos--;
       }
     }
   }
@@ -2607,5 +2677,50 @@ char* ndpi_get_flow_risk_info(struct ndpi_flow_struct *flow,
   
     return(out[0] == '\0' ? NULL : out);
   }
+}
+
+/* ******************************************* */
+/*
+  This function checks if a flow having the specified risk
+  parameters is an exception (i.e. the flow risk should not 
+  be triggered) or not.
+
+  You can use this function to check if a flow that
+  as a flow risk will match an exception or not.
+*/
+u_int8_t ndpi_check_flow_risk_exceptions(struct ndpi_detection_module_struct *ndpi_str,
+					 u_int num_params,
+					 ndpi_risk_params params[]) {
+  u_int i;
+
+  for(i=0; i<num_params; i++) {
+    switch(params[i].id) {
+    case NDPI_PARAM_HOSTNAME:
+      if(ndpi_check_hostname_risk_exception(ndpi_str, NULL, (char*)params[i].value))
+	return(1);
+      break;
+      
+    case NDPI_PARAM_ISSUER_DN:
+      if(ndpi_check_issuerdn_risk_exception(ndpi_str, (char*)params[i].value))
+	return(1);
+      break;
+
+    case NDPI_PARAM_HOST_IPV4:
+      if(ndpi_check_ipv4_exception(ndpi_str, NULL, *((u_int32_t*)params[i].value)))
+	return(1);
+      break;
+
+    case NDPI_MAX_RISK_PARAM_ID:
+      /* Nothing to do, just avoid warnings */
+      break;
+
+    default:
+      printf("nDPI [%s:%u] Ignored risk parameter id %u\n",
+	     __FILE__, __LINE__, params[i].id);
+      break;
+    }
+  }
+  
+  return(0);
 }
 #endif

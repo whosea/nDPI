@@ -27,6 +27,31 @@
 #include "ndpi_sha1.h"
 #include "ndpi_encryption.h"
 
+extern char *strptime(const char *s, const char *format, struct tm *tm);
+extern int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
+                           struct ndpi_flow_struct *flow);
+extern int processClientServerHello(struct ndpi_detection_module_struct *ndpi_struct,
+				    struct ndpi_flow_struct *flow, uint32_t quic_version);
+extern int http_process_user_agent(struct ndpi_detection_module_struct *ndpi_struct,
+                                   struct ndpi_flow_struct *flow,
+                                   const u_int8_t *ua_ptr, u_int16_t ua_ptr_len);
+/* QUIC/GQUIC stuff */
+extern int quic_len(const uint8_t *buf, uint64_t *value);
+extern int quic_len_buffer_still_required(uint8_t value);
+extern int is_version_with_var_int_transport_params(uint32_t version);
+
+// #define DEBUG_TLS_MEMORY       1
+// #define DEBUG_TLS              1
+// #define DEBUG_TLS_BLOCKS       1
+// #define DEBUG_CERTIFICATE_HASH
+
+// #define DEBUG_HEURISTIC
+
+// #define DEBUG_JA3C 1
+
+/* #define DEBUG_FINGERPRINT      1 */
+/* #define DEBUG_ENCRYPTED_SNI    1 */
+
 /* **************************************** */
 
 /* https://engineering.salesforce.com/tls-fingerprinting-with-ja3-and-ja3s-247362855967 */
@@ -732,24 +757,13 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
   if(flow->protos.tls_quic.subjectDN && flow->protos.tls_quic.issuerDN
      && (!strcmp(flow->protos.tls_quic.subjectDN, flow->protos.tls_quic.issuerDN))) {
     /* Last resort: we check if this is a trusted issuerDN */
-    ndpi_list *head = ndpi_struct->trusted_issuer_dn;
-
-    while(head != NULL) {
-#ifdef DEBUG_TLS
-      printf("TLS] %s() issuerDN %s / %s\n", __FUNCTION__,
-	     flow->protos.tls_quic.issuerDN, head->value);
-#endif
-
-      if(strcmp(flow->protos.tls_quic.issuerDN, head->value) == 0)
-	return; /* This is a trusted DN */
-      else
-	head = head->next;
-    }
-
+    if(ndpi_check_issuerdn_risk_exception(ndpi_struct, flow->protos.tls_quic.issuerDN))
+      return; /* This is a trusted DN */
+    
     ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_SELFSIGNED_CERTIFICATE, flow->protos.tls_quic.subjectDN);
   }
-
-#ifdef DEBUG_TLS
+  
+#if DEBUG_TLS
   printf("[TLS] %s() SubjectDN [%s]\n", __FUNCTION__, rdnSeqBuf);
 #endif
 }
@@ -885,8 +899,8 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
 
 /* **************************************** */
 
-static int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
-			   struct ndpi_flow_struct *flow) {
+int processTLSBlock(struct ndpi_detection_module_struct *ndpi_struct,
+                    struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   int ret;
 
