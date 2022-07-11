@@ -106,6 +106,8 @@
 #include "inc_generated/ndpi_asn_citrix.c.inc"
 #include "inc_generated/ndpi_asn_edgecast.c.inc"
 #include "inc_generated/ndpi_asn_goto.c.inc"
+#include "inc_generated/ndpi_asn_riotgames.c.inc"
+#include "inc_generated/ndpi_asn_threema.c.inc"
 #endif
 
 #include "inc_generated/ndpi_icloud_private_relay_match.c.inc"
@@ -2043,6 +2045,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
                           "UltraSurf", NDPI_PROTOCOL_CATEGORY_VPN,
                           ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_THREEMA,
+                          "Threema", NDPI_PROTOCOL_CATEGORY_CHAT,
+                          ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+                          ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main.c"
@@ -2696,6 +2702,8 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_citrix_protocol_list);
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_edgecast_protocol_list);
       ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_goto_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_riotgames_protocol_list);
+      ndpi_init_ptree_ipv4(ndpi_str, ndpi_str->protocols_ptree, ndpi_protocol_threema_protocol_list);
     }
 #endif
   }
@@ -3152,13 +3160,13 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_str) {
     if(ndpi_str->tls_cert_subject_automa.ac_automa != NULL)
       ac_automata_release((AC_AUTOMATA_t *) ndpi_str->tls_cert_subject_automa.ac_automa,
 		          1 /* free patterns strings memory */);
-
+#ifndef __KERNEL__
     if(ndpi_str->malicious_ja3_hashmap != NULL)
       ndpi_hash_free(&ndpi_str->malicious_ja3_hashmap, NULL);
 
     if(ndpi_str->malicious_sha1_hashmap != NULL)
       ndpi_hash_free(&ndpi_str->malicious_sha1_hashmap, NULL);
-
+#endif
     if(ndpi_str->custom_categories.hostnames.ac_automa != NULL)
       ac_automata_release((AC_AUTOMATA_t*)ndpi_str->custom_categories.hostnames.ac_automa,
 		          1 /* free patterns strings memory */);
@@ -4574,6 +4582,9 @@ static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
 
   /* UltraSurf */
   init_ultrasurf_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* Threema */
+  init_threema_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"
@@ -6276,8 +6287,10 @@ ndpi_protocol ndpi_detection_process_packet(struct ndpi_detection_module_struct 
     return(ret);
   }
 
-  if(ndpi_str->max_packets_to_process > 0 && flow->num_processed_pkts >= ndpi_str->max_packets_to_process)
+  if(ndpi_str->max_packets_to_process > 0 && flow->num_processed_pkts >= ndpi_str->max_packets_to_process) {
+    flow->extra_packets_func = NULL; /* To allow ndpi_extra_dissection_possible() to fail */
     return(ret); /* Avoid spending too much time with this flow */
+  }
 
   flow->num_processed_pkts++;
 
@@ -8264,6 +8277,9 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
 	 proto);
 #endif
 
+  if(!flow->extra_packets_func)
+    return(0);
+
   switch(proto) {
   case NDPI_PROTOCOL_TLS:
   case NDPI_PROTOCOL_DTLS:
@@ -8312,19 +8328,10 @@ u_int8_t ndpi_extra_dissection_possible(struct ndpi_detection_module_struct *ndp
     break;
 
   case NDPI_PROTOCOL_SKYPE_TEAMS:
-    if(flow->extra_packets_func)
-      return(1);
-    break;
-
   case NDPI_PROTOCOL_QUIC:
-    if(flow->extra_packets_func)
-      return(1);
-    break;
-
   case NDPI_PROTOCOL_KERBEROS:
   case NDPI_PROTOCOL_SNMP:
-    if(flow->extra_packets_func)
-      return(1);
+    return(1);
     break;
 
   case NDPI_PROTOCOL_BITTORRENT:

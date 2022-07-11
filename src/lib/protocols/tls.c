@@ -763,7 +763,7 @@ static void processCertificateElements(struct ndpi_detection_module_struct *ndpi
     ndpi_set_risk(ndpi_struct, flow, NDPI_TLS_SELFSIGNED_CERTIFICATE, flow->protos.tls_quic.subjectDN);
   }
   
-#if DEBUG_TLS
+#ifdef DEBUG_TLS
   printf("[TLS] %s() SubjectDN [%s]\n", __FUNCTION__, rdnSeqBuf);
 #endif
 }
@@ -870,13 +870,14 @@ int processCertificate(struct ndpi_detection_module_struct *ndpi_struct,
 #ifdef DEBUG_TLS
       printf("[TLS] SHA-1: %s\n", sha1_str);
 #endif
-
+#ifndef __KERNEL__
       if(ndpi_struct->malicious_sha1_hashmap != NULL) {
         u_int16_t rc1 = ndpi_hash_find_entry(ndpi_struct->malicious_sha1_hashmap, sha1_str, sha1_siz * 2, NULL);
 
         if(rc1 == 0)
           ndpi_set_risk(ndpi_struct, flow, NDPI_MALICIOUS_SHA1_CERTIFICATE, sha1_str);
       }
+#endif
 
       processCertificateElements(ndpi_struct, flow, certificates_offset, certificate_len);
       }
@@ -976,6 +977,14 @@ static int ndpi_search_tls_tcp(struct ndpi_detection_module_struct *ndpi_struct,
     return(1); /* Keep working */
 
   ndpi_search_tls_tcp_memory(ndpi_struct, flow);
+
+  /* Valid TLS Content Types:
+     https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-5 */
+  if(!(flow->l4.tcp.tls.message.buffer[0] >= 20 &&
+       flow->l4.tcp.tls.message.buffer[0] <= 26)) {
+    NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+    something_went_wrong = 1;
+  }
 
   while(!something_went_wrong) {
     u_int16_t len, p_len;
@@ -2442,7 +2451,7 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 #ifdef DEBUG_JA3C
 	      printf("[JA3] Client: %s \n", flow->protos.tls_quic.ja3_client);
 #endif
-
+#ifndef __KERNEL__
 	      if(ndpi_struct->malicious_ja3_hashmap != NULL) {
 	        u_int16_t rc1 = ndpi_hash_find_entry(ndpi_struct->malicious_ja3_hashmap,
 	                                             flow->protos.tls_quic.ja3_client,
@@ -2452,6 +2461,7 @@ static int _processClientServerHello(struct ndpi_detection_module_struct *ndpi_s
 	      if(rc1 == 0)
 	        ndpi_set_risk(ndpi_struct, flow, NDPI_MALICIOUS_JA3, flow->protos.tls_quic.ja3_client);
 	      }
+#endif
 	    }
 
 	    /* Before returning to the caller we need to make a final check */
