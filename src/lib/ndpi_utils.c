@@ -2146,7 +2146,10 @@ int ndpi_hash_find_entry(ndpi_str_hash *h, char *key, u_int key_len, void **valu
   HASH_FIND_INT(h_priv, &hash_value, found);
   if (found != NULL)
   {
-    *value = found->value;
+    if (value != NULL)
+    {
+      *value = found->value;
+    }
     return 0;
   } else {
     return 1;

@@ -1716,7 +1716,7 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
 			  "NOE", NDPI_PROTOCOL_CATEGORY_VOIP,
 			  ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
-  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 1 /* app proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_CISCOVPN,
+  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_CISCOVPN,
 			  "CiscoVPN", NDPI_PROTOCOL_CATEGORY_VPN,
 			  ndpi_build_default_ports(ports_a, 10000, 8008, 8009, 0, 0) /* TCP */,
 			  ndpi_build_default_ports(ports_b, 10000, 0, 0, 0, 0) /* UDP */);
@@ -2034,6 +2034,10 @@ static void ndpi_init_protocol_defaults(struct ndpi_detection_module_struct *ndp
                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
   ndpi_set_proto_defaults(ndpi_str, 1 /* cleartext */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_RIOTGAMES,
                           "RiotGames", NDPI_PROTOCOL_CATEGORY_GAME,
+                           ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
+                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
+  ndpi_set_proto_defaults(ndpi_str, 0 /* encrypted */, 0 /* nw proto */, NDPI_PROTOCOL_ACCEPTABLE, NDPI_PROTOCOL_ULTRASURF,
+                          "UltraSurf", NDPI_PROTOCOL_CATEGORY_VPN,
                           ndpi_build_default_ports(ports_a, 0, 0, 0, 0, 0) /* TCP */,
                           ndpi_build_default_ports(ports_b, 0, 0, 0, 0, 0) /* UDP */);
 
@@ -2723,8 +2727,8 @@ struct ndpi_detection_module_struct *ndpi_init_detection_module(ndpi_init_prefs 
   ndpi_str->common_alpns_automa.ac_automa = ac_automata_init(ac_domain_match_handler);
   load_common_alpns(ndpi_str);
   ndpi_str->tls_cert_subject_automa.ac_automa = ac_automata_init(NULL);
-  ndpi_str->malicious_ja3_automa.ac_automa = NULL; /* Initialized on demand */
-  ndpi_str->malicious_sha1_automa.ac_automa = NULL; /* Initialized on demand */
+  ndpi_str->malicious_ja3_hashmap = NULL; /* Initialized on demand */
+  ndpi_str->malicious_sha1_hashmap = NULL; /* Initialized on demand */
   ndpi_str->risky_domain_automa.ac_automa = NULL; /* Initialized on demand */
   ndpi_str->trusted_issuer_dn = NULL;
 
@@ -2809,8 +2813,8 @@ static void *ac_automa_list[7];
 void **ndpi_get_automata(struct ndpi_detection_module_struct *ndpi_str) {
   ac_automa_list[0] = ndpi_str->host_automa.ac_automa;
   ac_automa_list[1] = ndpi_str->tls_cert_subject_automa.ac_automa;
-  ac_automa_list[2] = ndpi_str->malicious_ja3_automa.ac_automa;
-  ac_automa_list[3] = ndpi_str->malicious_sha1_automa.ac_automa;
+  ac_automa_list[2] = NULL;
+  ac_automa_list[3] = NULL;
   ac_automa_list[4] = ndpi_str->risky_domain_automa.ac_automa;
   ac_automa_list[5] = (void *)1;
   return ac_automa_list;
@@ -2868,52 +2872,19 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
 
   if(ndpi_str->ac_automa_finalized) return;
 
-  for(i = 0; i < 99; i++) {
-    ndpi_automa *automa;
-/*
-  ndpi_str->host_automa.ac_automa = ac_automata_init();
-  ndpi_str->bigrams_automa.ac_automa = ac_automata_init();
-  ndpi_str->impossible_bigrams_automa.ac_automa = ac_automata_init();
-  ndpi_str->trigrams_automa.ac_automa = ac_automata_init();
-  ndpi_str->tls_cert_subject_automa.ac_automa = ac_automata_init();
- */
-    switch(i) {
-    case 0:
-      automa = &ndpi_str->host_automa;
-      break;
+  ndpi_automa * const automa[] = { &ndpi_str->host_automa,
+                                   &ndpi_str->tls_cert_subject_automa,
+                                   &ndpi_str->host_risk_mask_automa,
+                                   &ndpi_str->common_alpns_automa };
 
-    case 1:
-      automa = &ndpi_str->tls_cert_subject_automa;
-      break;
+  for(i = 0; i < NDPI_ARRAY_LENGTH(automa); ++i) {
+    ndpi_automa *a = automa[i];
 
-    case 2:
-      automa = &ndpi_str->malicious_ja3_automa;
-      break;
-
-    case 3:
-      automa = &ndpi_str->malicious_sha1_automa;
-      break;
-
-    case 4:
-      automa = &ndpi_str->host_risk_mask_automa;
-      break;
-
-    case 5:
-      automa = &ndpi_str->common_alpns_automa;
-      break;
-
-    case 6:
-      automa = &ndpi_str->risky_domain_automa;
-      break;
-
-    default:
-      ndpi_str->ac_automa_finalized = 1;
-      return;
-    }
-
-    if(automa && automa->ac_automa)
-      ac_automata_finalize((AC_AUTOMATA_t *) automa->ac_automa);
+    if(a && a->ac_automa)
+      ac_automata_finalize((AC_AUTOMATA_t *) a->ac_automa);
   }
+
+  ndpi_str->ac_automa_finalized = 1;
 }
 
 /* *********************************************** */
@@ -3178,13 +3149,11 @@ void ndpi_exit_detection_module(struct ndpi_detection_module_struct *ndpi_str) {
       ac_automata_release((AC_AUTOMATA_t *) ndpi_str->tls_cert_subject_automa.ac_automa,
 		          1 /* free patterns strings memory */);
 
-    if(ndpi_str->malicious_ja3_automa.ac_automa != NULL)
-      ac_automata_release((AC_AUTOMATA_t *) ndpi_str->malicious_ja3_automa.ac_automa,
-		          1 /* free patterns strings memory */);
+    if(ndpi_str->malicious_ja3_hashmap != NULL)
+      ndpi_hash_free(&ndpi_str->malicious_ja3_hashmap, NULL);
 
-    if(ndpi_str->malicious_sha1_automa.ac_automa != NULL)
-      ac_automata_release((AC_AUTOMATA_t *) ndpi_str->malicious_sha1_automa.ac_automa,
-			  1 /* free patterns strings memory */);
+    if(ndpi_str->malicious_sha1_hashmap != NULL)
+      ndpi_hash_free(&ndpi_str->malicious_sha1_hashmap, NULL);
 
     if(ndpi_str->custom_categories.hostnames.ac_automa != NULL)
       ac_automata_release((AC_AUTOMATA_t*)ndpi_str->custom_categories.hostnames.ac_automa,
@@ -3814,10 +3783,8 @@ int ndpi_load_malicious_ja3_file(struct ndpi_detection_module_struct *ndpi_str, 
   FILE *fd;
   int len, num = 0;
 
-  if(ndpi_str->malicious_ja3_automa.ac_automa == NULL)
-     ndpi_str->malicious_ja3_automa.ac_automa = ac_automata_init(NULL);
-  if(ndpi_str->malicious_ja3_automa.ac_automa)
-    ac_automata_name(ndpi_str->malicious_ja3_automa.ac_automa,"ja3",0);
+  if(ndpi_str->malicious_ja3_hashmap == NULL && ndpi_hash_init(&ndpi_str->malicious_ja3_hashmap) != 0)
+    return(-1);
 
   fd = fopen(path, "r");
 
@@ -3844,7 +3811,14 @@ int ndpi_load_malicious_ja3_file(struct ndpi_detection_module_struct *ndpi_str, 
     if((comma = strchr(line, ',')) != NULL)
       comma[0] = '\0';
 
-    if(ndpi_add_string_to_automa(ndpi_str->malicious_ja3_automa.ac_automa, line) >= 0)
+    len = strlen(line);
+
+    if(len != 32 /* size of MD5 hash */) {
+      NDPI_LOG_ERR(ndpi_str, "Not a JA3 md5 hash: [%s]\n", line);
+      continue;
+    }
+
+    if(ndpi_hash_add_entry(&ndpi_str->malicious_ja3_hashmap, line, len, NULL) == 0)
       num++;
   }
 
@@ -3870,10 +3844,8 @@ int ndpi_load_malicious_sha1_file(struct ndpi_detection_module_struct *ndpi_str,
   size_t i, len;
   int num = 0;
 
-  if (ndpi_str->malicious_sha1_automa.ac_automa == NULL)
-    ndpi_str->malicious_sha1_automa.ac_automa = ac_automata_init(NULL);
-  if(ndpi_str->malicious_sha1_automa.ac_automa)
-    ac_automata_name(ndpi_str->malicious_sha1_automa.ac_automa,"sha1",0);
+  if (ndpi_str->malicious_sha1_hashmap == NULL && ndpi_hash_init(&ndpi_str->malicious_sha1_hashmap) != 0)
+    return(-1);
 
   fd = fopen(path, "r");
 
@@ -3898,14 +3870,16 @@ int ndpi_load_malicious_sha1_file(struct ndpi_detection_module_struct *ndpi_str,
       second_comma = &buffer[len - 1];
     }
 
-    if ((second_comma - first_comma) != 40)
-      continue;
     second_comma[0] = '\0';
+    if ((second_comma - first_comma) != 40) {
+      NDPI_LOG_ERR(ndpi_str, "Not a SSL certificate sha1 hash: [%s]\n", first_comma);
+      continue;
+    }
 
     for (i = 0; i < 40; ++i)
       first_comma[i] = toupper(first_comma[i]);
 
-    if (ndpi_add_string_to_automa(ndpi_str->malicious_sha1_automa.ac_automa, first_comma) >= 0)
+    if(ndpi_hash_add_entry(&ndpi_str->malicious_sha1_hashmap, first_comma, second_comma - first_comma, NULL) == 0)
       num++;
   }
 
@@ -4593,6 +4567,9 @@ static int ndpi_callback_init(struct ndpi_detection_module_struct *ndpi_str) {
 
   /* RiotGames */
   init_riotgames_dissector(ndpi_str, &a, detection_bitmask);
+
+  /* UltraSurf */
+  init_ultrasurf_dissector(ndpi_str, &a, detection_bitmask);
 
 #ifdef CUSTOM_NDPI_PROTOCOLS
 #include "../../../nDPI-custom/custom_ndpi_main_init.c"

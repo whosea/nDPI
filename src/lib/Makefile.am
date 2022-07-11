@@ -179,6 +179,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/tvuplayer.c \
 		     protocols/tocaboca.c \
 		     protocols/ubntac2.c \
+		     protocols/ultrasurf.c \
 		     protocols/usenet.c \
 		     protocols/viber.c \
 		     protocols/vhua.c \
