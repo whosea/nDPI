@@ -101,16 +101,15 @@ static void ndpi_mt_init(struct xt_entry_match *match)
 	struct xt_ndpi_mtinfo *info = (void *)match->data;
 	NDPI_BITMASK_RESET(info->flags);
 }
+static char *_clevel2str[] = {
+ "unknown", "port", "ip", "user",
+ "dpart",  "dcpart", "dcache", "dpi" };
+static int clevelnc[] = { 2, 1, 1, 2, 3, 3, 3, 3 };
+
+#define clevel2num (sizeof(_clevel2str)/sizeof(_clevel2str[0]))
+
 static const char *clevel2str(int l) {
-	switch(l) {
-	  case 0: return "unknown";
-	  case 1: return "port";
-	  case 2: return "ip";
-	  case 3: return "user";
-	  case 4: return "cache";
-	  case 5: return "dpi";
-	}
-	return "?";
+	return (l > 0 && l < clevel2num) ? _clevel2str[l] : "?";
 }
 static const char *clevel_op2str(int l) {
 	switch(l) {
@@ -123,11 +122,13 @@ static int str2clevel(const char *s) {
 	int i;
 	char *e;
 
-	for(i=1; i <= 5; i++)
-	    if(!strcasecmp(clevel2str(i),s)) return i;
+	for(i=0; i < clevel2num; i++)
+	    if(!strcasecmp(_clevel2str[i],s)) return i;
+	for(i=0; i < clevel2num; i++)
+	    if(!strncasecmp(_clevel2str[i],s,clevelnc[i])) return i;
 	i = strtol(s,&e,0);
 	if(*e) return 0;
-	return i < 0 || i > 5 ? 0 : i;
+	return i < 0 || i > 7 ? 0 : i;
 }
 static void 
 _ndpi_mt4_save(const void *entry, const struct xt_entry_match *match,int save)
