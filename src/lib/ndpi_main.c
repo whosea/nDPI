@@ -2875,6 +2875,7 @@ void ndpi_finalize_initialization(struct ndpi_detection_module_struct *ndpi_str)
   ndpi_automa * const automa[] = { &ndpi_str->host_automa,
                                    &ndpi_str->tls_cert_subject_automa,
                                    &ndpi_str->host_risk_mask_automa,
+                                   &ndpi_str->risky_domain_automa,
                                    &ndpi_str->common_alpns_automa };
 
   for(i = 0; i < NDPI_ARRAY_LENGTH(automa); ++i) {
