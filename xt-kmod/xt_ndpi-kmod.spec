@@ -3,7 +3,7 @@
 %define ndpi_git_ver flow_info-4
 
 # If kversion isn't defined on the rpmbuild line, define it here.
-#%{!?kversion: %define kversion 3.10.0-1160.42.2.el7.%{_target_cpu}}
+# %{!?kversion: %define kversion 3.10.0-1160.42.2.el7.%{_target_cpu}}
 %{!?kversion: %define kversion 3.10.0-1160.el7.%{_target_cpu}}
 
 Name:    %{kmod_name}-kmod
@@ -17,10 +17,12 @@ URL:     http://www.kernel.org/
 #sudo apt-get install build-essential bison flex libpcap-dev libtool-bin autoconf pkg-config libjson-c-dev libnuma-dev libgcrypt20-dev libpcre2-dev
 
 BuildRequires: redhat-rpm-config, perl, kernel-devel, gcc, iptables-devel, libpcap-devel, autogen, autoconf, automake, libtool, flex, bison
-BuildRequires: kernel = 3.10.0-1160.el7, kernel-devel = 3.10.0-1160.el7
+BuildRequires: %kernel_module_package_buildreqs
+# BuildRequires: kernel = 3.10.0-1160.el7, kernel-devel = 3.10.0-1160.el7
 Requires: kernel >= 3.10.0-1160
-#BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
-#Requires: kernel >= 3.10.0-1160.42.2
+
+# BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
+# Requires: kernel >= 3.10.0-1160.42.2
 ExclusiveArch: x86_64
 
 # Sources.
