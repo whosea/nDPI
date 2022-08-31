@@ -54,8 +54,11 @@ of the same variant of the Linux kernel and not on any one specific build.
 ./autogen.sh
 ( cd src/lib ; make ndpi_network_list.c.inc )
 cd ndpi-netfilter
-sed -e '/^MODULES_DIR/d' -e '/^KERNEL_DIR/d' -i src/Makefile
-MODULES_DIR=/lib/modules/%{kversion} KERNEL_DIR=$MODULES_DIR/build/ make
+# sed -e '/^MODULES_DIR/d' -e '/^KERNEL_DIR/d' -i src/Makefile
+MODULES_DIR=/lib/modules/$(shell uname -r) KERNEL_DIR=$MODULES_DIR/build/ make
+# MODULES_DIR := /lib/modules/$(shell uname -r)
+# KERNEL_DIR := ${MODULES_DIR}/build
+
 echo "override %{kmod_name} * weak-updates/%{kmod_name}" > kmod-%{kmod_name}.conf
 
 %build
@@ -69,6 +72,7 @@ echo "conf name: kmod-%{kmod_name}.conf"
 echo "source new path: %{buildroot}%{_defaultdocdir}/kmod-%{kmod_name}-%{version}/"
 echo "source path: %{SOURCE5}"
 echo "strip: %{__strip}"
+
 
 
 #创建xtables目录，位于~/rpmbuild/BUILDROOT/
@@ -85,7 +89,9 @@ touch kmod-%{kmod_name}.conf
 
 # Strip the modules(s).
 #找出buildroot下文件类型是ko的，执行安装脚本
+echo "find start"
 find %{buildroot} -type f -name \*.ko -exec %{__strip} --strip-debug \{\} \;
+echo "find end"
 
 # Sign the modules(s).
 %if %{?_with_modsign:1}%{!?_with_modsign:0}
@@ -98,8 +104,10 @@ do %{__perl} /usr/src/kernels/%{kversion}/scripts/sign-file \
 done
 %endif
 
+echo "clean start"
 %clean
 %{__rm} -rf %{buildroot}
+echo "clean end"
 
 %changelog
 * Fri Nov 20 2020 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.8.2-1

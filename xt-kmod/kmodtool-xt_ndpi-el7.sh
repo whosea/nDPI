@@ -201,7 +201,7 @@ EOF
 
 cat <<EOF
 %postun        -n kmod-${kmod_name}${dashvariant}
-echo "Working. This may take some time ..."
+echo "Working. This may take some time ..."00
 echo "kmod name: kmod-${kmod_name}${dashvariant}"
 
 if [ -e "/boot/System.map-${verrel}${dotvariant}" ]; then
