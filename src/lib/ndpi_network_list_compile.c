@@ -424,7 +424,7 @@ int main(int argc,char **argv) {
   }
   ofd = fd ? fd:stdout;
 
-  fprintf(ofd,"/*\n\n\tDon't edit this file!\n\n\tsource file: %s\n\n */\n\n",infile);
+  fprintf(ofd,"/*\n\n\tDon't edit this file!\n\n\tchange *.yaml files\n\n */\n\n");
   fprintf(ofd,"ndpi_network host_protocol_list[] = {\n");
 
   for(i=0; i <= NDPI_LAST_IMPLEMENTED_PROTOCOL; i++) {

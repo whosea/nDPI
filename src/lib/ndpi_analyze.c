@@ -1,7 +1,7 @@
 /*
  * ndpi_analyze.c
  *
- * Copyright (C) 2019-21 - ntop.org
+ * Copyright (C) 2019-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library.
@@ -20,10 +20,6 @@
  * along with nDPI.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-
-#ifdef HAVE_CONFIG_H
-#include "ndpi_config.h"
-#endif
 
 #include <stdlib.h>
 #include <errno.h>
@@ -157,6 +153,16 @@ float ndpi_data_variance(struct ndpi_analyze_struct *s) {
 /* Compute the standard deviation on all values */
 float ndpi_data_stddev(struct ndpi_analyze_struct *s) {
   return(sqrt(ndpi_data_variance(s)));
+}
+
+/* ********************************************************************************* */
+
+/* 
+   Compute the mean on all values 
+   NOTE: In statistics, there is no difference between the mean and average
+*/
+float ndpi_data_mean(struct ndpi_analyze_struct *s) {
+  return(ndpi_data_average(s));
 }
 
 /* ********************************************************************************* */
@@ -299,7 +305,7 @@ double ndpi_hll_count(struct ndpi_hll *hll) {
 /* ********************************************************************************* */
 /* ********************************************************************************* */
 
-int ndpi_init_bin(struct ndpi_bin *b, enum ndpi_bin_family f, u_int8_t num_bins) {
+int ndpi_init_bin(struct ndpi_bin *b, enum ndpi_bin_family f, u_int16_t num_bins) {
   b->num_bins = num_bins, b->family = f, b->is_empty = 1;
 
   switch(f) {
@@ -315,6 +321,11 @@ int ndpi_init_bin(struct ndpi_bin *b, enum ndpi_bin_family f, u_int8_t num_bins)
 
   case ndpi_bin_family32:
     if((b->u.bins32 = (u_int32_t*)ndpi_calloc(num_bins, sizeof(u_int32_t))) == NULL)
+      return(-1);
+    break;
+
+  case ndpi_bin_family64:
+    if((b->u.bins64 = (u_int64_t*)ndpi_calloc(num_bins, sizeof(u_int64_t))) == NULL)
       return(-1);
     break;
   }
@@ -334,6 +345,9 @@ void ndpi_free_bin(struct ndpi_bin *b) {
     break;
   case ndpi_bin_family32:
     ndpi_free(b->u.bins32);
+    break;
+  case ndpi_bin_family64:
+    ndpi_free(b->u.bins64);
     break;
   }
 }
@@ -371,6 +385,14 @@ struct ndpi_bin* ndpi_clone_bin(struct ndpi_bin *b) {
     } else
       memcpy(out->u.bins32, b->u.bins32, out->num_bins*sizeof(u_int32_t));
     break;
+
+  case ndpi_bin_family64:
+    if((out->u.bins64 = (u_int64_t*)ndpi_calloc(out->num_bins, sizeof(u_int64_t))) == NULL) {
+      ndpi_free(out);
+      return(NULL);
+    } else
+      memcpy(out->u.bins64, b->u.bins64, out->num_bins*sizeof(u_int64_t));
+    break;
   }
 
   return(out);
@@ -378,7 +400,7 @@ struct ndpi_bin* ndpi_clone_bin(struct ndpi_bin *b) {
 
 /* ********************************************************************************* */
 
-void ndpi_set_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val) {
+void ndpi_set_bin(struct ndpi_bin *b, u_int16_t slot_id, u_int64_t val) {
   if(slot_id >= b->num_bins) slot_id = 0;
 
   switch(b->family) {
@@ -391,12 +413,15 @@ void ndpi_set_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val) {
   case ndpi_bin_family32:
     b->u.bins32[slot_id] = (u_int32_t)val;
     break;
+  case ndpi_bin_family64:
+    b->u.bins64[slot_id] = (u_int64_t)val;
+    break;
   }
 }
 
 /* ********************************************************************************* */
 
-void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val) {
+void ndpi_inc_bin(struct ndpi_bin *b, u_int16_t slot_id, u_int64_t val) {
   b->is_empty = 0;
 
   if(slot_id >= b->num_bins) slot_id = 0;
@@ -411,12 +436,15 @@ void ndpi_inc_bin(struct ndpi_bin *b, u_int8_t slot_id, u_int32_t val) {
   case ndpi_bin_family32:
     b->u.bins32[slot_id] += (u_int32_t)val;
     break;
+  case ndpi_bin_family64:
+    b->u.bins64[slot_id] += (u_int64_t)val;
+    break;
   }
 }
 
 /* ********************************************************************************* */
 
-u_int32_t ndpi_get_bin_value(struct ndpi_bin *b, u_int8_t slot_id) {
+u_int64_t ndpi_get_bin_value(struct ndpi_bin *b, u_int16_t slot_id) {
   if(slot_id >= b->num_bins) slot_id = 0;
 
   switch(b->family) {
@@ -428,6 +456,9 @@ u_int32_t ndpi_get_bin_value(struct ndpi_bin *b, u_int8_t slot_id) {
     break;
   case ndpi_bin_family32:
     return(b->u.bins32[slot_id]);
+    break;
+  case ndpi_bin_family64:
+    return(b->u.bins64[slot_id]);
     break;
   }
 
@@ -449,6 +480,9 @@ void ndpi_reset_bin(struct ndpi_bin *b) {
   case ndpi_bin_family32:
     memset(b->u.bins32, 0, sizeof(u_int32_t)*b->num_bins);
     break;
+  case ndpi_bin_family64:
+    memset(b->u.bins64, 0, sizeof(u_int64_t)*b->num_bins);
+    break;
   }
 }
 /* ********************************************************************************* */
@@ -457,7 +491,7 @@ void ndpi_reset_bin(struct ndpi_bin *b) {
   Each bin slot is transformed in a % with respect to the value total
  */
 void ndpi_normalize_bin(struct ndpi_bin *b) {
-  u_int8_t i;
+  u_int16_t i;
   u_int32_t tot = 0;
 
   if(b->is_empty) return;
@@ -489,13 +523,22 @@ void ndpi_normalize_bin(struct ndpi_bin *b) {
 	b->u.bins32[i] = (b->u.bins32[i]*100) / tot;
     }
     break;
+
+  case ndpi_bin_family64:
+    for(i=0; i<b->num_bins; i++) tot += b->u.bins64[i];
+
+    if(tot > 0) {
+      for(i=0; i<b->num_bins; i++)
+	b->u.bins64[i] = (b->u.bins64[i]*100) / tot;
+    }
+    break;
   }
 }
 
 /* ********************************************************************************* */
 
 char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf, u_int out_buf_len) {
-  u_int8_t i;
+  u_int16_t i;
   u_int len = 0;
 
   if(!out_buf) return(out_buf); else out_buf[0] = '\0';
@@ -506,7 +549,7 @@ char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf
   switch(b->family) {
   case ndpi_bin_family8:
     for(i=0; i<b->num_bins; i++) {
-      int rc = snprintf(&out_buf[len], out_buf_len-len, "%s%u", (i > 0) ? "," : "", b->u.bins8[i]);
+      int rc = ndpi_snprintf(&out_buf[len], out_buf_len-len, "%s%u", (i > 0) ? "," : "", b->u.bins8[i]);
 
       if(rc < 0) break;
       len += rc;
@@ -515,7 +558,7 @@ char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf
 
   case ndpi_bin_family16:
     for(i=0; i<b->num_bins; i++) {
-      int rc = snprintf(&out_buf[len], out_buf_len-len, "%s%u", (i > 0) ? "," : "", b->u.bins16[i]);
+      int rc = ndpi_snprintf(&out_buf[len], out_buf_len-len, "%s%u", (i > 0) ? "," : "", b->u.bins16[i]);
 
       if(rc < 0) break;
       len += rc;
@@ -524,7 +567,16 @@ char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf
 
   case ndpi_bin_family32:
     for(i=0; i<b->num_bins; i++) {
-      int rc = snprintf(&out_buf[len], out_buf_len-len, "%s%u", (i > 0) ? "," : "", b->u.bins32[i]);
+      int rc = ndpi_snprintf(&out_buf[len], out_buf_len-len, "%s%u", (i > 0) ? "," : "", b->u.bins32[i]);
+
+      if(rc < 0) break;
+      len += rc;
+    }
+    break;
+
+  case ndpi_bin_family64:
+    for(i=0; i<b->num_bins; i++) {
+      int rc = ndpi_snprintf(&out_buf[len], out_buf_len-len, "%s%llu", (i > 0) ? "," : "", (unsigned long long)b->u.bins64[i]);
 
       if(rc < 0) break;
       len += rc;
@@ -555,10 +607,14 @@ char* ndpi_print_bin(struct ndpi_bin *b, u_int8_t normalize_first, char *out_buf
    0 = alike
    ...
    the higher the more different
-*/
-float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t normalize_first) {
-  u_int8_t i;
 
+   if similarity_max_threshold != 0, we assume that bins arent similar
+*/
+float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2,
+			  u_int8_t normalize_first, float similarity_max_threshold) {
+  u_int16_t i;
+  float threshold = similarity_max_threshold*similarity_max_threshold;
+  
   if(
      // (b1->family != b2->family) ||
      (b1->num_bins != b2->num_bins))
@@ -594,7 +650,10 @@ float ndpi_bin_similarity(struct ndpi_bin *b1, struct ndpi_bin *b2, u_int8_t nor
 
       if(a != b) sum += pow(diff, 2);
 
-      // printf("[a: %u][b: %u][sum: %u]\n", a, b, sum);
+      if(threshold && (sum > threshold))
+	return(-2); /* Sorry they are not similar */
+	 
+      // printf("%u/%u) [a: %u][b: %u][sum: %u]\n", i, b1->num_bins, a, b, sum);
     }
 
     /* The lower the more similar */
@@ -720,7 +779,7 @@ int ndpi_cluster_bins(struct ndpi_bin *bins, u_int16_t num_bins,
 
 	if(centroids[j].is_empty) continue;
 
-	similarity = ndpi_bin_similarity(&bins[i], &centroids[j], 0);
+	similarity = ndpi_bin_similarity(&bins[i], &centroids[j], 0, 0);
 
 	if(j == cluster_ids[i])
 	  current_similarity = similarity;
@@ -1226,7 +1285,7 @@ int ndpi_ses_add_value(struct ndpi_ses_struct *ses, const u_int64_t _value, doub
 
 #ifdef SES_DEBUG
   printf("[num_values: %u][[error: %.3f][forecast: %.3f][sqe: %.3f][sq: %.3f][confidence_band: %.3f]\n",
-	   ses->num_values, error, *forecast, ses->sum_square_error, sq, *confidence_band);
+	   ses->num_values, error, *forecast, ses->sum_square_error, sq_error, *confidence_band);
 #endif
 
   return(rc);
@@ -1418,3 +1477,35 @@ void ndpi_des_fitting(double *values, u_int32_t num_values, float *ret_alpha, fl
 
   *ret_alpha = best_alpha, *ret_beta = best_beta;
 }
+
+/* *********************************************************** */
+
+/* Z-Score = (Value - Mean) / StdDev */
+u_int ndpi_find_outliers(u_int32_t *values, bool *outliers, u_int32_t num_values) {
+  u_int i, ret = 0;
+  float mean, stddev, low_threshold = -2.5, high_threshold = 2.5;
+  struct ndpi_analyze_struct a;
+  
+  ndpi_init_data_analysis(&a, 3 /* this is the window so we do not need to store values and 3 is enough */);
+
+  /* Add values */
+  for(i=0; i<num_values; i++) 
+    ndpi_data_add_value(&a, values[i]);
+
+  mean    = ndpi_data_mean(&a);
+  stddev  = ndpi_data_stddev(&a);
+  
+  /* Process values */
+  for(i=0; i<num_values; i++) {
+    float z_score = (((float)values[i]) - mean) / stddev;
+    bool is_outlier = ((z_score < low_threshold) || (z_score > high_threshold)) ? true : false;
+
+    if(is_outlier) ret++;
+    outliers[i] = is_outlier;
+  }
+  
+  ndpi_free_data_analysis(&a, 0);
+
+  return(ret);
+}
+

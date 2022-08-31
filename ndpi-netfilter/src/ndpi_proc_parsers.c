@@ -25,6 +25,7 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 
     char *pname,*host_match,*nc,*nh,*cstr;
     uint16_t protocol_id;
+    int op_del = 0;
 
     nc = NULL;
 
@@ -32,11 +33,11 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 	if(*cmd == '#') break;
 
 	while(*cmd && (*cmd == ' ' || *cmd == '\t')) cmd++;
-	if(ndpi_log_debug > 1)
+	if(_DBG_TRACE_SPROC_H)
 		pr_info("%s: %.100s\n",__func__,cmd);
 	if(!strcmp(cmd,"reset")) {
 
-		if(ndpi_log_debug > 1)
+		if(_DBG_TRACE_SPROC_H)
 			pr_info("hostdef: clean host_ac %px\n",n->host_ac);
 
 		for(protocol_id = 0; protocol_id < NDPI_NUM_BITS; protocol_id++) {
@@ -48,7 +49,7 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 		n->host_error = 0;
 		n->host_upd++;
 
-		if(ndpi_log_debug > 1)
+		if(_DBG_TRACE_SPROC_H)
 			pr_info("xt_ndpi: reset hosts\n");
 		break;
 	}
@@ -68,7 +69,12 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 		*nc++ = '\0';
 		while(*nc && (*nc == ' ' || *nc == '\t' || *nc == ';')) nc++;
 	}
-
+	if(*pname == '+') {
+		pname++;
+	} else if(*pname == '-') {
+		op_del = 1;
+		pname++;
+	}
 	protocol_id =  ndpi_get_proto_by_name(n->ndpi_struct, pname);
 
 	if(protocol_id == NDPI_PROTOCOL_UNKNOWN) {
@@ -88,17 +94,22 @@ int parse_ndpi_hostdef(struct ndpi_net *n,char *cmd) {
 
 		sml = strlen(host_match);
 		if(str_collect_look(n->hosts_tmp->p[protocol_id],host_match,sml) >= 0) {
-			pr_err("xt_ndpi: exists '%.60s'\n",host_match);
-			continue;
-		}
-		cstr = str_collect_add(&n->hosts_tmp->p[protocol_id],host_match,sml);
-		if(!cstr) {
-			pr_err("xt_ndpi: can't alloc memory for '%.60s'\n",host_match);
-			goto bad_cmd;
+			if(op_del) 
+				str_collect_del(n->hosts_tmp->p[protocol_id],host_match,sml);
+			else {
+				pr_err("xt_ndpi: exists '%.60s'\n",host_match);
+				continue;
+			}
+		} else 	{
+			cstr = str_collect_add(&n->hosts_tmp->p[protocol_id],host_match,sml);
+			if(!cstr) {
+				pr_err("xt_ndpi: can't alloc memory for '%.60s'\n",host_match);
+				goto bad_cmd;
+			}
 		}
 		n->host_upd++;
 	}
-	if(ndpi_log_debug > 2 && nc && *nc)
+	if(_DBG_TRACE_SPROC_H && nc && *nc)
 		pr_info("xt_ndpi: next part '%s'\n",nc);
     }
     return 0;
@@ -738,7 +749,7 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 				return 1;
 			}
 			e_proto = ndpi_get_proto_by_name(n->ndpi_struct,v+1);
-			if(ndpi_log_debug > 1)
+			if(_DBG_TRACE_SPROC)
 				pr_info("NDPI: add custom protocol %x\n",e_proto);
 			n->mark[e_proto].mark = e_proto;
 			n->mark[e_proto].mask = 0x1ff;
@@ -816,7 +827,7 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 		}
 //		pr_info("NDPI: proto %s id %d mark %x mask %s\n",
 //				hid,id,mark,m);
-		if(atomic_read(&n->protocols_cnt[0]) &&
+		if(atomic64_read(&n->protocols_cnt[0]) &&
 			!mark && !mask) {
 			pr_err("NDPI: iptables in use! Can't disable protocol\n");
 			return 1;
@@ -849,6 +860,41 @@ int parse_ndpi_proto(struct ndpi_net *n,char *cmd) {
 		return 0;
 	}
 	pr_err("NDPI: bad cmd %s\n",hid);
+	return *v ? 0:1;
+}
+
+/********************* ndpi debug *********************************/
+
+int parse_ndpi_debug(struct ndpi_net *n,char *cmd) {
+	char *v;
+	uint32_t mask;
+	v = cmd;
+	if(!*v) return 0;
+/*
+ * opt [yY1+]
+ */
+	while(v && *v != ' ' && *v != '\t') v++;
+	if(*v) {
+		*v = '\0';
+		mask = dbg_ipt_opt_get(cmd);
+		if(!mask) {
+			pr_err("NDPI: bad debug opt %s\n",cmd);
+			return 1;
+		}
+		*v = ' ';
+		while(*v && (*v == ' ' || *v == '\t')) v++;
+		if(*v) {
+			if(*v == 'y' || *v == 'Y' || *v == '1' || *v == '+')
+				ndpi_log_debug |= mask;
+			  else 
+			    if(*v == 'n' || *v == 'N' || *v == '0' || *v == '-')
+				ndpi_log_debug &= ~mask;
+			      else 
+				return 1;
+			return 0;
+		}
+	}
+	pr_err("NDPI: bad cmd %s\n",cmd);
 	return *v ? 0:1;
 }
 

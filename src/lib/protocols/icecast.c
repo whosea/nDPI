@@ -2,7 +2,7 @@
  * icecast.c
  *
  * Copyright (C) 2009-11 - ipoque GmbH
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -30,7 +30,7 @@
 
 static void ndpi_int_icecast_add_connection(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_ICECAST, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_ICECAST, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 void ndpi_search_icecast_tcp(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
@@ -60,10 +60,6 @@ void ndpi_search_icecast_tcp(struct ndpi_detection_module_struct *ndpi_struct, s
     }
   }
 
-  if(NDPI_FLOW_PROTOCOL_EXCLUDED(ndpi_struct, flow, NDPI_PROTOCOL_HTTP)) {
-    goto icecast_exclude;
-  }
-
   if(flow == NULL) return;
     
   if((packet->packet_direction == flow->setup_packet_direction)
@@ -89,7 +85,6 @@ void ndpi_search_icecast_tcp(struct ndpi_detection_module_struct *ndpi_struct, s
     }
   }
 
- icecast_exclude:
   NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
 }
 

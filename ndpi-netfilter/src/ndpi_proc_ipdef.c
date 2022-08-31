@@ -26,7 +26,7 @@ int n_ipdef_proc_open(struct inode *inode, struct file *file)
 
 int n_ipdef_proc_close(struct inode *inode, struct file *file)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	generic_proc_close(n,parse_ndpi_ipdef,W_BUF_IP);
         return 0;
 }
@@ -35,14 +35,14 @@ ssize_t
 n_ipdef_proc_write(struct file *file, const char __user *buffer,
                      size_t length, loff_t *loff)
 {
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+	return generic_proc_write(pde_data(file_inode(file)), buffer, length, loff,
 			parse_ndpi_ipdef, 4060 , W_BUF_IP);
 }
 
 ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	ndpi_patricia_tree_t *pt;
 	ndpi_prefix_t *px;
 	ndpi_patricia_node_t *Xstack[PATRICIA_MAXBITS+1], **Xsp, *node;
@@ -80,10 +80,9 @@ ssize_t n_ipdef_proc_read(struct file *file, char __user *buf,
 		}
 		if(node->data) {
 			struct ndpi_port_def *pd = node->data;
-			ndpi_port_range_t *pt = pd->p;
 			if(pd->count[0]+pd->count[1] > 0) {
 			    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"%-16s ",ibuf);
-			    l += ndpi_print_port_range(pt,pd->count[0]+pd->count[1],
+			    l += ndpi_print_port_range(pd->p,pd->count[0]+pd->count[1],
 					&lbuf[l],sizeof(lbuf)-l,n->ndpi_struct);
 			    l += snprintf(&lbuf[l],sizeof(lbuf)-l,"\n");
 			}

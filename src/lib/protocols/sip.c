@@ -2,7 +2,7 @@
  * sip.c
  *
  * Copyright (C) 2009-11 - ipoque GmbH
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -31,7 +31,7 @@
 static void ndpi_int_sip_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
 					struct ndpi_flow_struct *flow,
 					u_int8_t due_to_correlation) {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_SIP, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_SIP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 #if !defined(WIN32)
@@ -150,6 +150,20 @@ void ndpi_search_sip_handshake(struct ndpi_detection_module_struct
        && (memcmp(&packet_payload[8], "SIP:", 4) == 0
 	   || memcmp(&packet_payload[8], "sip:", 4) == 0)) {
       NDPI_LOG_INFO(ndpi_struct, "found sip OPTIONS\n");
+      ndpi_int_sip_add_connection(ndpi_struct, flow, 0);
+      return;
+    }
+
+    if((memcmp(packet_payload, "REFER ", 6) == 0 || memcmp(packet_payload, "refer ", 6) == 0)
+       && (memcmp(&packet_payload[6], "SIP:", 4) == 0 || memcmp(&packet_payload[6], "sip:", 4) == 0)) {
+      NDPI_LOG_INFO(ndpi_struct, "found sip REFER\n");
+      ndpi_int_sip_add_connection(ndpi_struct, flow, 0);
+      return;
+    }
+
+    if((memcmp(packet_payload, "PRACK ", 6) == 0 || memcmp(packet_payload, "prack ", 6) == 0)
+       && (memcmp(&packet_payload[6], "SIP:", 4) == 0 || memcmp(&packet_payload[6], "sip:", 4) == 0)) {
+      NDPI_LOG_INFO(ndpi_struct, "found sip REFER\n");
       ndpi_int_sip_add_connection(ndpi_struct, flow, 0);
       return;
     }

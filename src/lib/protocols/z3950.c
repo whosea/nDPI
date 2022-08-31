@@ -1,7 +1,7 @@
 /*
  * z3950.c
  *
- * Copyright (C) 2012-21 - ntop.org
+ * Copyright (C) 2012-22 - ntop.org
  *
  * This module is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -28,7 +28,7 @@
 
 static void ndpi_int_z3950_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
                                           struct ndpi_flow_struct *flow) {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_Z3950, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_Z3950, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 /* ***************************************************************** */
@@ -124,11 +124,11 @@ static void ndpi_search_z3950(struct ndpi_detection_module_struct *ndpi_struct,
 
 void init_z3950_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_int32_t *id,
                           NDPI_PROTOCOL_BITMASK *detection_bitmask) {
-  ndpi_set_bitmask_protocol_detection("Z39.50",
+  ndpi_set_bitmask_protocol_detection("Z3950",
                                       ndpi_struct, detection_bitmask, *id,
                                       NDPI_PROTOCOL_Z3950,
                                       ndpi_search_z3950,
-                                      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_WITH_PAYLOAD,
+                                      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
                                       SAVE_DETECTION_BITMASK_AS_UNKNOWN,
                                       ADD_TO_DETECTION_BITMASK);
 

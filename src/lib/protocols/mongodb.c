@@ -26,6 +26,8 @@
 
 #include "ndpi_api.h"
 
+/* https://docs.mongodb.com/manual/reference/mongodb-wire-protocol/ */
+
 enum mongo_opcodes
   {
     OP_REPLY = 1,
@@ -44,7 +46,7 @@ struct mongo_message_header
   uint32_t message_length;
   uint32_t request_id;
   uint32_t response_to;
-  enum mongo_opcodes op_code;
+  uint32_t op_code; /* enum mongo_opcodes */
 };
 
 static void set_mongodb_detected(struct ndpi_detection_module_struct *ndpi_struct,
@@ -56,7 +58,7 @@ static void set_mongodb_detected(struct ndpi_detection_module_struct *ndpi_struc
     /* If no custom protocol has been detected */
     /* if(flow->detected_protocol_stack[0] == NDPI_PROTOCOL_UNKNOWN) */
     ndpi_int_reset_protocol(flow);
-    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MONGODB, flow->guessed_host_protocol_id);
+    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MONGODB, flow->guessed_host_protocol_id, NDPI_CONFIDENCE_DPI);
   }
 }
 
@@ -67,6 +69,7 @@ static void ndpi_check_mongodb(struct ndpi_detection_module_struct *ndpi_struct,
 			       struct ndpi_flow_struct *flow) {
   struct mongo_message_header mongodb_hdr;
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
+  uint32_t responseFlags;
 
   if (packet->payload_packet_len <= sizeof(mongodb_hdr)) {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
@@ -78,16 +81,15 @@ static void ndpi_check_mongodb(struct ndpi_detection_module_struct *ndpi_struct,
   /* All MongoDB numbers are in host byte order */
   // mongodb_hdr.message_length = ntohl(mongodb_hdr.message_length);
 
-  if((mongodb_hdr.message_length < 4)
-     || (mongodb_hdr.message_length > 1000000) /* Used to avoid false positives */
+  if((le32toh(mongodb_hdr.message_length) < 4)
+     || (le32toh(mongodb_hdr.message_length) > 1000000) /* Used to avoid false positives */
      ) {
     NDPI_LOG_DBG(ndpi_struct, "Invalid MONGODB length");
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
   }
 
-  switch(mongodb_hdr.op_code) {
-  case OP_REPLY:
+  switch(le32toh(mongodb_hdr.op_code)) {
   case OP_UPDATE:
   case OP_INSERT:
   case RESERVED:
@@ -98,6 +100,23 @@ static void ndpi_check_mongodb(struct ndpi_detection_module_struct *ndpi_struct,
   case OP_MSG:
     set_mongodb_detected(ndpi_struct, flow);
     break;
+  case OP_REPLY:
+    /* struct {
+         MsgHeader header;         // standard message header
+         int32     responseFlags;  // bit vector - see details below
+         int64     cursorID;       // cursor id if client needs to do get more's
+         int32     startingFrom;   // where in the cursor this reply is starting
+         int32     numberReturned; // number of documents in the reply
+         document* documents;      // documents
+       }
+    */
+    if(packet->payload_packet_len > sizeof(mongodb_hdr) + 20) {
+      responseFlags = le32toh(*(uint32_t *)(packet->payload + sizeof(mongodb_hdr)));
+      if((responseFlags & 0xFFFFFFF0) == 0)
+        set_mongodb_detected(ndpi_struct, flow);
+    }
+    break;
+
   default:
     NDPI_LOG_DBG(ndpi_struct, "Invalid MONGODB length");
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);

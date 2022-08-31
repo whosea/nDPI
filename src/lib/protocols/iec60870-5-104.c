@@ -2,7 +2,7 @@
  * iec60870-5-104.c
  * Extension for industrial 104 protocol recognition
  *
- * Copyright (C) 2019-21 - ntop.org
+ * Copyright (C) 2019-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -46,7 +46,6 @@ void ndpi_search_iec60870_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 	if(len == 0) 
 	  break;
 	else {
-	  u_int8_t len = packet->payload[offset+1];
 	  
 	  if((len + offset + 2) == packet->payload_packet_len) {
 	    found = 1;
@@ -62,7 +61,7 @@ void ndpi_search_iec60870_tcp(struct ndpi_detection_module_struct *ndpi_struct,
     if(found) {
       NDPI_LOG_INFO(ndpi_struct, "Found IEC60870-104\n");
       
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_IEC60870, NDPI_PROTOCOL_UNKNOWN);
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_IEC60870, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       return;
     }
   }

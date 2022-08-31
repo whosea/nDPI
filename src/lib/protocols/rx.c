@@ -1,7 +1,7 @@
 /*
  * rx.c
  *
- * Copyright (C) 2012-21 - ntop.org
+ * Copyright (C) 2012-22 - ntop.org
  *
  * Giovanni Mascellani <gio@debian.org>
  *
@@ -28,6 +28,10 @@
 #define NDPI_CURRENT_PROTO NDPI_PROTOCOL_RX
 
 #include "ndpi_api.h"
+
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
 
 /* See http://web.mit.edu/kolya/afs/rx/rx-spec for protocol description. */
 
@@ -72,6 +76,7 @@ struct ndpi_rx_header {
 #define PLUS_2             6
 #define MORE_1             9
 #define CLIENT_INIT_2     33
+#define PLUS_3            34
 
 
 
@@ -119,7 +124,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
      header->flags == PLUS_0 || header->flags == PLUS_1 ||
      header->flags == PLUS_2 || header->flags == REQ_ACK ||
      header->flags == MORE_1 || header->flags == CLIENT_INIT_1 ||
-     header->flags == CLIENT_INIT_2) {
+     header->flags == CLIENT_INIT_2 || header->flags == PLUS_3) {
 
     /* TYPE and FLAGS combo */
     switch(header->type)
@@ -133,7 +138,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
 	/* Fall-through */
       case RX_ACK:
 	if(header->flags == CLIENT_INIT_1 || header->flags == CLIENT_INIT_2 ||
-	   header->flags == EMPTY)
+	   header->flags == EMPTY || header->flags == PLUS_3)
 	  goto security;
 	/* Fall-through */
       case RX_CHALLENGE:
@@ -188,7 +193,7 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
 	flow->l4.udp.rx_conn_id == header->conn_id)
     {
       NDPI_LOG_INFO(ndpi_struct, "found RX\n");
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RX, NDPI_PROTOCOL_UNKNOWN);
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RX, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
     }
     /* https://www.central.org/frameless/numbers/rxservice.html. */
     else
@@ -199,10 +204,6 @@ void ndpi_check_rx(struct ndpi_detection_module_struct *ndpi_struct,
   } else {
     flow->l4.udp.rx_conn_epoch = header->conn_epoch;
     flow->l4.udp.rx_conn_id = header->conn_id;
-    {
-      NDPI_LOG_INFO(ndpi_struct, "found RX\n");
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RX, NDPI_PROTOCOL_UNKNOWN);
-    }
   }
 }
 
@@ -222,7 +223,7 @@ void init_rx_dissector(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_set_bitmask_protocol_detection("RX", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_RX,
 				      ndpi_search_rx,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_UDP_WITH_PAYLOAD,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_UDP_WITH_PAYLOAD,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

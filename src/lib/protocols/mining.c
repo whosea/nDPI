@@ -1,7 +1,7 @@
 /*
  * mining.c [Bitcoin, Ethereum, ZCash, Monero]
  *
- * Copyright (C) 2018-21 - ntop.org
+ * Copyright (C) 2018-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -36,8 +36,8 @@ static void cacheMiningHostTwins(struct ndpi_detection_module_struct *ndpi_struc
 
 /* ************************************************************************** */
 
-void ndpi_search_mining_udp(struct ndpi_detection_module_struct *ndpi_struct,
-			    struct ndpi_flow_struct *flow) {
+static void ndpi_search_mining_udp(struct ndpi_detection_module_struct *ndpi_struct,
+				   struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
   u_int16_t source = ntohs(packet->udp->source);
   u_int16_t dest = ntohs(packet->udp->dest);
@@ -49,8 +49,7 @@ void ndpi_search_mining_udp(struct ndpi_detection_module_struct *ndpi_struct,
      Ethereum P2P Discovery Protocol
      https://github.com/ConsenSys/ethereum-dissectors/blob/master/packet-ethereum-disc.c
   */
-  if(packet->udp
-     && (packet->payload_packet_len > 98)
+  if((packet->payload_packet_len > 98)
      && (packet->payload_packet_len < 1280)
      && ((source == 30303) || (dest == 30303))
      && (packet->payload[97] <= 0x04 /* NODES */)
@@ -60,8 +59,8 @@ void ndpi_search_mining_udp(struct ndpi_detection_module_struct *ndpi_struct,
     else if(packet->iphv6 && ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[0]) == 0xFF020000)
       ;
     else {
-      snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN);
+      ndpi_snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       if(packet->iph) /* TODO: ipv6 */
         cacheMiningHostTwins(ndpi_struct, packet->iph->saddr + packet->iph->daddr);
       return;
@@ -79,15 +78,16 @@ static u_int8_t isEthPort(u_int16_t dport) {
 
 /* ************************************************************************** */
 
-void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
-			    struct ndpi_flow_struct *flow) {
+static void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
+				   struct ndpi_flow_struct *flow) {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
   NDPI_LOG_DBG(ndpi_struct, "search MINING TCP\n");
 
   /* Check connection over TCP */
-  if(packet->tcp && (packet->payload_packet_len > 10)) {
-    if(packet->tcp->source == htons(8333)) {
+  if(packet->payload_packet_len > 10) {
+    if(packet->tcp->source == htons(8333) ||
+       packet->tcp->dest == htons(8333)) {
       /*
 	Bitcoin
 	
@@ -96,8 +96,8 @@ void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
       u_int32_t magic = htonl(0xf9beb4d9), magic1 = htonl(0xfabfb5da), *to_match = (u_int32_t*)packet->payload;
       
       if((*to_match == magic) || (*to_match == magic1)) {
-	snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
-	ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN);
+       ndpi_snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
+	ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 	if(packet->iph) /* TODO: ipv6 */
 	  cacheMiningHostTwins(ndpi_struct, packet->iph->saddr + packet->iph->daddr);
 	return;
@@ -107,16 +107,13 @@ void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
     if((packet->payload_packet_len > 300)
        && (packet->payload_packet_len < 600)
        && (packet->payload[2] == 0x04)) {
-
       if(isEthPort(ntohs(packet->tcp->dest)) /* Ethereum port */) {
-	snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
-	ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN);
+       ndpi_snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
+	ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 	if(packet->iph) /* TODO: ipv6 */
 	  cacheMiningHostTwins(ndpi_struct, packet->iph->saddr + packet->iph->daddr);
 	return;
-      } else
-	flow->guessed_protocol_id = NDPI_PROTOCOL_MINING;
-      
+      } 
     } else if(ndpi_strnstr((const char *)packet->payload, "{", packet->payload_packet_len)
 	 && (
 	   ndpi_strnstr((const char *)packet->payload, "\"eth1.0\"", packet->payload_packet_len)
@@ -130,8 +127,8 @@ void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 	{ "id": 2, "jsonrpc":"2.0","result":true}
 	{"worker": "", "jsonrpc": "2.0", "params": [], "id": 3, "method": "eth_getWork"}
       */
-      snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN);
+      ndpi_snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ETH");
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       if(packet->iph) /* TODO: ipv6 */
         cacheMiningHostTwins(ndpi_struct, packet->iph->saddr + packet->iph->daddr);
       return;
@@ -154,8 +151,8 @@ void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 	{"id":1,"jsonrpc":"2.0","error":null,"result":{"id":"479059546883218","job":{"blob":"0606e89883d205a65d8ee78991838a1cf3ec2ebbc5fb1fa43dec5fa1cd2bee4069212a549cd731000000005a88235653097aa3e97ef2ceef4aee610751a828f9be1a0758a78365fb0a4c8c05","job_id":"722134174127131","target":"dc460300"},"status":"OK"}}
 	{"method":"submit","params":{"id":"479059546883218","job_id":"722134174127131","nonce":"98024001","result":"c9be9381a68d533c059d614d961e0534d7d8785dd5c339c2f9596eb95f320100"},"id":1}
       */
-      snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ZCash/Monero");
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN);
+      ndpi_snprintf(flow->flow_extra_info, sizeof(flow->flow_extra_info), "%s", "ZCash/Monero");
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MINING, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       if(packet->iph) /* TODO: ipv6 */
         cacheMiningHostTwins(ndpi_struct, packet->iph->saddr + packet->iph->daddr);
       return;
@@ -167,24 +164,25 @@ void ndpi_search_mining_tcp(struct ndpi_detection_module_struct *ndpi_struct,
 
 /* ************************************************************************** */
 
+void ndpi_search_mining(struct ndpi_detection_module_struct *ndpi_struct,
+			struct ndpi_flow_struct *flow) {
+  struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
+
+  if(packet->tcp)
+    return ndpi_search_mining_tcp(ndpi_struct, flow);
+  return ndpi_search_mining_udp(ndpi_struct, flow);
+}
+
+
+/* ************************************************************************** */
+
 void init_mining_dissector(struct ndpi_detection_module_struct *ndpi_struct,
 			   u_int32_t *id, NDPI_PROTOCOL_BITMASK *detection_bitmask)
 {
   ndpi_set_bitmask_protocol_detection("Mining", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_MINING,
-				      ndpi_search_mining_tcp,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
-				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
-				      ADD_TO_DETECTION_BITMASK);
-
-  *id += 1;
-
-  /* ************ */
-  
-  ndpi_set_bitmask_protocol_detection("Mining", ndpi_struct, detection_bitmask, *id,
-				      NDPI_PROTOCOL_MINING,
-				      ndpi_search_mining_udp,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_UDP_WITH_PAYLOAD,
+				      ndpi_search_mining,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

@@ -3,29 +3,42 @@
 cd "$(dirname "${0}")"
 
 FUZZY_TESTING_ENABLED=@BUILD_FUZZTARGETS@
-if [ "$NDPI_DISABLE_FUZZY" = "1" ]; then
+if [ "${NDPI_DISABLE_FUZZY}" = "1" ]; then
    FUZZY_TESTING_ENABLED=0
 fi
 
 #Remember: valgrind and *SAN are incompatible!
-VALGRIND=""
-if [ "$NDPI_TESTS_VALGRIND" = "1" ]; then
-   VALGRIND="valgrind -q --leak-check=full"
+CMD_PREFIX="${CMD_PREFIX}"
+if [ "${NDPI_TESTS_WINE}" = "1" ]; then
+   CMD_PREFIX="wine"
+elif [ "${NDPI_TESTS_VALGRIND}" = "1" ]; then
+   CMD_PREFIX="valgrind -q --leak-check=full"
 fi
 
-GCRYPT_ENABLED=@GCRYPT_ENABLED@
+CMD_DIFF="$(which diff)"
+CMD_WDIFF="$(which wdiff)"
+CMD_COLORDIFF="$(which colordiff)"
+
+EXE_SUFFIX=@EXE_SUFFIX@
+GPROF_ENABLED=@GPROF_ENABLED@
 PCRE_ENABLED=@PCRE_ENABLED@
 PCRE_PCAPS="WebattackRCE.pcap"
-GCRYPT_PCAPS="gquic.pcap quic-23.pcap quic-24.pcap quic-27.pcap quic-28.pcap quic-29.pcap quic-mvfst-22.pcap quic-mvfst-27.pcapng quic-mvfst-exp.pcap quic_q50.pcap quic_t50.pcap quic_t51.pcap quic_0RTT.pcap quic_interop_V.pcapng quic-33.pcapng doq.pcapng doq_adguard.pcapng dlt_ppp.pcap os_detected.pcapng quic_frags_ch_out_of_order_same_packet_craziness.pcapng quic_frags_ch_in_multiple_packets.pcapng"
-READER="$VALGRIND ../example/ndpiReader -p ../example/protos.txt -c ../example/categories.txt -r ../example/risky_domains.txt -j ../example/ja3_fingerprints.csv -S ../example/sha1_fingerprints.csv"
+GCRYPT_PCAPS="gquic.pcap quic-23.pcap quic-24.pcap quic-27.pcap quic-28.pcap quic-29.pcap quic-mvfst-22.pcap quic-mvfst-27.pcapng quic-mvfst-exp.pcap quic_q50.pcap quic_t50.pcap quic_t51.pcap quic_0RTT.pcap quic_interop_V.pcapng quic-33.pcapng doq.pcapng doq_adguard.pcapng dlt_ppp.pcap os_detected.pcapng quic_frags_ch_out_of_order_same_packet_craziness.pcapng quic_frags_ch_in_multiple_packets.pcapng quic-v2-00.pcapng"
+READER="${CMD_PREFIX} ../example/ndpiReader${EXE_SUFFIX} -p ../example/protos.txt -c ../example/categories.txt -r ../example/risky_domains.txt -j ../example/ja3_fingerprints.csv -S ../example/sha1_fingerprints.csv"
 
 RC=0
-PCAPS=`cd pcap; /bin/ls *.pcap *.pcapng`
+PCAPS=`cd pcap; /bin/ls *.pcap *.pcapng *.cap`
 
-if [ ! -x "../example/ndpiReader" ]; then
-  echo "$0: Missing $(realpath ../example/ndpiReader)"
+if [ ! -x "../example/ndpiReader${EXE_SUFFIX}" ]; then
+  echo "$0: Missing $(realpath ../example/ndpiReader${EXE_SUFFIX})"
   echo "$0: Run ./configure and make first"
   exit 1
+fi
+
+if [ ${GPROF_ENABLED} -eq 1 ]; then
+  GPROF="$(which pprof)"
+else
+  GPROF=false
 fi
 
 fuzzy_testing() {
@@ -39,7 +52,7 @@ build_results() {
 	#echo $f
 	# create result files if not present
 	if [ ! -f result/$f.out ]; then
-	    CMD="$READER -q -t -i pcap/$f -w result/$f.out -v 2"
+	    CMD="$READER -q -K JSON -k /dev/null -t -i pcap/$f -w result/$f.out -v 2"
 	    $CMD
 	fi
     done
@@ -53,14 +66,6 @@ check_results() {
 		[ $SKIP_PCAP = 1 ] && continue
 	    fi
 	    SKIP_PCAP=0
-	    if [ $GCRYPT_ENABLED -eq 0 ]; then
-	      for g in $GCRYPT_PCAPS; do
-	        if [ $f = $g ]; then
-	          SKIP_PCAP=1
-	          break
-	        fi
-	      done
-	    fi
 	    if [ $PCRE_ENABLED -eq 0 ]; then
 	      for p in $PCRE_PCAPS; do
 	        if [ $f = $p ]; then
@@ -75,22 +80,39 @@ check_results() {
 	    fi
 
 	if [ -f result/$f.out ]; then
-	    CMD="$READER -q -t -i pcap/$f -w /tmp/reader.out -v 2"
-	    $CMD
-	    NUM_DIFF=`diff result/$f.out /tmp/reader.out | wc -l`
-
-	    if [ $NUM_DIFF -eq 0 ]; then
-		printf "%-48s\tOK\n" "$f"
+	    CMD="$READER -q -K JSON -k /dev/null -t -i pcap/$f -w /tmp/reader.$$.out -v 2"
+	    CPUPROFILE=result/$f.cprof HEAPPROFILE=result/$f $CMD
+	    CMD_RET=$?
+	    if [ $CMD_RET -eq 0 ]; then
+	      NUM_DIFF=`${CMD_DIFF} result/$f.out /tmp/reader.$$.out | wc -l`
 	    else
-		printf "%-48s\tERROR\n" "$f"
-		echo "$CMD [old vs new]"
-		diff result/$f.out /tmp/reader.out
-		RC=1
+	      printf "%-48s\tERROR (ndpiReader${EXE_SUFFIX} exit code: ${CMD_RET})\n" "$f"
+	      RC=$(( RC + 1 ))
+	      continue
 	    fi
 
-	    /bin/rm /tmp/reader.out
+		if [ $NUM_DIFF -eq 0 ]; then
+		  printf "%-48s\tOK\n" "$f"
+		else
+		  printf "%-48s\tERROR\n" "$f"
+		  echo "$CMD [old vs new]"
+		  ${CMD_DIFF} result/$f.out /tmp/reader.$$.out
+		  if [ ! -z "${CMD_COLORDIFF}" -a ! -z "${CMD_WDIFF}" ]; then
+		    ${CMD_WDIFF} -n -3 result/$f.out /tmp/reader.$$.out | sort | uniq | ${CMD_COLORDIFF}
+		  fi
+		  RC=$(( RC + 1 ))
+	    fi
+
+	    /bin/rm -f /tmp/reader.$$.out
 	fi
     done
+
+    if [ ${GPROF_ENABLED} -eq 1 ]; then
+      ${GPROF} -top -nodecount 100 -nodefraction 0 -show '^(ndpi|.*_ndpi)' ../example/ndpiReader${EXE_SUFFIX} ./result/*.cprof || exit 1
+      ${GPROF} -png -output ./result/cpu_profile.png -nodecount 100 -nodefraction 0 -show '^(ndpi|.*_ndpi)' ../example/ndpiReader${EXE_SUFFIX} ./result/*.cprof || exit 1
+      ${GPROF} -top -nodecount 100 -nodefraction 0 -show '^(ndpi|.*_ndpi)' ../example/ndpiReader${EXE_SUFFIX} ./result/*.heap || exit 1
+      ${GPROF} -png -output ./result/heap_profile.png -nodecount 100 -nodefraction 0 -show '^(ndpi|.*_ndpi)' ../example/ndpiReader${EXE_SUFFIX} ./result/*.heap || exit 1
+    fi
 }
 
 if [ $FUZZY_TESTING_ENABLED -eq 1 ]; then
@@ -98,5 +120,7 @@ if [ $FUZZY_TESTING_ENABLED -eq 1 ]; then
 fi
 build_results
 check_results $*
+
+test ${RC} -ne 0 && printf '%s: %s\n' "${0}" "${RC} pcap(s) failed"
 
 exit $RC

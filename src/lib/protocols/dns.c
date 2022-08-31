@@ -1,7 +1,7 @@
 /*
  * dns.c
  *
- * Copyright (C) 2012-21 - ntop.org
+ * Copyright (C) 2012-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -61,7 +61,7 @@ static void ndpi_check_dns_type(struct ndpi_detection_module_struct *ndpi_struct
   case 14:
   case 253:
   case 11:
-  case 33:
+    /* case 33: */ /* SRV */
   case 10:
   case 38:
   case 30:
@@ -94,7 +94,7 @@ static void ndpi_check_dns_type(struct ndpi_detection_module_struct *ndpi_struct
   case 106:
   case 107:
   case 259:
-    ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_SUSPICIOUS_TRAFFIC);
+    ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_SUSPICIOUS_TRAFFIC, "Obsolete DNS record type");
     break;
   }
 }
@@ -115,6 +115,26 @@ static u_int16_t checkPort(u_int16_t port) {
   }
 
   return(0);
+}
+
+/* *********************************************** */
+
+static int isMDNSMulticastAddress(struct ndpi_packet_struct * const packet)
+{
+  return (packet->iph && ntohl(packet->iph->daddr) == 0xE00000FB /* multicast: 224.0.0.251 */) ||
+         (packet->iphv6 && ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[0]) == 0xFF020000 &&
+                           ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[1]) == 0x00000000 &&
+                           ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[2]) == 0x00000000 &&
+                           ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[3]) == 0x000000FB /* multicast: FF02::FB */);
+}
+
+static int isLLMNRMulticastAddress(struct ndpi_packet_struct *const packet)
+{
+  return (packet->iph && ntohl(packet->iph->daddr) == 0xE00000FC /* multicast: 224.0.0.252 */) ||
+         (packet->iphv6 && ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[0]) == 0xFF020000 &&
+                           ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[1]) == 0x00000000 &&
+                           ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[2]) == 0x00000000 &&
+                           ntohl(packet->iphv6->ip6_dst.u6_addr.u6_addr32[3]) == 0x00010003 /* multicast: FF02::1:3 */);
 }
 
 /* *********************************************** */
@@ -200,16 +220,17 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
   else if((dns_header->flags & FLAGS_MASK) == 0x8000)
     *is_query = 0;
   else {
-    ndpi_set_risk(ndpi_struct, flow, NDPI_MALFORMED_PACKET);
+    ndpi_set_risk(ndpi_struct, flow, NDPI_MALFORMED_PACKET, "Invalid DNS Flags");
     return(1 /* invalid */);
   }
 
   if(*is_query) {
     /* DNS Request */
-    if((dns_header->num_queries > 0) && (dns_header->num_queries <= NDPI_MAX_DNS_REQUESTS)
+    if((dns_header->num_queries <= NDPI_MAX_DNS_REQUESTS)
        //       && (dns_header->num_answers == 0)
        && (((dns_header->flags & 0x2800) == 0x2800 /* Dynamic DNS Update */)
 	   || ((dns_header->flags & 0xFCF0) == 0x00) /* Standard Query */
+	   || ((dns_header->flags & 0xFCFF) == 0x0800) /* Inverse query */
 	   || ((dns_header->num_answers == 0) && (dns_header->authority_rrs == 0)))) {
       /* This is a good query */
       while(x+2 < packet->payload_packet_len) {
@@ -225,13 +246,24 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
 	  x++;
       }
     } else {
-      ndpi_set_risk(ndpi_struct, flow, NDPI_MALFORMED_PACKET);
+      ndpi_set_risk(ndpi_struct, flow, NDPI_MALFORMED_PACKET, "Invalid DNS Header");
       return(1 /* invalid */);
     }
   } else {
     /* DNS Reply */
     flow->protos.dns.reply_code = dns_header->flags & 0x0F;
 
+    if(flow->protos.dns.reply_code != 0) {
+      char str[32];
+
+      snprintf(str, sizeof(str), "DNS Error Code %d", flow->protos.dns.reply_code);
+      ndpi_set_risk(ndpi_struct, flow, NDPI_ERROR_CODE_DETECTED, str);
+    } else {
+      if(ndpi_isset_risk(ndpi_struct, flow, NDPI_SUSPICIOUS_DGA_DOMAIN)) {
+	ndpi_set_risk(ndpi_struct, flow, NDPI_RISKY_DOMAIN, "DGA Name Query with no Error Code");	
+      }
+    }
+    
     if((dns_header->num_queries > 0) && (dns_header->num_queries <= NDPI_MAX_DNS_REQUESTS) /* Don't assume that num_queries must be zero */
        && ((((dns_header->num_answers > 0) && (dns_header->num_answers <= NDPI_MAX_DNS_REQUESTS))
 	    || ((dns_header->authority_rrs > 0) && (dns_header->authority_rrs <= NDPI_MAX_DNS_REQUESTS))
@@ -255,6 +287,7 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
 
       if(dns_header->num_answers > 0) {
 	u_int16_t rsp_type;
+	u_int32_t rsp_ttl;
 	u_int16_t num;
 
 	for(num = 0; num < dns_header->num_answers; num++) {
@@ -270,13 +303,18 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
 	  } else
 	    x += data_len;
 
-	  if((x+2) >= packet->payload_packet_len) {
+	  if((x+8) >= packet->payload_packet_len) {
 	    break;
 	  }
 
 	  rsp_type = get16(&x, packet->payload);
+	  rsp_ttl  = ntohl(*((u_int32_t*)&packet->payload[x+2]));
+
+	  if(rsp_ttl == 0)
+	    ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_SUSPICIOUS_TRAFFIC, "DNS Record with zero TTL");	  
 
 #ifdef DNS_DEBUG
+	  printf("[DNS] TTL = %u\n", rsp_ttl);
 	  printf("[DNS] [response] response_type=%d\n", rsp_type);
 #endif
 
@@ -317,7 +355,7 @@ static int search_valid_dns(struct ndpi_detection_module_struct *ndpi_struct,
 	/* We missed the request */
 	u_int16_t s_port = packet->udp ? ntohs(packet->udp->source) : ntohs(packet->tcp->source);
 
-	ndpi_set_detected_protocol(ndpi_struct, flow, checkPort(s_port), NDPI_PROTOCOL_UNKNOWN);
+	ndpi_set_detected_protocol(ndpi_struct, flow, checkPort(s_port), NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       }
     }
   }
@@ -351,6 +389,19 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
     s_port = ntohs(packet->udp->source);
     d_port = ntohs(packet->udp->dest);
     payload_offset = 0;
+
+    /* For MDNS/LLMNR: If the packet is not a response, dest addr needs to be multicast. */
+    if ((d_port == MDNS_PORT && isMDNSMulticastAddress(packet) == 0) ||
+        (d_port == LLMNR_PORT && isLLMNRMulticastAddress(packet) == 0))
+    {
+      if (packet->payload_packet_len > 5 &&
+          ntohs(get_u_int16_t(packet->payload, 2)) != 0 &&
+          ntohs(get_u_int16_t(packet->payload, 4)) != 0)
+      {
+        NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
+        return;
+      }
+    }
   } else if(packet->tcp != NULL) /* pkt size > 512 bytes */ {
     s_port = ntohs(packet->tcp->source);
     d_port = ntohs(packet->tcp->dest);
@@ -369,6 +420,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
     int invalid = search_valid_dns(ndpi_struct, flow, &dns_header, payload_offset, &is_query);
     ndpi_protocol ret;
     u_int num_queries, idx;
+    char _hostname[256];
 
     ret.master_protocol = NDPI_PROTOCOL_UNKNOWN;
     ret.app_protocol    = (d_port == LLMNR_PORT) ? NDPI_PROTOCOL_LLMNR : ((d_port == MDNS_PORT) ? NDPI_PROTOCOL_MDNS : NDPI_PROTOCOL_DNS);
@@ -379,7 +431,6 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
     }
 
     /* extract host name server */
-    max_len = sizeof(flow->host_server_name)-1;
     off = sizeof(struct ndpi_dns_packet_header) + payload_offset;
 
     /* Before continuing let's dissect the following queries to see if they are valid */
@@ -427,7 +478,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 #ifdef DNS_DEBUG
 	printf("[DNS] Invalid query len [%u >= %u]\n", i+4, packet->payload_packet_len);
 #endif
-	ndpi_set_risk(ndpi_struct, flow, NDPI_MALFORMED_PACKET);
+	ndpi_set_risk(ndpi_struct, flow, NDPI_MALFORMED_PACKET, "Invalid DNS Query Lenght");
 	break;
       } else {
 	idx = i+5, num_queries++;
@@ -435,6 +486,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
     } /* for */
 
     hostname_is_valid = 1;
+    max_len = sizeof(_hostname)-1;
     while((j < max_len) && (off < packet->payload_packet_len) && (packet->payload[off] != '\0')) {
       uint8_t c, cl = packet->payload[off++];
 
@@ -444,40 +496,42 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 	break;
       }
 
-      if(j && (j < max_len)) flow->host_server_name[j++] = '.';
+      if(j && (j < max_len)) _hostname[j++] = '.';
 
-	  while((j < max_len) && (cl != 0)) {
-		  u_int32_t shift;
+      while((j < max_len) && (cl != 0)) {
+	u_int32_t shift;
 
-		  c = packet->payload[off++];
-		  shift = ((u_int32_t) 1) << (c & 0x1f);
-		  if ((dns_validchar[c >> 5] & shift)) {
-			  flow->host_server_name[j++] = tolower(c);
-		  } else {
-			  if (isprint(c) == 0) {
-			    hostname_is_valid = 0;
-			    flow->host_server_name[j++] = '?';
-			  } else {
-			    flow->host_server_name[j++] = '_';
-			  }
-		  }
-		  cl--;
-	  }
-    }
-    if (hostname_is_valid == 0) {
-      ndpi_set_risk(ndpi_struct, flow, NDPI_INVALID_CHARACTERS);
+        c = packet->payload[off++];
+        shift = ((u_int32_t) 1) << (c & 0x1f);
+        if((dns_validchar[c >> 5] & shift)) {
+          _hostname[j++] = tolower(c);
+	} else {
+          if (isprint(c) == 0) {
+            hostname_is_valid = 0;
+            _hostname[j++] = '?';
+	  } else {
+            _hostname[j++] = '_';
+          }
+	}
+	cl--;
+      }
     }
 
-    flow->host_server_name[j] = '\0';
+    _hostname[j] = '\0';
+
+    ndpi_hostname_sni_set(flow, (const u_int8_t *)_hostname, j);
+
+    if (hostname_is_valid == 0)
+      ndpi_set_risk(ndpi_struct, flow, NDPI_INVALID_CHARACTERS, NULL);    
 
     if(j > 0) {
       ndpi_protocol_match_result ret_match;
 
-      ndpi_check_dga_name(ndpi_struct, flow, (char*)flow->host_server_name, 1);
+      ndpi_check_dga_name(ndpi_struct, flow, flow->host_server_name, 1);
 
       ret.app_protocol = ndpi_match_host_subprotocol(ndpi_struct, flow,
-						     (char *)flow->host_server_name,
-						     strlen((const char*)flow->host_server_name),
+						     flow->host_server_name,
+						     strlen(flow->host_server_name),
 						     &ret_match,
 						     NDPI_PROTOCOL_DNS);
 
@@ -495,7 +549,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 
     if(is_query) {
       /* In this case we say that the protocol has been detected just to let apps carry on with their activities */
-      ndpi_set_detected_protocol(ndpi_struct, flow, ret.app_protocol, ret.master_protocol);
+      ndpi_set_detected_protocol(ndpi_struct, flow, ret.app_protocol, ret.master_protocol, NDPI_CONFIDENCE_DPI);
 
       /* This is necessary to inform the core to call this dissector again */
       flow->check_extra_packets = 1;
@@ -522,7 +576,7 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
 	 matched a subprotocol
       **/
       NDPI_LOG_INFO(ndpi_struct, "found DNS\n");
-      ndpi_set_detected_protocol(ndpi_struct, flow, ret.app_protocol, ret.master_protocol);
+      ndpi_set_detected_protocol(ndpi_struct, flow, ret.app_protocol, ret.master_protocol, NDPI_CONFIDENCE_DPI);
     } else {
       if((flow->detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
 	 || (flow->detected_protocol_stack[1] == NDPI_PROTOCOL_DNS))
@@ -538,9 +592,14 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
   if((flow->detected_protocol_stack[0] == NDPI_PROTOCOL_DNS)
      || (flow->detected_protocol_stack[1] == NDPI_PROTOCOL_DNS)) {
     /* TODO: add support to RFC6891 to avoid some false positives */
-    if(packet->udp != NULL && packet->payload_packet_len > PKT_LEN_ALERT)
-      ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_LARGE_PACKET);
+    if((packet->udp != NULL)
+       && (packet->payload_packet_len > PKT_LEN_ALERT)) {
+      char str[48];
 
+      snprintf(str, sizeof(str), "%u Bytes DNS Packet", packet->payload_packet_len);
+      ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_LARGE_PACKET, str);
+    }
+    
     if(packet->iph != NULL) {
       /* IPv4 */
       u_int8_t flags = ((u_int8_t*)packet->iph)[6];
@@ -548,14 +607,14 @@ static void ndpi_search_dns(struct ndpi_detection_module_struct *ndpi_struct, st
       /* 0: fragmented; 1: not fragmented */
       if((flags & 0x20)
 	 || (ndpi_iph_is_valid_and_not_fragmented(packet->iph, packet->l3_packet_len) == 0)) {
-	ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_FRAGMENTED);
+	ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_FRAGMENTED, NULL);
       }
     } else if(packet->iphv6 != NULL) {
       /* IPv6 */
       const struct ndpi_ip6_hdrctl *ip6_hdr = &packet->iphv6->ip6_hdr;
 
       if(ip6_hdr->ip6_un1_nxt == 0x2C /* Next Header: Fragment Header for IPv6 (44) */) {
-	ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_FRAGMENTED);
+	ndpi_set_risk(ndpi_struct, flow, NDPI_DNS_FRAGMENTED, NULL);
       }	
     }
   }

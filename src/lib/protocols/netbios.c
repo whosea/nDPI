@@ -1,7 +1,7 @@
 /*
  * netbios.c
  *
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  * Copyright (C) 2009-11 - ipoque GmbH
  *
  * This file is part of nDPI, an open source deep packet inspection
@@ -102,15 +102,15 @@ static void ndpi_int_netbios_add_connection(struct ndpi_detection_module_struct 
   if((off < packet->payload_packet_len)
      && ndpi_netbios_name_interpret((unsigned char*)&packet->payload[off],
 		 (u_int)(packet->payload_packet_len - off), name, sizeof(name)-1) > 0) {
-      snprintf((char*)flow->host_server_name, sizeof(flow->host_server_name)-1, "%s", name);
+      ndpi_hostname_sni_set(flow, (const u_int8_t *)name, strlen((char *)name));
 
-      ndpi_check_dga_name(ndpi_struct, flow, (char*)flow->host_server_name, 1);
+      ndpi_check_dga_name(ndpi_struct, flow, flow->host_server_name, 1);
   }
 
   if(sub_protocol == NDPI_PROTOCOL_UNKNOWN)
-    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_NETBIOS, NDPI_PROTOCOL_UNKNOWN);
+    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_NETBIOS, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
   else
-    ndpi_set_detected_protocol(ndpi_struct, flow, sub_protocol, NDPI_PROTOCOL_NETBIOS);
+    ndpi_set_detected_protocol(ndpi_struct, flow, sub_protocol, NDPI_PROTOCOL_NETBIOS, NDPI_CONFIDENCE_DPI);
 }
 
 /* ****************************************************************** */
@@ -367,7 +367,8 @@ void ndpi_search_netbios(struct ndpi_detection_module_struct *ndpi_struct,
       if(netbios_len == packet->payload_packet_len - 14) {
 	NDPI_LOG_DBG2(ndpi_struct, "found netbios port 138 and payload length >= 112 \n");
 
-	if(packet->payload[0] >= 0x10 && packet->payload[0] <= 0x16) {
+	/* TODO: ipv6 */
+	if(packet->iph && packet->payload[0] >= 0x10 && packet->payload[0] <= 0x16) {
 	  u_int32_t source_ip = ntohl(get_u_int32_t(packet->payload, 4));
 
 	  NDPI_LOG_DBG2(ndpi_struct, "found netbios with MSG-type 0x10,0x11,0x12,0x13,0x14,0x15 or 0x16\n");
@@ -418,7 +419,7 @@ void init_netbios_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_
   ndpi_set_bitmask_protocol_detection("NETBIOS", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_NETBIOS,
 				      ndpi_search_netbios,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_TCP_OR_UDP_WITH_PAYLOAD_WITHOUT_RETRANSMISSION,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

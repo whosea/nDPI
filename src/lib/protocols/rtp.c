@@ -2,7 +2,7 @@
  * rtp.c
  *
  * Copyright (C) 2009-11 - ipoque GmbH
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -85,7 +85,7 @@ static void ndpi_rtp_search(struct ndpi_detection_module_struct *ndpi_struct,
   if((payload_len < 2)
      || (d_port == 5355 /* LLMNR_PORT */)
      || (d_port == 5353 /* MDNS_PORT */)     
-     || flow->protos.tls_quic_stun.stun.num_binding_requests
+     || flow->stun.num_binding_requests
      ) {
     NDPI_EXCLUDE_PROTO(ndpi_struct, flow);
     return;
@@ -103,14 +103,14 @@ static void ndpi_rtp_search(struct ndpi_detection_module_struct *ndpi_struct,
        )
     ) {
     NDPI_LOG_INFO(ndpi_struct, "Found RTP\n");
-    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RTP, NDPI_PROTOCOL_UNKNOWN);
+    ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RTP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
     return;
   } else if((payload_len >= 12)
 	    && (((payload[0] & 0xFF) == 0x80) || ((payload[0] & 0xFF) == 0xA0)) /* RTP magic byte[1] */
 	    && (payloadType = isValidMSRTPType(payload[1] & 0xFF))) {
     if(payloadType == 1 /* RTP */) {
       NDPI_LOG_INFO(ndpi_struct, "Found Skype for Business (former MS Lync)\n");
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_SKYPE_TEAMS, NDPI_PROTOCOL_UNKNOWN);
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_SKYPE_TEAMS, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       return;
     }
   }
@@ -150,7 +150,7 @@ void ndpi_search_rtp(struct ndpi_detection_module_struct *ndpi_struct, struct nd
 static void ndpi_int_rtp_add_connection(struct ndpi_detection_module_struct
 					*ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RTP, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RTP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 /*
@@ -404,7 +404,7 @@ void init_rtp_dissector(struct ndpi_detection_module_struct *ndpi_struct,
   ndpi_set_bitmask_protocol_detection("RTP", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_RTP,
 				      ndpi_search_rtp,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_UDP_WITH_PAYLOAD,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_UDP_WITH_PAYLOAD,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
 

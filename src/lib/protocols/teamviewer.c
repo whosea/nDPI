@@ -2,7 +2,7 @@
  * teamviewer.c
  *
  * Copyright (C) 2012 by Gianluca Costa xplico.org
- * Copyright (C) 2012-21 - ntop.org
+ * Copyright (C) 2012-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -32,7 +32,7 @@
 static void ndpi_int_teamview_add_connection(struct ndpi_detection_module_struct
                                              *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TEAMVIEWER, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_TEAMVIEWER, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
   NDPI_LOG_INFO(ndpi_struct, "found teamwiewer\n");
 }
 
@@ -72,7 +72,7 @@ void ndpi_search_teamview(struct ndpi_detection_module_struct *ndpi_struct, stru
 	if (flow->l4.udp.teamviewer_stage == 4 ||
 	    packet->udp->dest == ntohs(5938) || packet->udp->source == ntohs(5938)) {
 	  ndpi_int_teamview_add_connection(ndpi_struct, flow);
-	  ndpi_set_risk(ndpi_struct, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION); /* Remote assistance (UDP only) */
+	  ndpi_set_risk(ndpi_struct, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION, "Found TeamViewer"); /* Remote assistance (UDP only) */
 	}
 	return;
       }
@@ -93,7 +93,7 @@ void ndpi_search_teamview(struct ndpi_detection_module_struct *ndpi_struct, stru
 	  flow->l4.udp.teamviewer_stage++;
 	  if (flow->l4.udp.teamviewer_stage == 4) {
 	    ndpi_int_teamview_add_connection(ndpi_struct, flow);
-	    ndpi_set_risk(ndpi_struct, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION); /* Remote assistance (UDP only) */
+	    ndpi_set_risk(ndpi_struct, flow, NDPI_DESKTOP_OR_FILE_SHARING_SESSION, "Found TeamViewer"); /* Remote assistance (UDP only) */
 	  }
 	}
 	return;

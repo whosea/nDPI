@@ -633,11 +633,11 @@ static AC_ERROR_t dump_node_common(AC_AUTOMATA_t * thiz,
         char lbuf[512];
         int nl = 0,j;
 
-        nl = snprintf(lbuf,sizeof(lbuf),"'%.100s' N:%d{",rstr,n->matched_patterns->num);
+        nl = ndpi_snprintf(lbuf,sizeof(lbuf),"'%.100s' N:%d{",rstr,n->matched_patterns->num);
         for (j=0; j<n->matched_patterns->num; j++) {
             AC_PATTERN_t *sid = &n->matched_patterns->patterns[j];
-            if(j) nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,", ");
-            nl += snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %c%.100s%c",
+            if(j) nl += ndpi_snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,", ");
+            nl += ndpi_snprintf(&lbuf[nl],sizeof(lbuf)-nl-1,"%d %c%.100s%c",
                             sid->rep.number & 0x3fff,
                             sid->rep.number & 0x8000 ? '^':' ',
                             sid->astring,
@@ -802,7 +802,7 @@ static void node_release(AC_NODE_t * thiz, int free_pattern)
 
 /* Nonzero if X is not aligned on a "long" boundary.  */
 #undef UNALIGNED /* Windows defined it but differently from what Aho expects */
-#define UNALIGNED(X) ((long)X & (__SIZEOF_LONG__ - 1))
+#define UNALIGNED(X) ((intptr_t)X & (__SIZEOF_LONG__ - 1))
 
 #define LBLOCKSIZE __SIZEOF_LONG__ 
 
@@ -851,7 +851,11 @@ xmemchr(unsigned char *s, unsigned char c,int n)
       unsigned long int mask = c * DUPC;
 
       while (n >= LBLOCKSIZE) {
-        unsigned long int nc = DETECTNULL((*(unsigned long int *)s) ^ mask);
+#if __SIZEOF_LONG__ == 4
+        unsigned long int nc = DETECTNULL(le32toh(*(unsigned long int *)s) ^ mask);
+#else
+        unsigned long int nc = DETECTNULL(le64toh(*(unsigned long int *)s) ^ mask);
+#endif
         if(nc)
             return s + (bsf(nc) >> 3);
         s += LBLOCKSIZE;

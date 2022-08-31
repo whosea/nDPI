@@ -99,18 +99,29 @@ static bool ndpi_check_valid_cassandra_opcode(uint8_t opcode)
   return false;
 }
 
+static bool ndpi_check_valid_cassandra_flags(uint8_t flags)
+{
+  return (flags & 0xF0) == 0;
+}
+
 void ndpi_search_cassandra(struct ndpi_detection_module_struct *ndpi_struct,
                            struct ndpi_flow_struct *flow)
 {
   struct ndpi_packet_struct *packet = ndpi_get_packet_struct(ndpi_struct);
 
+  NDPI_LOG_DBG(ndpi_struct, "search Cassandra\n");
+
   if (packet->tcp) {
     if (packet->payload_packet_len >= CASSANDRA_HEADER_LEN &&
         ndpi_check_valid_cassandra_version(get_u_int8_t(packet->payload, 0)) &&
+        ndpi_check_valid_cassandra_flags(get_u_int8_t(packet->payload, 1)) &&
         ndpi_check_valid_cassandra_opcode(get_u_int8_t(packet->payload, 4)) &&
-        get_u_int32_t(packet->payload, 5) <= CASSANDRA_MAX_BODY_SIZE &&
-        get_u_int32_t(packet->payload, 5) >= (uint32_t) (packet->payload_packet_len - CASSANDRA_HEADER_LEN)) {
-      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_CASSANDRA, NDPI_PROTOCOL_UNKNOWN);
+        le32toh(get_u_int32_t(packet->payload, 5)) <= CASSANDRA_MAX_BODY_SIZE &&
+        le32toh(get_u_int32_t(packet->payload, 5)) >= (uint32_t) (packet->payload_packet_len - CASSANDRA_HEADER_LEN) &&
+        flow->l4.tcp.h323_valid_packets == 0 /* To avoid clashing with H323 */ &&
+        flow->socks4_stage == 0 /* To avoid clashing with SOCKS */) {
+      NDPI_LOG_INFO(ndpi_struct, "found Cassandra\n");
+      ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_CASSANDRA, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
       return;
     }
   }

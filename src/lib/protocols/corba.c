@@ -27,7 +27,7 @@
 static void ndpi_int_corba_add_connection(struct ndpi_detection_module_struct
 					  *ndpi_struct, struct ndpi_flow_struct *flow)
 {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_CORBA, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_CORBA, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 void ndpi_search_corba(struct ndpi_detection_module_struct *ndpi_struct, struct ndpi_flow_struct *flow)
 {
@@ -37,8 +37,8 @@ void ndpi_search_corba(struct ndpi_detection_module_struct *ndpi_struct, struct 
   if(packet->tcp != NULL) {
     NDPI_LOG_DBG2(ndpi_struct, "calculating CORBA over tcp\n");
     /* Corba General Inter-ORB Protocol -> GIOP */
-    if ((packet->payload_packet_len >= 24 && packet->payload_packet_len <= 144) &&
-        memcmp(packet->payload, "GIOP", 4) == 0) {
+    if(packet->payload_packet_len >= 24 &&
+       memcmp(packet->payload, "GIOP", 4) == 0) {
       NDPI_LOG_INFO(ndpi_struct, "found corba\n");
       ndpi_int_corba_add_connection(ndpi_struct, flow);
     }

@@ -1,7 +1,7 @@
 /*
  * avast.c
  *
- * Copyright (C) 2012-21 - ntop.org
+ * Copyright (C) 2012-22 - ntop.org
  *
  * This module is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -27,7 +27,7 @@
 static void ndpi_int_avast_securedns_add_connection(struct ndpi_detection_module_struct *ndpi_struct,
                                                     struct ndpi_flow_struct *flow)
 {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_AVAST_SECUREDNS, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_AVAST_SECUREDNS, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 static void ndpi_search_avast_securedns(struct ndpi_detection_module_struct *ndpi_struct,
@@ -59,7 +59,7 @@ void init_avast_securedns_dissector(struct ndpi_detection_module_struct *ndpi_st
                                       ndpi_struct, detection_bitmask, *id,
                                       NDPI_PROTOCOL_AVAST_SECUREDNS,
                                       ndpi_search_avast_securedns,
-                                      NDPI_SELECTION_BITMASK_PROTOCOL_UDP_WITH_PAYLOAD,
+                                      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_UDP_WITH_PAYLOAD,
                                       SAVE_DETECTION_BITMASK_AS_UNKNOWN,
                                       ADD_TO_DETECTION_BITMASK);
 

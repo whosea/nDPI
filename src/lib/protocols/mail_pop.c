@@ -1,7 +1,7 @@
 /*
  * mail_pop.c
  *
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  * Copyright (C) 2009-11 - ipoque GmbH
  *
  * This file is part of nDPI, an open source deep packet inspection
@@ -47,7 +47,7 @@ static void ndpi_int_mail_pop_add_connection(struct ndpi_detection_module_struct
 					     *ndpi_struct, struct ndpi_flow_struct *flow) {
 
   flow->guessed_protocol_id = NDPI_PROTOCOL_UNKNOWN; /* Avoid POP3S to be used s sub-protocol */
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MAIL_POP, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_MAIL_POP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 /* **************************************** */
@@ -77,22 +77,27 @@ static int ndpi_int_mail_pop_check_for_client_commands(struct ndpi_detection_mod
 	       && (packet->payload[1] == 'S' || packet->payload[1] == 's')
 	       && (packet->payload[2] == 'E' || packet->payload[2] == 'e')
 	       && (packet->payload[3] == 'R' || packet->payload[3] == 'r')) {
-      ndpi_user_pwd_payload_copy((u_int8_t*)flow->protos.ftp_imap_pop_smtp.username,
-				 sizeof(flow->protos.ftp_imap_pop_smtp.username), 5,
+      char buf[64];
+	
+      ndpi_user_pwd_payload_copy((u_int8_t*)flow->l4.tcp.ftp_imap_pop_smtp.username,
+				 sizeof(flow->l4.tcp.ftp_imap_pop_smtp.username), 5,
 				 packet->payload, packet->payload_packet_len);
 
-      ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS);
+      snprintf(buf, sizeof(buf), "Found username (%s)",
+	       flow->l4.tcp.ftp_imap_pop_smtp.username);
+      ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS, buf);
+      
       flow->l4.tcp.pop_command_bitmask |= POP_BIT_USER;
       return 1;
     } else if((packet->payload[0] == 'P' || packet->payload[0] == 'p')
 	      && (packet->payload[1] == 'A' || packet->payload[1] == 'a')
 	      && (packet->payload[2] == 'S' || packet->payload[2] == 's')
 	      && (packet->payload[3] == 'S' || packet->payload[3] == 's')) {
-      ndpi_user_pwd_payload_copy((u_int8_t*)flow->protos.ftp_imap_pop_smtp.password,
-				 sizeof(flow->protos.ftp_imap_pop_smtp.password), 5,
+      ndpi_user_pwd_payload_copy((u_int8_t*)flow->l4.tcp.ftp_imap_pop_smtp.password,
+				 sizeof(flow->l4.tcp.ftp_imap_pop_smtp.password), 5,
 				 packet->payload, packet->payload_packet_len);
 
-      ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS);
+      ndpi_set_risk(ndpi_struct, flow, NDPI_CLEAR_TEXT_CREDENTIALS, "Found password");
       flow->l4.tcp.pop_command_bitmask |= POP_BIT_PASS;
       return 1;
     } else if((packet->payload[0] == 'C' || packet->payload[0] == 'c')
@@ -182,7 +187,7 @@ void ndpi_search_mail_pop_tcp(struct ndpi_detection_module_struct
       if(flow->l4.tcp.mail_pop_stage > 0) {
 	NDPI_LOG_INFO(ndpi_struct, "mail_pop identified\n");
 	
-	if((flow->protos.ftp_imap_pop_smtp.password[0] != '\0')
+	if((flow->l4.tcp.ftp_imap_pop_smtp.password[0] != '\0')
 	   || (flow->l4.tcp.mail_pop_stage > 3)) {
 	  ndpi_int_mail_pop_add_connection(ndpi_struct, flow);
 	  popInitExtraPacketProcessing(flow);
@@ -222,7 +227,7 @@ int ndpi_extra_search_mail_pop_tcp(struct ndpi_detection_module_struct *ndpi_str
   
   ndpi_search_mail_pop_tcp(ndpi_struct, flow);
 
-  rc = (flow->protos.ftp_imap_pop_smtp.password[0] == '\0') ? 1 : 0;
+  rc = (flow->l4.tcp.ftp_imap_pop_smtp.password[0] == '\0') ? 1 : 0;
   
 #ifdef POP_DEBUG
   printf("**** %s() [rc: %d]\n", __FUNCTION__, rc);

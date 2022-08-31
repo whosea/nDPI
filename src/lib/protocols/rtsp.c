@@ -2,7 +2,7 @@
  * rtsp.c
  *
  * Copyright (C) 2009-11 - ipoque GmbH
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -33,7 +33,7 @@ static void ndpi_int_rtsp_add_connection(struct ndpi_detection_module_struct *nd
 					 struct ndpi_flow_struct *flow/* , */
 					 /* ndpi_protocol_type_t protocol_type */)
 {
-  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RTSP, NDPI_PROTOCOL_UNKNOWN);
+  ndpi_set_detected_protocol(ndpi_struct, flow, NDPI_PROTOCOL_RTSP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 /* this function searches for a rtsp-"handshake" over tcp or udp. */
@@ -50,7 +50,9 @@ void ndpi_search_rtsp_tcp_udp(struct ndpi_detection_module_struct
   }
 
   if (packet->parsed_lines > 0 &&
-      LINE_ENDS(packet->line[0], "RTSP/1.0") != 0)
+      (LINE_ENDS(packet->line[0], "RTSP/1.0") != 0 ||
+       LINE_ENDS(packet->accept_line, "application/x-rtsp-tunnelled") != 0 ||
+       LINE_ENDS(packet->content_line, "application/x-rtsp-tunnelled") != 0))
   {
     ndpi_int_rtsp_add_connection(ndpi_struct, flow);
     return;

@@ -1,7 +1,7 @@
 /*
  * ndpi_util.h
  *
- * Copyright (C) 2011-21 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * nDPI is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -90,6 +90,7 @@ extern int dpdk_port_deinit(int port);
 #define MAX_TABLE_SIZE_1         4096
 #define MAX_TABLE_SIZE_2         8192
 #define INIT_VAL                   -1
+#define SERIALIZATION_BUFSIZ     (8192 * 2)
 
 
 // inner hash table (ja3 -> security state)
@@ -134,7 +135,6 @@ struct flow_metrics {
 
 struct ndpi_entropy {
   // Entropy fields
-  pkt_timeval src2dst_last_pkt_time, dst2src_last_pkt_time, flow_last_pkt_time;
   u_int16_t src2dst_pkt_len[MAX_NUM_PKTS];                     /*!< array of packet appdata lengths */
   pkt_timeval src2dst_pkt_time[MAX_NUM_PKTS];               /*!< array of arrival times          */
   u_int16_t dst2src_pkt_len[MAX_NUM_PKTS];                     /*!< array of packet appdata lengths */
@@ -158,14 +158,25 @@ struct ndpi_entropy {
   float score;
 };
 
+enum info_type {
+    INFO_INVALID = 0,
+    INFO_GENERIC,
+    INFO_KERBEROS,
+    INFO_FTP_IMAP_POP_SMTP,
+    INFO_TLS_QUIC_ALPN_VERSION,
+    INFO_TLS_QUIC_ALPN_ONLY,
+};
+
 // flow tracking
 typedef struct ndpi_flow_info {
   u_int32_t flow_id;
   u_int32_t hashval;
-  u_int32_t src_ip;
-  u_int32_t dst_ip;
-  u_int16_t src_port;
-  u_int16_t dst_port;
+  u_int32_t src_ip; /* network order */
+  u_int32_t dst_ip; /* network order */
+  struct ndpi_in6_addr src_ip6; /* network order */
+  struct ndpi_in6_addr dst_ip6; /* network order */
+  u_int16_t src_port; /* network order */
+  u_int16_t dst_port; /* network order */
   u_int8_t detection_completed, protocol, bidirectional, check_extra_packets;
   u_int16_t vlan_id;
   u_int32_t nf_mark;
@@ -188,24 +199,46 @@ typedef struct ndpi_flow_info {
   u_int32_t src2dst_packets, dst2src_packets;
   u_int32_t has_human_readeable_strings;
   char human_readeable_string_buffer[32];
+  char *risk_str;
 
   // result only, not used for flow identification
   ndpi_protocol detected_protocol;
+  ndpi_confidence_t confidence;
 
   // Flow data analysis
+  pkt_timeval src2dst_last_pkt_time, dst2src_last_pkt_time, flow_last_pkt_time;
   struct ndpi_analyze_struct *iat_c_to_s, *iat_s_to_c, *iat_flow,
     *pktlen_c_to_s, *pktlen_s_to_c;
 
-  char info[255];
+  enum info_type info_type;
+  union {
+    char info[256];
+    struct {
+      char alpn[128];
+      char tls_supported_versions[128];
+    } tls_quic;
+    struct {
+      unsigned char auth_failed;
+      char username[127];
+      char password[128];
+    } ftp_imap_pop_smtp;
+    struct {
+      char domain[85];
+      char hostname[85];
+      char username[86];
+    } kerberos;
+  };
+
   char flow_extra_info[16];
-  char host_server_name[240];
-  char bittorent_hash[41];
-  char dhcp_fingerprint[48];
+  char host_server_name[80]; /* Hostname/SNI */
+  char *bittorent_hash;
+  char *dhcp_fingerprint;
+  char *dhcp_class_ident;
   ndpi_risk risk;
   
   struct {
     u_int16_t ssl_version;
-    char client_requested_server_name[256], server_info[64],
+    char server_info[64],
       client_hassh[33], server_hassh[33], *server_names,
       *tls_alpn, *tls_supported_versions,
       *tls_issuerDN, *tls_subjectDN,
@@ -225,18 +258,18 @@ typedef struct ndpi_flow_info {
   } ssh_tls;
 
   struct {
-    char url[256], request_content_type[64], content_type[64], user_agent[128];
+    char url[256], request_content_type[64], content_type[64], user_agent[256];
     u_int response_status_code;
   } http;
 
   struct {
-    char username[32], password[32];
+    char *username, *password;
   } telnet;
 
   void *src_id, *dst_id;
 
-  struct ndpi_entropy entropy;
-  struct ndpi_entropy last_entropy;
+  struct ndpi_entropy *entropy;
+  struct ndpi_entropy *last_entropy;
 
   /* Payload lenght bins */
 #ifdef DIRECTION_BINS
@@ -263,6 +296,7 @@ typedef struct ndpi_stats {
   u_int64_t packet_len[6];
   u_int16_t max_packet_len;
   u_int64_t dpi_packet_count[3];
+  u_int64_t flow_confidence[NDPI_CONFIDENCE_MAX];
 } ndpi_stats_t;
 
 
@@ -300,11 +334,14 @@ typedef struct ndpi_workflow {
   void **ndpi_flows_root;
   struct ndpi_detection_module_struct *ndpi_struct;
   u_int32_t num_allocated_flows;
+
+  /* CSV,TLV,JSON serialization interface */
+  ndpi_serializer ndpi_serializer;
 } ndpi_workflow_t;
 
 
 /* TODO: remove wrappers parameters and use ndpi global, when their initialization will be fixed... */
-struct ndpi_workflow * ndpi_workflow_init(const struct ndpi_workflow_prefs * prefs, pcap_t * pcap_handle);
+struct ndpi_workflow * ndpi_workflow_init(const struct ndpi_workflow_prefs * prefs, pcap_t * pcap_handle, int do_init_flows_root, ndpi_serialization_format serialization_format);
 
 
 /* workflow main free function */
@@ -322,8 +359,7 @@ void ndpi_free_flow_info_half(struct ndpi_flow_info *flow);
 struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 					       const struct pcap_pkthdr *header,
 					       const u_char *packet,
-					       ndpi_risk *flow_risk,
-					       FILE * csv_fp);
+					       ndpi_risk *flow_risk);
 
 int ndpi_is_datalink_supported(int datalink_type);
 
@@ -343,7 +379,7 @@ static inline void ndpi_workflow_set_flow_giveup_callback(struct ndpi_workflow *
 
 /* compare two nodes in workflow */
 int ndpi_workflow_node_cmp(const void *a, const void *b);
-void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_flow_info *flow, FILE * csv_fp);
+void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_flow_info *flow);
 u_int32_t ethernet_crc32(const void* data, size_t n_bytes);
 void ndpi_flow_info_free_data(struct ndpi_flow_info *flow);
 void ndpi_flow_info_freer(void *node);

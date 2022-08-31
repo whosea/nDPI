@@ -4,17 +4,46 @@ use strict;
 
 my %P;
 
+
+match_inc('ndpi_content_match.c.inc','host_protocol_list');
+foreach my $f (glob('inc_generated/*.c.inc')) {
+	next if $f eq 'inc_generated/ndpi_dga_match.c.inc';
+#	next if $f eq 'ndpi_content_match.c.inc';
+#	next if $f !~ /^ndpi_([a-z0-9_]+)match.c.inc$/;
+	next if $f eq 'inc_generated/ndpi_icloud_private_relay_match.c.inc';
+	match_inc($f,"ndpi_protocol_.*_protocol_list");
+}
+
+foreach my $proto (qw(AMAZON_AWS MICROSOFT_AZURE CLOUDFLARE MINING MICROSOFT_365 MS_ONE_DRIVE MS_OUTLOOK SKYPE_TEAMS TOR WHATSAPP ZOOM other)) {
+	my $f = 'ndpi_network_list_'.lc($proto).'.yaml';
+	if(-f $f) {
+		print STDERR "$f exists!\n";
+#		next;
+	}
+	die "create file $f" if !open(F,'>'.$f);
+	foreach (sort keys %P) {
+		print_proto(*F,$P{$_}) if $_ eq $proto || $proto eq 'other';
+	}
+	close(F);
+	print STDERR "Write $f OK\n";
+}
+
+exit(0);
+
+sub match_inc {
+my ($fn,$listname) = @_;
 my $st = 0;
 my $cmmnt = '';
 my ($ev1, $ev2) = (0,0);
-die "open ndpi_content_match.c.inc" if !open(F,'<ndpi_content_match.c.inc');
-die "create ndpi_content_match.c.inc.new" if !open(R,'>ndpi_content_match.c.inc.new');
+print STDERR "Start $fn $listname\n";
+die "open $fn: ".$! if !open(F,'<'.$fn);
+die "create ${fn}.new: ".$! if !open(R,'>'.$fn.'.new');
 while(<F>) {
 	chomp();
 
 	if(!$st) {
 		next if /^#if\s0$/;
-		if(/ndpi_network\s+host_protocol_list/) {
+		if(/ndpi_network\s+$listname\[/) {
 			$ev1++;
 			print STDERR "host_protocol_list start\n";
 			print R "#if 0\n";
@@ -55,6 +84,15 @@ while(<F>) {
 				} while($_ !~ /^\s*#endif/);
 			next;
 		}
+		if(/#ifdef CUSTOM_NDPI_PROTOCOLS/) {
+				$_ = <F>;
+				die if !/#include/;
+				print R "$_";
+				$_ = <F>;
+				die if !/#endif/;
+				print R "$_";
+				next;
+		}
 		die "?: ".$_;
 	}
 	if($st == 2) { # comment
@@ -80,6 +118,10 @@ while(<F>) {
 		next;
 	}
 	if($st == 4) {
+		if($ev2 == 1 && /^#endif$/) {
+				$ev2 = 2;
+				next;
+		}
 		if(/ndpi_category_match\s+category_match\[\]\s+=\s+{/) {
 			print STDERR "ndpi_category_match category_match start\n";
 			print R "#ifndef __KERNEL__\n";
@@ -109,22 +151,13 @@ close(R);
 close(F);
 die "Missing host_protocol_list\n" if !$ev1;
 die "host_protocol_list not closed!\n" if !$ev2;
-
-foreach my $proto (qw(TOR AMAZON_AWS WHATSAPP std)) {
-	my $f = 'ndpi_network_list_'.lc($proto).'.yaml';
-	if(-f $f) {
-		print STDERR "$f exists!\n";
-		next;
-	}
-	die "create file $f" if !open(F,'>'.$f);
-	foreach (sort keys %P) {
-		print_proto(*F,$P{$_}) if $_ eq $proto || $proto eq 'std';
-	}
-	close(F);
-	print STDERR "Write $f OK\n";
+my $rc = system("diff -q ${fn}.new ${fn}");
+if($rc == 256) {
+		system("mv ${fn}.new ${fn}");
+} else {
+		unlink "${fn}.new";
 }
-
-exit(0);
+}
 
 sub print_proto {
 	my ($f,$r) = @_;

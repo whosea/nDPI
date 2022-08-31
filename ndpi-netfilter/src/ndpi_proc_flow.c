@@ -47,6 +47,7 @@ size_t ndpi_dump_lost_rec(char *buf,size_t bufsize,
 	memset(buf,0,sizeof(struct flow_data_common));
 	c = (struct flow_data_common *)buf;
 	c->rec_type = 3;
+	c->extflag  = 1;
 	c->p[0] = cpi;
 	c->p[1] = cpo;
 	c->b[0] = cbi;
@@ -62,10 +63,72 @@ size_t ndpi_dump_start_rec(char *buf, size_t bufsize, time64_t tm)
 	memset(buf,0,8);
 	c = (struct flow_data_common *)buf;
 	c->rec_type = 1;
+	c->extflag  = 1;
 	c->time_start = (uint32_t)tm; // BUG AFTER YEAR 2105
 	return 8;
 }
 
+static inline int add_opt_str(char *buf,size_t l,size_t size,char c,char *str) {
+	size_t nc = strlen(str) + 2 + (l ? 1:0);
+	if(l + nc >= size) return 0;
+	buf += l;
+	if(l) *buf++ = ' ';
+	*buf++ = c;
+	*buf++ = '=';
+	strcpy(buf,str);
+	return nc;
+}
+
+size_t ndpi_dump_opt(char *buf, size_t bufsize,
+		struct nf_ct_ext_ndpi *ct)
+{
+	size_t l = 0,i,flag=0;
+
+	buf[0] = '\0';
+
+	for(i=0; i < NDPI_FLOW_OPT_MAX && ndpi_flow_opt[i]; i++) {
+	   if(ndpi_flow_opt[i] != 'L' && !ct->flow_opt) continue;
+	   switch(ndpi_flow_opt[i]) {
+		case 'L':
+			if(!(flag & 0x10) && ct->confidence != NDPI_CONFIDENCE_UNKNOWN && l < bufsize-4) {
+			    if(l) buf[l++] = ' ';
+			    buf[l] = 'L'; buf[l+1] = '=';
+			    buf[l+2] = (char)('0' + (ct->confidence & 7));
+			    l += 3;
+			    flag |= 0x10;
+			}
+			break;
+		case 'S':
+			if(!(flag & 1) && ct->ja3s) {
+			    l += add_opt_str(buf,l,bufsize,'S',&ct->flow_opt[ct->ja3s-1]);
+			    flag |= 1;
+			}
+			break;
+		case 'C':
+			if(!(flag & 2) && ct->ja3c) {
+			    l += add_opt_str(buf,l,bufsize,'C',&ct->flow_opt[ct->ja3c-1]);
+			    flag |= 2;
+			}
+			break;
+		case 'F':
+			if(!(flag & 4) && ct->tlsfp) {
+			    l += add_opt_str(buf,l,bufsize,'F',&ct->flow_opt[ct->tlsfp-1]);
+			    flag |= 4;
+			}
+			break;
+		case 'V':
+			if(!(flag & 8) && ct->tlsv) {
+			    l += add_opt_str(buf,l,bufsize,'V',&ct->flow_opt[ct->tlsv-1]);
+			    flag |= 8;
+			}
+			break;
+		default:
+			i=NDPI_FLOW_OPT_MAX;
+	   }
+	}
+	buf[l] = '\0';
+	return l;
+}
 ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 		char *buf, size_t buflen, struct nf_ct_ext_ndpi *ct)
 {
@@ -73,14 +136,20 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 	struct flow_data *d;
 	struct flow_info *i;
 	ssize_t ret_len;
-	int c_len,h_len;
+	int o_len,h_len;
+	char buf_opt[512];
 
 	ret_len = v6 ? flow_data_v6_size : flow_data_v4_size;
-	c_len = ct->ssl ? strlen(ct->ssl):0;
 	h_len = ct->host ? strlen(ct->host):0;
-	if(c_len > 255) c_len = 255;
-	if(h_len > 255) h_len = 255;
-	ret_len += c_len + h_len;
+	o_len = ndpi_dump_opt(buf_opt,sizeof(buf_opt)-1,ct);
+	if(h_len != 0 && o_len != 0)
+		o_len++; // Add space before opttions
+
+	if(o_len + h_len > NF_STR_OPTLEN) { /* FIXME */
+		if(h_len > 255) h_len = 255;
+		if(o_len > 255) o_len = NF_STR_OPTLEN - h_len;
+	}
+	ret_len += o_len + h_len;
 
 	if(buflen < ret_len) return 0;
 
@@ -91,9 +160,15 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 
 	c->rec_type	= 2;
 	c->family	= v6 != 0;
+	c->extflag      = 1;
 	c->proto	= ct->l4_proto;
-	c->cert_len	= c_len;
-	c->host_len	= h_len;
+	if( o_len > 255 || h_len > 255) {
+	  c->opt_len	= o_len+h_len-255;
+	  c->host_len	= 255;
+	} else {
+	  c->opt_len	= o_len;
+	  c->host_len	= h_len;
+	}
 	c->time_start	= i->time_start;
 	if((n->acc_read_mode & 0x3) != 2) {
 		c->p[0]		= i->p[0]-i->p[2];
@@ -130,14 +205,16 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 		a->sport = i->sport;
 		a->dport = i->dport;
 	}
-	if(c_len + h_len) {
+	if(o_len + h_len) {
 		char *s = (char *)c + (v6 ? flow_data_v6_size : flow_data_v4_size);
-		if(c_len) {
-			memcpy(s,ct->ssl,c_len);
-			s += c_len;
-		}
-		if(h_len)
+		if(h_len) {
 			memcpy(s,ct->host,h_len);
+			s += h_len;
+			if(o_len)
+			   *s++ = ' ';
+		}
+		if(o_len)
+			memcpy(s,buf_opt,o_len);
 	}
 	n->str_buf_len = ret_len; 
 	return ret_len;
@@ -147,7 +224,7 @@ ssize_t ndpi_dump_acct_info_bin(struct ndpi_net *n,int v6,
 ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 		struct nf_ct_ext_ndpi *ct) {
 	const char *t_proto;
-	ssize_t l = 0,sl = 0;
+	ssize_t l = 0;
 	char *buf = n->str_buf;
 	size_t buflen = NF_STR_LBUF-1;
 	int is_ipv6 = test_ipv6(ct);
@@ -222,17 +299,26 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 	    t_proto = ndpi_get_proto_by_id(n->ndpi_struct,ct->proto.master_protocol);
 	    l += snprintf(&buf[l],buflen-l,",%s",t_proto);
 	}
-	if(ct->ssl) {
-	    sl = strlen(ct->ssl);
-	    if(sl > 250) sl = 250;
-	    if(l + sl + 6 < buflen)
-		l += snprintf(&buf[l],buflen-l," C=%.250s",ct->ssl);
-	}
-	if(ct->host) {
-	    sl = strlen(ct->host);
-	    if(sl > 250) sl = 250;
-	    if(l + sl + 6 < buflen)
-		l += snprintf(&buf[l],buflen-l," H=%.250s",ct->host);
+	{
+	  int sl_host = 0; 
+	  int sl_opt = 0; 
+	  if(ct->host) {
+	    sl_host = strlen(ct->host);
+	    if(sl_host > 250) sl_host = 250;
+	    if(l + sl_host + 6 > buflen)
+		   sl_host = buflen - 6 - l;
+	    l += snprintf(&buf[l],buflen-l," H=%.*s",sl_host,ct->host);
+	  }
+	  {
+	    char opt_buf[512];
+	    sl_opt = ndpi_dump_opt(opt_buf,sizeof(opt_buf)-1,ct);
+	    if(sl_opt) {
+	      if(sl_opt + sl_host > NF_STR_OPTLEN ) sl_opt = NF_STR_OPTLEN - 4 - sl_host;
+	      if(l + sl_opt + 6 > buflen)
+		   sl_opt = buflen - 6 - l;
+	      l += snprintf(&buf[l],buflen-l," %.*s",sl_opt,opt_buf);
+	    }
+	  }
 	}
 	buf[l++] = '\n';
 	buf[l] = 0;
@@ -244,7 +330,7 @@ ssize_t ndpi_dump_acct_info(struct ndpi_net *n,
 ssize_t nflow_proc_read(struct file *file, char __user *buf,
                               size_t count, loff_t *ppos)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	if(n->acc_last_op != 1) { // seek 0 after write command
 		n->acc_last_op = 1;
 		nflow_proc_read_start(n);
@@ -303,7 +389,7 @@ static int parse_ndpi_flow(struct ndpi_net *n,char *buf)
 }
 
 int nflow_proc_open(struct inode *inode, struct file *file) {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 
 	if(!ndpi_enable_flow) return -EINVAL;
 
@@ -317,7 +403,7 @@ int nflow_proc_open(struct inode *inode, struct file *file) {
 
 int nflow_proc_close(struct inode *inode, struct file *file)
 {
-        struct ndpi_net *n = PDE_DATA(file_inode(file));
+        struct ndpi_net *n = pde_data(file_inode(file));
 	if(!ndpi_enable_flow) return -EINVAL;
 	generic_proc_close(n,parse_ndpi_flow,W_BUF_FLOW);
 	if(flow_read_debug)
@@ -332,17 +418,17 @@ ssize_t
 nflow_proc_write(struct file *file, const char __user *buffer,
 		                     size_t length, loff_t *loff)
 {
-struct ndpi_net *n = PDE_DATA(file_inode(file));
+struct ndpi_net *n = pde_data(file_inode(file));
 	if(!ndpi_enable_flow) return -EINVAL;
 	if(n->flow_l) return -EINVAL; // Reading in progress!
 	n->acc_last_op = 2;
-	return generic_proc_write(PDE_DATA(file_inode(file)), buffer, length, loff,
+	return generic_proc_write(pde_data(file_inode(file)), buffer, length, loff,
 				  parse_ndpi_flow, 4060 , W_BUF_FLOW);
 }
 
 loff_t nflow_proc_llseek(struct file *file, loff_t offset, int whence) {
 	if(whence == SEEK_SET) {
-		struct ndpi_net *n = PDE_DATA(file_inode(file));
+		struct ndpi_net *n = pde_data(file_inode(file));
 		if(offset == 0) {
 			if(flow_read_debug)
 				pr_info("%s:%s seek start\n", __func__,n->ns_name);

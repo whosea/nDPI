@@ -3,9 +3,11 @@ NDPI_SRC := ../../src
 NDPI_PRO := ${NDPI_SRC}/lib/protocols
 
 ccflags-y += -I${src}/${NDPI_SRC}/include -I${src}/${NDPI_SRC}/lib -I${src}/../libre -I${src}/${NDPI_SRC}/lib/third_party/include 
-ccflags-y += -DHAVE_CONFIG_H -DNDPI_LIB_COMPILATION -DOPENDPI_NETFILTER_MODULE -DNDPI_DETECTION_SUPPORT_IPV6 -g
+ccflags-y += -DHAVE_CONFIG_H -DNDPI_LIB_COMPILATION -DOPENDPI_NETFILTER_MODULE -DNDPI_DETECTION_SUPPORT_IPV6 -g 
+ccflags-y += -Wno-declaration-after-statement
+#ccflags-y += -Wshadow-local
 # Needed for pahole
-# -femit-struct-debug-detailed=any
+#ccflags-y += -femit-struct-debug-detailed=any
 
 ifndef $(KERNEL_DIR)
 KERNEL_DIR := /lib/modules/$(shell uname -r)/build
@@ -31,6 +33,7 @@ xt_ndpi-y := main.o ndpi_strcol.o ndpi_proc_parsers.o ndpi_proc_generic.o \
 		${NDPI_SRC}/lib/third_party/src/ahocorasick.o \
 		${NDPI_SRC}/lib/third_party/src/libcache.o \
 		${NDPI_SRC}/lib/third_party/src/ndpi_patricia.o \
+		${NDPI_SRC}/lib/third_party/src/gcrypt_light.o \
 		${NDPI_SRC}/lib/third_party/src/btlib.o \
 		${NDPI_SRC}/lib/ndpi_main.o \
 		${NDPI_SRC}/lib/ndpi_utils.o \

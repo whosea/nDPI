@@ -8,7 +8,7 @@ static void ndpi_int_bjnp_add_connection(struct ndpi_detection_module_struct *nd
 					    struct ndpi_flow_struct *flow,
 					 u_int8_t due_to_correlation) {
   ndpi_set_detected_protocol(ndpi_struct, flow,
-			     NDPI_PROTOCOL_BJNP, NDPI_PROTOCOL_UNKNOWN);
+			     NDPI_PROTOCOL_BJNP, NDPI_PROTOCOL_UNKNOWN, NDPI_CONFIDENCE_DPI);
 }
 
 
@@ -50,7 +50,7 @@ void init_bjnp_dissector(struct ndpi_detection_module_struct *ndpi_struct, u_int
   ndpi_set_bitmask_protocol_detection("BJNP", ndpi_struct, detection_bitmask, *id,
 				      NDPI_PROTOCOL_BJNP,
 				      ndpi_search_bjnp,
-				      NDPI_SELECTION_BITMASK_PROTOCOL_UDP_WITH_PAYLOAD,
+				      NDPI_SELECTION_BITMASK_PROTOCOL_V4_V6_UDP_WITH_PAYLOAD,
 				      SAVE_DETECTION_BITMASK_AS_UNKNOWN,
 				      ADD_TO_DETECTION_BITMASK);
   *id += 1;

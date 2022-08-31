@@ -1,7 +1,7 @@
 /*
  * ndpi_win32.h
  *
- * Copyright (C) 2011-16 - ntop.org
+ * Copyright (C) 2011-22 - ntop.org
  *
  * This file is part of nDPI, an open source deep packet inspection
  * library based on the OpenDPI and PACE technology by ipoque GmbH
@@ -47,17 +47,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#define _WS2TCPIP_H_ /* Avoid compilation problems */
-
 #define	IPVERSION	4 /* on *nix it is defined in netinet/ip.h */ 
-
-#ifndef MIN
-#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
-#endif
-
-#ifndef IPPROTO_SCTP
-#define IPPROTO_SCTP 132
-#endif
 
 #if defined(__MINGW32__) || defined(__MINGW64__)
 #undef gettimeofday
@@ -81,5 +71,8 @@ typedef unsigned       __int64 u_int64_t;
 #define timegm                          _mkgmtime
 
 #define sleep(a /* sec */)              Sleep(1000*a /* ms */)
+
+/* https://stackoverflow.com/questions/7993050/multiplatform-atomic-increment */
+#define __sync_fetch_and_add(a,b)       InterlockedExchangeAdd ((a), b)
 
 #endif /* __NDPI_WIN32_H__ */

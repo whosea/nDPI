@@ -17,6 +17,7 @@ libndpi_a_include_HEADERS = ../include/ndpi_api.h \
 			     ../include/ndpi_typedefs.h     \
 			     third_party/include/ndpi_md5.h \
 			     third_party/include/ndpi_sha1.h \
+			     third_party/include/gcrypt_light.h \
 			     third_party/include/libcache.h
 
 libndpi_a_SOURCES = ndpi_content_match.c.inc \
@@ -68,6 +69,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/dropbox.c \
 		     protocols/eaq.c \
 		     protocols/edonkey.c \
+		     protocols/ethernet_ip.c \
 		     protocols/fasttrack.c \
 		     protocols/fiesta.c \
 		     protocols/fix.c \
@@ -83,11 +85,14 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/h323.c \
 		     protocols/halflife2_and_mods.c \
 		     protocols/hpvirtgrp.c \
+		     protocols/hsrp.c \
 		     protocols/http.c \
 		     protocols/iax.c \
 		     protocols/icecast.c \
+		     protocols/i3d.c \
 		     protocols/imo.c \
 		     protocols/iec60870-5-104.c \
+		     protocols/ipsec.c \
 		     protocols/ipp.c \
 		     protocols/irc.c \
 		     protocols/jabber.c \
@@ -108,6 +113,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/modbus.c \
 		     protocols/mongodb.c \
 		     protocols/mpegts.c \
+		     protocols/mpegdash.c \
 		     protocols/mqtt.c \
 		     protocols/mssql_tds.c \
 		     protocols/mysql.c \
@@ -130,8 +136,10 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/qq.c \
 		     protocols/quic.c \
 		     protocols/radius.c \
+		     protocols/raknet.c \
 		     protocols/rdp.c \
 		     protocols/redis_net.c \
+		     protocols/rsh.c \
 		     protocols/rsync.c \
 		     protocols/rtcp.c \
 		     protocols/rtmp.c \
@@ -139,6 +147,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/rtsp.c \
 		     protocols/rx.c \
 		     protocols/s7comm.c \
+		     protocols/sd_rtn.c \
 		     protocols/sflow.c \
 		     protocols/shoutcast.c \
 		     protocols/sip.c \
@@ -157,7 +166,6 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/steam.c \
 		     protocols/stun.c \
 		     protocols/syslog.c \
-		     protocols/targus_getdata.c \
 		     protocols/tcp_udp.c \
 		     protocols/teamspeak.c \
 		     protocols/teamviewer.c \
@@ -166,14 +174,19 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/tftp.c \
 		     protocols/thunder.c \
 		     protocols/tls.c \
+		     protocols/threema.c \
 		     protocols/teredo.c \
+		     protocols/riotgames.c \
 		     protocols/tvuplayer.c \
+		     protocols/tocaboca.c \
 		     protocols/ubntac2.c \
+		     protocols/ultrasurf.c \
 		     protocols/usenet.c \
 		     protocols/viber.c \
 		     protocols/vhua.c \
 		     protocols/vmware.c \
 		     protocols/vnc.c \
+		     protocols/vxlan.c \
 		     protocols/warcraft3.c \
 		     protocols/websocket.c \
 		     protocols/whoisdas.c \
@@ -182,6 +195,7 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     protocols/wsd.c \
 		     protocols/xbox.c \
 		     protocols/xdmcp.c \
+		     protocols/xiaomi.c \
 		     protocols/zattoo.c \
 		     protocols/zeromq.c \
 		     protocols/smpp.c \
@@ -202,7 +216,8 @@ libndpi_a_SOURCES = ndpi_content_match.c.inc \
 		     third_party/src/libinjection_xss.c \
 		     third_party/src/libcache.c \
 		     third_party/src/btlib.c \
-		     third_party/src/ndpi_patricia.c
+		     third_party/src/ndpi_patricia.c \
+		     third_party/src/gcrypt_light.c
 
 lib_LIBRARIES = libndpi.a
 
