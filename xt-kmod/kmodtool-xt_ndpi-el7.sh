@@ -256,6 +256,8 @@ print_rpmtemplate ()
   #echo "kmod_name :${kmod_name}"
   kver="${1}"
   #echo "kver :${kver}"
+  echo "kver: ${kver}" >&2
+
   get_verrel "${1}"
   get_verrel_for_deps "${1}"
 

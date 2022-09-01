@@ -3,7 +3,6 @@
 %define ndpi_git_ver flow_info-4
 
 # If kversion isn't defined on the rpmbuild line, define it here.
-# %{!?kversion: %define kversion 3.10.0-1160.42.2.el7.%{_target_cpu}}
 %{!?kversion: %define kversion %{uname -r}}
 
 Name:    %{kmod_name}-kmod
@@ -18,11 +17,8 @@ URL:     http://www.kernel.org/
 
 BuildRequires: redhat-rpm-config, perl, kernel-devel, gcc, iptables-devel, libpcap-devel, autogen, autoconf, automake, libtool, flex, bison
 BuildRequires: %kernel_module_package_buildreqs
-# BuildRequires: kernel = 3.10.0-1160.el7, kernel-devel = 3.10.0-1160.el7
 Requires: kernel >= 3.10.0-1160
 
-# BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
-# Requires: kernel >= 3.10.0-1160.42.2
 # ExclusiveArch: x86_64
 
 # Sources.
@@ -36,6 +32,7 @@ Source10: kmodtool-%{kmod_name}-el7.sh
 #Patch3: ndpi-netfilter_rhel7.6.patch
 
 # Magic hidden here.
+echo "spec kversion: %{kversion}"
 %{expand:%(sh %{SOURCE10} rpmtemplate %{kmod_name} %{kversion} "")}
 
 
@@ -55,6 +52,7 @@ echo "setup"
 #%patch2 -p1
 #%patch3 -p1
 echo "patch3 finish"
+
 ./autogen.sh
 echo "autogen finish"
 ( cd src/lib ; make ndpi_network_list.c.inc )
