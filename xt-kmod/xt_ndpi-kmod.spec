@@ -23,7 +23,7 @@ Requires: kernel >= 3.10.0-1160
 
 # BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
 # Requires: kernel >= 3.10.0-1160.42.2
-ExclusiveArch: x86_64
+# ExclusiveArch: x86_64
 
 # Sources.
 #Source0: https://github.com/vel21ripn/nDPI/archive/%{ndpi_git_ver}.tar.gz
@@ -123,7 +123,7 @@ echo "rm clean"
 %{__rm} -rf %{buildroot}
 echo "clean end"
 
-%files
+%files         -n kmod-%{kmod_name}
 %defattr(644,root,root,755)
 /lib/modules/%{kversion}
 /usr/lib64/xtables/libxt_NDPI.so
