@@ -16,7 +16,8 @@ URL:     http://www.kernel.org/
 #sudo apt-get install build-essential bison flex libpcap-dev libtool-bin autoconf pkg-config libjson-c-dev libnuma-dev libgcrypt20-dev libpcre2-dev
 
 BuildRequires: redhat-rpm-config, perl, kernel-devel, gcc, iptables-devel, libpcap-devel, autogen, autoconf, automake, libtool, flex, bison
-BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
+# BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
+BuildRequires: %kernel_module_package_buildreqs
 Requires: kernel >= 3.10.0-1160.6.1
 ExclusiveArch: x86_64
 
