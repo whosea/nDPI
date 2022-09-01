@@ -38,6 +38,7 @@ Source10: kmodtool-%{kmod_name}-el7.sh
 # Magic hidden here.
 %{expand:%(sh %{SOURCE10} rpmtemplate %{kmod_name} %{kversion} "")}
 
+
 # Disable the building of the debug package(s).
 %define debug_package %{nil}
 
