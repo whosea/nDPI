@@ -59,10 +59,10 @@ echo "autogen finish"
 ( cd src/lib ; make ndpi_network_list.c.inc )
 cd ndpi-netfilter
 # sed -e '/^MODULES_DIR/d' -e '/^KERNEL_DIR/d' -i src/Makefile
-MODULES_DIR=/lib/modules/$(shell uname -r) KERNEL_DIR=$MODULES_DIR/build/ make
+MODULES_DIR=/lib/modules/$(uname -r) KERNEL_DIR=$MODULES_DIR/build/ make
 echo "MODULES_DIR: %{MODULES_DIR}"
 echo "KERNEL_DIR: %{KERNEL_DIR}"
-# MODULES_DIR := /lib/modules/$(shell uname -r)
+# MODULES_DIR := /lib/modules/$(uname -r)
 # KERNEL_DIR := ${MODULES_DIR}/build
 
 echo "override %{kmod_name} * weak-updates/%{kmod_name}" > kmod-%{kmod_name}.conf
