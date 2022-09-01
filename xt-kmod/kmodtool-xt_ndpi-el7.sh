@@ -52,44 +52,61 @@ variant=
 
 get_kernel_release ()
 {
+  #echo "get_kernel_release"
   if [[ -z $1 ]]; then
     uname -r
     return
   fi
   local arch=$(arch)
-  local verrel=${1%.$arch}
+  #echo "arch:${arch}"
+  local verrel=${1%}
+  #local verrel=${1%.$arch}
+  #echo "verrel:${verrel}"
   local verprefix=${verrel%.*}
+  #echo "verprefix:${verprefix}"
   local versuffix=${verrel#$verprefix}
-  verrel=$(ls -Ud /usr/src/kernels/$verprefix*$versuffix.$arch | sort -V | tail -n 1)
-  verrel=${verrel##*/}
-  [[ -z $verrel ]] && verrel=$1.$arch
-  echo "$verrel"
+  #echo "versuffix:${versuffix}"
+  #verrel=$(ls -Ud /usr/src/kernels/$verprefix*$versuffix.$arch | sort -V | tail -n 1)
+  #echo "verrel-1:${verrel}"
+  #verrel=${verrel##*/}
+  #echo "verrel-2:${verrel}"
+  #[[ -z $verrel ]] && verrel=$1.$arch
+  #echo "$verrel"
 }
 
 get_verrel ()
 {
+  #echo "get_verrel param $1"
   verrel=$(get_kernel_release "$1")
+  #echo "verrel-1 ${verrel}"
   verrel=${verrel/%.$knownvariants/}
+  #echo "verrel-2 ${verrel}"
 }
 
 print_verrel ()
 {
   get_verrel $@
-  echo "${verrel}"
+  #echo "get_verrel ${verrel}"
 }
 
 get_verrel_for_deps ()
 {
   verrel_dep=${1:-$(uname -r)}
+  #echo "verrel_dep1 ${verrel_dep}"
   verrel_dep=${verrel_dep/%.$knownvariants/}
+  #echo "verrel_dep2 ${verrel_dep}"
 }
 
 get_variant ()
 {
   get_verrel $@
+  #echo "verrel:${verrel}"
   variant=$(get_kernel_release "$1")
+  #echo "variant1:${variant}"
   variant=${variant/#$verrel?(.)/}
+  #echo "variant2:${variant}"
   variant=${variant:-'""'}
+  #echo "variant3:${variant}"
 }
 
 print_variant ()
@@ -128,6 +145,10 @@ get_rpmtemplate ()
     local variant="${1}"
     local dashvariant="${variant:+-${variant}}"
     local dotvariant="${variant:+.${variant}}"
+
+    #echo "variant ${variant}"
+    #echo "dashvariant ${dashvariant}"
+    #echo "dotvariant ${dotvariant}"
 
     echo "%package       -n kmod-${kmod_name}${dashvariant}"
 
@@ -220,8 +241,6 @@ EOF
 
 # echo "files3 list3"
 echo "%files         -n kmod-${kmod_name}${dashvariant}"
-echo "/${verrel}"
-echo "/files3/list/end"
 if [ "" == "$override_filelist" ];
 then
     echo "%defattr(644,root,root,755)"
@@ -231,7 +250,6 @@ then
     echo "%config /etc/depmod.d/kmod-${kmod_name}.conf"
     echo "%doc /usr/share/doc/kmod-${kmod_name}-%{version}/"
 else
-    echo "/override_filelist"
     cat "$override_filelist" | get_filelist
 fi
 }
@@ -239,8 +257,11 @@ fi
 print_rpmtemplate ()
 {
   kmod_name="${1}"
+  #参数遍历下一个
   shift
+  #echo "kmod_name :${kmod_name}"
   kver="${1}"
+  #echo "kver :${kver}"
   get_verrel "${1}"
   get_verrel_for_deps "${1}"
   [[ -z $kver ]] && kver=$verrel
@@ -257,6 +278,7 @@ print_rpmtemplate ()
   fi
 
   for variant in "$@" ; do
+      #echo "variant :${variant}"
       if [ "default" == "$variant" ];
       then
             get_rpmtemplate ""
@@ -299,6 +321,9 @@ while [ "${1}" ] ; do
       ;;
     rpmtemplate)
       shift
+      #centosVersion=$(uname -r)
+      #echo "centosVersion ${centosVersion}"
+      #print_rpmtemplate "kmod" ${centosVersion} ""
       print_rpmtemplate "$@"
       exit $?
       ;;
