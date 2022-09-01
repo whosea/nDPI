@@ -3,7 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="26e7539c-7677-4a56-a7bf-7fab414857db" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xt-kmod/kmodtool-xt_ndpi-el7.sh" beforeDir="false" afterPath="$PROJECT_DIR$/xt-kmod/kmodtool-xt_ndpi-el7.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xt-kmod/xt_ndpi-kmod.spec" beforeDir="false" afterPath="$PROJECT_DIR$/xt-kmod/xt_ndpi-kmod.spec" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -62,7 +61,7 @@
       <workItem from="1640613699186" duration="1215000" />
       <workItem from="1661668301485" duration="2044000" />
       <workItem from="1661741243958" duration="1416000" />
-      <workItem from="1661839306116" duration="23237000" />
+      <workItem from="1661839306116" duration="25089000" />
     </task>
     <servers />
   </component>

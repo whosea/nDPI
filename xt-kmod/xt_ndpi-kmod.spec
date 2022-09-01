@@ -106,6 +106,7 @@ done
 
 echo "clean start"
 %clean
+echo "rm clean"
 %{__rm} -rf %{buildroot}
 echo "clean end"
 
