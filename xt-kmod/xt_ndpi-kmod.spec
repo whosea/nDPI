@@ -3,7 +3,7 @@
 %define ndpi_git_ver flow_info-4
 
 # If kversion isn't defined on the rpmbuild line, define it here.
-%{!?kversion: %define kversion %{uname -r}}
+%{!?kversion: %define kversion $(uname -r)}
 
 Name:    %{kmod_name}-kmod
 Version: 4.0.0
