@@ -76,37 +76,28 @@ get_kernel_release ()
 
 get_verrel ()
 {
-  #echo "get_verrel param $1"
   verrel=$(get_kernel_release "$1")
-  #echo "verrel-1 ${verrel}"
   verrel=${verrel/%.$knownvariants/}
-  #echo "verrel-2 ${verrel}"
 }
 
 print_verrel ()
 {
   get_verrel $@
-  #echo "get_verrel ${verrel}"
+  echo "${verrel}"
 }
 
 get_verrel_for_deps ()
 {
   verrel_dep=${1:-$(uname -r)}
-  #echo "verrel_dep1 ${verrel_dep}"
   verrel_dep=${verrel_dep/%.$knownvariants/}
-  #echo "verrel_dep2 ${verrel_dep}"
 }
 
 get_variant ()
 {
   get_verrel $@
-  #echo "verrel:${verrel}"
   variant=$(get_kernel_release "$1")
-  #echo "variant1:${variant}"
   variant=${variant/#$verrel?(.)/}
-  #echo "variant2:${variant}"
   variant=${variant:-'""'}
-  #echo "variant3:${variant}"
 }
 
 print_variant ()
@@ -200,7 +191,7 @@ EOF
 ## that will be executed by RPM during various stages of package processing ##
 ##############################################################################
 
-#echo "post"
+
 cat <<EOF
 %post          -n kmod-${kmod_name}${dashvariant}
 echo "Working. This may take some time ..."
@@ -216,13 +207,13 @@ fi
 echo "Done."
 EOF
 
-#echo "preun"
+
 cat <<EOF
 %preun         -n kmod-${kmod_name}${dashvariant}
 rpm -ql kmod-${kmod_name}${dashvariant}-%{version}-%{release}.$(arch) | grep '\.ko$' > /var/run/rpm-kmod-${kmod_name}${dashvariant}-modules
 EOF
 
-#echo "postun"
+
 cat <<EOF
 %postun        -n kmod-${kmod_name}${dashvariant}
 echo "Working. This may take some time ..."
@@ -239,19 +230,20 @@ fi
 echo "Done."
 EOF
 
-# echo "files3 list3"
+
 echo "%files         -n kmod-${kmod_name}${dashvariant}"
 if [ "" == "$override_filelist" ];
 then
     echo "%defattr(644,root,root,755)"
-    echo "%files /lib/modules/${verrel}${dotvariant}/"
-    echo "%files /usr/lib64/xtables/libxt_NDPI.so"
-    echo "%files /usr/lib64/xtables/libxt_ndpi.so"
-    echo "%config /etc/depmod.d/kmod-${kmod_name}.conf"
-    echo "%doc /usr/share/doc/kmod-${kmod_name}-%{version}/"
+    echo "%{buildroot}/lib/modules/${verrel}${dotvariant}/"
+    echo "%{buildroot}/usr/lib64/xtables/libxt_NDPI.so"
+    echo "%{buildroot}/usr/lib64/xtables/libxt_ndpi.so"
+    echo "%config %{buildroot}/etc/depmod.d/kmod-${kmod_name}.conf"
+    echo "%doc %{buildroot}/usr/share/doc/kmod-${kmod_name}-%{version}/"
 else
     cat "$override_filelist" | get_filelist
 fi
+
 }
 
 print_rpmtemplate ()
