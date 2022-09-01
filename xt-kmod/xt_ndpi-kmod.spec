@@ -125,17 +125,13 @@ echo "clean end"
 
 %files
 %defattr(644,root,root,755)
-/lib/modules/$(uname -r)/
+/lib/modules/%{kversion}
 /usr/lib64/xtables/libxt_NDPI.so
 /usr/lib64/xtables/libxt_ndpi.so
-
 %config
 /etc/depmod.d/kmod-%{kmod_name}.conf
-
 %doc
 /usr/share/doc/kmod-%{kmod_name}-%{version}/
-
-
 
 %changelog
 * Fri Nov 20 2020 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.8.2-1
