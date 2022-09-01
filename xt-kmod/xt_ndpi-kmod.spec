@@ -123,7 +123,7 @@ echo "rm clean"
 %{__rm} -rf %{buildroot}
 echo "clean end"
 
-%files -n kmod-%{kmod_name}
+%files
 %defattr(644,root,root,755)
 echo "files collect"
 /lib/modules/$(uname -r)/
