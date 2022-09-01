@@ -4,7 +4,7 @@
 
 # If kversion isn't defined on the rpmbuild line, define it here.
 # %{!?kversion: %define kversion 3.10.0-1160.42.2.el7.%{_target_cpu}}
-%{!?kversion: %define kversion 3.10.0-1160.el7.%{_target_cpu}}
+%{!?kversion: %define kversion %{uname -r}}
 
 Name:    %{kmod_name}-kmod
 Version: 4.0.0
