@@ -75,6 +75,7 @@ echo "install start"
 %install
 echo "install finish"
 
+echo "build request: %{kernel_module_package_buildreqs}"
 echo "buildroot: %{buildroot}"
 echo "ko name: ndpi-netfilter/src/%{kmod_name}.ko"
 echo "kmod path: %{buildroot}/lib/modules/%{kversion}/extra/%{kmod_name}/"
