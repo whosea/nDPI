@@ -218,9 +218,9 @@ fi
 echo "Done."
 EOF
 
-echo "files3 list3"
+# echo "files3 list3"
 echo "%files         -n kmod-${kmod_name}${dashvariant}"
-echo "files list end"
+echo "/files3/list/end"
 if [ "" == "$override_filelist" ];
 then
     echo "%defattr(644,root,root,755)"
@@ -230,7 +230,7 @@ then
     echo "%config /etc/depmod.d/kmod-${kmod_name}.conf"
     echo "%doc /usr/share/doc/kmod-${kmod_name}-%{version}/"
 else
-    echo "override_filelist"
+    echo "/override_filelist"
     cat "$override_filelist" | get_filelist
 fi
 }
