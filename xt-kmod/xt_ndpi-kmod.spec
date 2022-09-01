@@ -3,7 +3,8 @@
 %define ndpi_git_ver flow_info-4
 
 # If kversion isn't defined on the rpmbuild line, define it here.
-%{!?kversion: %define kversion 3.10.0-1160.42.2.el7.%{_target_cpu}}
+# %{!?kversion: %define kversion 3.10.0-1160.42.2.el7.%{_target_cpu}}
+%{!?kversion: %define kversion 3.10.0-1160.el7.%{_target_cpu}}
 
 Name:    %{kmod_name}-kmod
 Version: 4.0.0
@@ -16,9 +17,12 @@ URL:     http://www.kernel.org/
 #sudo apt-get install build-essential bison flex libpcap-dev libtool-bin autoconf pkg-config libjson-c-dev libnuma-dev libgcrypt20-dev libpcre2-dev
 
 BuildRequires: redhat-rpm-config, perl, kernel-devel, gcc, iptables-devel, libpcap-devel, autogen, autoconf, automake, libtool, flex, bison
-# BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
 BuildRequires: %kernel_module_package_buildreqs
-Requires: kernel >= 3.10.0-1160.6.1
+# BuildRequires: kernel = 3.10.0-1160.el7, kernel-devel = 3.10.0-1160.el7
+Requires: kernel >= 3.10.0-1160
+
+# BuildRequires: kernel = 3.10.0-1160.42.2.el7, kernel-devel = 3.10.0-1160.42.2.el7
+# Requires: kernel >= 3.10.0-1160.42.2
 ExclusiveArch: x86_64
 
 # Sources.
@@ -42,21 +46,35 @@ This package provides the %{kmod_name} kernel module(s).
 It is built to depend upon the specific ABI provided by a range of releases
 of the same variant of the Linux kernel and not on any one specific build.
 
+echo "prep"
 %prep
+echo "setup"
 %setup -q -n nDPI-%{ndpi_git_ver}
 #%patch1 -p1
 #%patch2 -p1
 #%patch3 -p1
+echo "patch3 finish"
 ./autogen.sh
+echo "autogen finish"
 ( cd src/lib ; make ndpi_network_list.c.inc )
 cd ndpi-netfilter
-sed -e '/^MODULES_DIR/d' -e '/^KERNEL_DIR/d' -i src/Makefile
-MODULES_DIR=/lib/modules/%{kversion} KERNEL_DIR=$MODULES_DIR/build/ make
+# sed -e '/^MODULES_DIR/d' -e '/^KERNEL_DIR/d' -i src/Makefile
+MODULES_DIR=/lib/modules/$(uname -r) KERNEL_DIR=$MODULES_DIR/build/ make
+echo "MODULES_DIR: %{MODULES_DIR}"
+echo "KERNEL_DIR: %{KERNEL_DIR}"
+# MODULES_DIR := /lib/modules/$(uname -r)
+# KERNEL_DIR := ${MODULES_DIR}/build
+
 echo "override %{kmod_name} * weak-updates/%{kmod_name}" > kmod-%{kmod_name}.conf
 
+echo "build start"
 %build
+echo "build finish"
 
+echo "install start"
 %install
+echo "install finish"
+
 echo "buildroot: %{buildroot}"
 echo "ko name: ndpi-netfilter/src/%{kmod_name}.ko"
 echo "kmod path: %{buildroot}/lib/modules/%{kversion}/extra/%{kmod_name}/"
@@ -65,6 +83,7 @@ echo "conf name: kmod-%{kmod_name}.conf"
 echo "source new path: %{buildroot}%{_defaultdocdir}/kmod-%{kmod_name}-%{version}/"
 echo "source path: %{SOURCE5}"
 echo "strip: %{__strip}"
+
 
 
 #创建xtables目录，位于~/rpmbuild/BUILDROOT/
@@ -81,7 +100,9 @@ touch kmod-%{kmod_name}.conf
 
 # Strip the modules(s).
 #找出buildroot下文件类型是ko的，执行安装脚本
+echo "find start"
 find %{buildroot} -type f -name \*.ko -exec %{__strip} --strip-debug \{\} \;
+echo "find end"
 
 # Sign the modules(s).
 %if %{?_with_modsign:1}%{!?_with_modsign:0}
@@ -94,8 +115,11 @@ do %{__perl} /usr/src/kernels/%{kversion}/scripts/sign-file \
 done
 %endif
 
-%clean
+echo "clean start"
+# %clean
+echo "rm clean"
 %{__rm} -rf %{buildroot}
+echo "clean end"
 
 %changelog
 * Fri Nov 20 2020 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.8.2-1
