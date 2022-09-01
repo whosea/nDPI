@@ -123,7 +123,7 @@ echo "rm clean"
 %{__rm} -rf %{buildroot}
 echo "clean end"
 
-%files         -n kmod-%{kmod_name}
+%files
 %defattr(644,root,root,755)
 /lib/modules/%{kversion}
 /usr/lib64/xtables/libxt_NDPI.so
