@@ -32,7 +32,6 @@ Source10: kmodtool-%{kmod_name}-el7.sh
 #Patch3: ndpi-netfilter_rhel7.6.patch
 
 # Magic hidden here.
-echo "spec kversion: %{kversion}"
 %{expand:%(sh %{SOURCE10} rpmtemplate %{kmod_name} %{kversion} "")}
 
 
@@ -44,6 +43,8 @@ This package provides the %{kmod_name} kernel module(s).
 It is built to depend upon the specific ABI provided by a range of releases
 of the same variant of the Linux kernel and not on any one specific build.
 
+echo "spec kversion："
+echo "%{kversion}"
 echo "prep"
 %prep
 echo "setup"
