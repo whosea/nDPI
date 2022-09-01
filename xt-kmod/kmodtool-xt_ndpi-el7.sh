@@ -230,19 +230,20 @@ fi
 echo "Done."
 EOF
 
-
+cat <<EOF
 echo "%files         -n kmod-${kmod_name}${dashvariant}"
 if [ "" == "$override_filelist" ];
 then
     echo "%defattr(644,root,root,755)"
-    echo "%{buildroot}/lib/modules/${verrel}${dotvariant}/"
-    echo "%{buildroot}/usr/lib64/xtables/libxt_NDPI.so"
-    echo "%{buildroot}/usr/lib64/xtables/libxt_ndpi.so"
-    echo "%config %{buildroot}/etc/depmod.d/kmod-${kmod_name}.conf"
-    echo "%doc %{buildroot}/usr/share/doc/kmod-${kmod_name}-%{version}/"
+    echo "/lib/modules/${verrel}${dotvariant}/"
+    echo "/usr/lib64/xtables/libxt_NDPI.so"
+    echo "/usr/lib64/xtables/libxt_ndpi.so"
+    echo "%config /etc/depmod.d/kmod-${kmod_name}.conf"
+    echo "%doc /usr/share/doc/kmod-${kmod_name}-%{version}/"
 else
     cat "$override_filelist" | get_filelist
 fi
+EOF
 
 }
 
