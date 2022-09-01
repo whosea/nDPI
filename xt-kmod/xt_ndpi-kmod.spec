@@ -123,6 +123,21 @@ echo "rm clean"
 %{__rm} -rf %{buildroot}
 echo "clean end"
 
+%files -n kmod-%{kmod_name}
+%defattr(644,root,root,755)
+echo "files collect"
+/lib/modules/$(uname -r)/
+/usr/lib64/xtables/libxt_NDPI.so
+/usr/lib64/xtables/libxt_ndpi.so
+
+%config
+/etc/depmod.d/kmod-%{kmod_name}.conf
+
+%doc
+/usr/share/doc/kmod-%{kmod_name}-%{version}/
+
+
+
 %changelog
 * Fri Nov 20 2020 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.8.2-1
 - Kernel 3.10.0-1160: rebuild kernel modules - NethServer/dev#6341
