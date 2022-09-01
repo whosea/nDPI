@@ -59,7 +59,8 @@ get_kernel_release ()
   fi
   local arch=$(arch)
   #echo "arch:${arch}"
-  local verrel=${1%}
+  local verrel=$1
+  echo "$verrel"
   #local verrel=${1%.$arch}
   #echo "verrel:${verrel}"
   local verprefix=${verrel%.*}
@@ -77,7 +78,7 @@ get_kernel_release ()
 get_verrel ()
 {
   verrel=$(get_kernel_release "$1")
-  verrel=${verrel/%.$knownvariants/}
+  #verrel=${verrel/%.$knownvariants/}
 }
 
 print_verrel ()
@@ -258,6 +259,8 @@ print_rpmtemplate ()
   #echo "kver :${kver}"
   get_verrel "${1}"
   get_verrel_for_deps "${1}"
+
+  echo "verrel: ${verrel}" >&2
   [[ -z $kver ]] && kver=$verrel
   shift
   if [ -z "${kmod_name}" ] ; then
