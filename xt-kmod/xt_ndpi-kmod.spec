@@ -125,7 +125,6 @@ echo "clean end"
 
 %files
 %defattr(644,root,root,755)
-echo "files collect"
 /lib/modules/$(uname -r)/
 /usr/lib64/xtables/libxt_NDPI.so
 /usr/lib64/xtables/libxt_ndpi.so
