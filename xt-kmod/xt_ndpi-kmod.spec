@@ -46,24 +46,35 @@ This package provides the %{kmod_name} kernel module(s).
 It is built to depend upon the specific ABI provided by a range of releases
 of the same variant of the Linux kernel and not on any one specific build.
 
+echo "prep"
 %prep
+echo "setup"
 %setup -q -n nDPI-%{ndpi_git_ver}
 #%patch1 -p1
 #%patch2 -p1
 #%patch3 -p1
+echo "patch3 finish"
 ./autogen.sh
+echo "autogen finish"
 ( cd src/lib ; make ndpi_network_list.c.inc )
 cd ndpi-netfilter
 # sed -e '/^MODULES_DIR/d' -e '/^KERNEL_DIR/d' -i src/Makefile
 MODULES_DIR=/lib/modules/$(shell uname -r) KERNEL_DIR=$MODULES_DIR/build/ make
+echo "MODULES_DIR: %{MODULES_DIR}"
+echo "KERNEL_DIR: %{KERNEL_DIR}"
 # MODULES_DIR := /lib/modules/$(shell uname -r)
 # KERNEL_DIR := ${MODULES_DIR}/build
 
 echo "override %{kmod_name} * weak-updates/%{kmod_name}" > kmod-%{kmod_name}.conf
 
+echo "build start"
 %build
+echo "build finish"
 
+echo "install start"
 %install
+echo "install finish"
+
 echo "buildroot: %{buildroot}"
 echo "ko name: ndpi-netfilter/src/%{kmod_name}.ko"
 echo "kmod path: %{buildroot}/lib/modules/%{kversion}/extra/%{kmod_name}/"
