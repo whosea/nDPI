@@ -220,8 +220,7 @@ EOF
 
 # echo "files3 list3"
 echo "%files         -n kmod-${kmod_name}${dashvariant}"
-echo "${verrel}"
-echo "/lib/modules/${dotvariant}"
+echo "/${verrel}"
 echo "/files3/list/end"
 if [ "" == "$override_filelist" ];
 then
