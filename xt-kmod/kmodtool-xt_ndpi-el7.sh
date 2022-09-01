@@ -179,6 +179,7 @@ EOF
 ## that will be executed by RPM during various stages of package processing ##
 ##############################################################################
 
+echo "post"
 cat <<EOF
 %post          -n kmod-${kmod_name}${dashvariant}
 echo "Working. This may take some time ..."
@@ -194,11 +195,13 @@ fi
 echo "Done."
 EOF
 
+echo "preun"
 cat <<EOF
 %preun         -n kmod-${kmod_name}${dashvariant}
 rpm -ql kmod-${kmod_name}${dashvariant}-%{version}-%{release}.$(arch) | grep '\.ko$' > /var/run/rpm-kmod-${kmod_name}${dashvariant}-modules
 EOF
 
+echo "postun"
 cat <<EOF
 %postun        -n kmod-${kmod_name}${dashvariant}
 echo "Working. This may take some time ..."
@@ -215,7 +218,9 @@ fi
 echo "Done."
 EOF
 
+echo "files list"
 echo "%files         -n kmod-${kmod_name}${dashvariant}"
+echo "files list end"
 if [ "" == "$override_filelist" ];
 then
     echo "%defattr(644,root,root,755)"
