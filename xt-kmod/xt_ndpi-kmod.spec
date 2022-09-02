@@ -43,8 +43,6 @@ This package provides the %{kmod_name} kernel module(s).
 It is built to depend upon the specific ABI provided by a range of releases
 of the same variant of the Linux kernel and not on any one specific build.
 
-echo "spec kversion："
-echo "%{kversion}"
 echo "prep"
 %prep
 echo "setup"
